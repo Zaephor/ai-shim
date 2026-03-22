@@ -1,0 +1,15 @@
+# Binaries
+ai-shim
+*.exe
+dist/
+
+# Test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
