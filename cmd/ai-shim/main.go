@@ -9,13 +9,9 @@ import (
 const version = "dev"
 
 func main() {
-	exe, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ai-shim: cannot determine executable path: %v\n", err)
-		os.Exit(1)
-	}
-
-	name := filepath.Base(exe)
+	// Use os.Args[0] instead of os.Executable() because the latter resolves
+	// symlinks, which would defeat symlink-based invocation detection.
+	name := filepath.Base(os.Args[0])
 
 	if name == "ai-shim" || name == "ai-shim.exe" {
 		// Direct invocation — management mode
