@@ -1,5 +1,5 @@
 # Binaries
-ai-shim
+/ai-shim
 *.exe
 dist/
 
