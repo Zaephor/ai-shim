@@ -1,0 +1,132 @@
+package container
+
+import (
+	"context"
+	"testing"
+
+	"github.com/docker/docker/api/types/mount"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func skipIfNoDocker(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	if err != nil {
+		t.Skip("Docker not available:", err)
+	}
+	runner.Close()
+}
+
+func TestNewRunner(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+}
+
+func TestRun_SimpleCommand(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:  "alpine:latest",
+		Cmd:    []string{"echo", "hello"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+}
+
+func TestRun_ExitCode(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:  "alpine:latest",
+		Cmd:    []string{"sh", "-c", "exit 42"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 42, exitCode)
+}
+
+func TestRun_WithEnv(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:  "alpine:latest",
+		Env:    []string{"TEST_VAR=hello"},
+		Cmd:    []string{"sh", "-c", "test \"$TEST_VAR\" = hello"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+}
+
+func TestRun_WithWorkdir(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:      "alpine:latest",
+		WorkingDir: "/tmp",
+		Cmd:        []string{"sh", "-c", "test \"$(pwd)\" = /tmp"},
+		Labels:     map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+}
+
+func TestRun_WithHostname(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:    "alpine:latest",
+		Hostname: "test-shim",
+		Cmd:      []string{"sh", "-c", "test \"$(hostname)\" = test-shim"},
+		Labels:   map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+}
+
+func TestRun_WithMount(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// Use a volume mount instead of bind mount to avoid issues in DinD
+	// environments where the host filesystem differs from the test runner.
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image: "alpine:latest",
+		Mounts: []mount.Mount{
+			{Type: mount.TypeVolume, Target: "/testmount"},
+		},
+		Cmd:    []string{"test", "-d", "/testmount"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+}
