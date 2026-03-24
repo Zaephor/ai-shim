@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-<<<<<<< HEAD
 func TestDetect_HasHostname(t *testing.T) {
 	info := Detect()
 	assert.NotEmpty(t, info.Hostname)
@@ -29,16 +28,10 @@ func TestDetect_HasUID(t *testing.T) {
 func TestDetect_SocketPath(t *testing.T) {
 	info := Detect()
 	assert.NotEmpty(t, info.DockerSocket)
-=======
-func TestDetect_BasicFields(t *testing.T) {
-	info := Detect()
-	assert.NotEmpty(t, info.Username, "Username should be set")
-	assert.NotEmpty(t, info.Hostname, "Hostname should be set")
 }
 
 func TestDetect_GPUFields(t *testing.T) {
 	info := Detect()
-	// GPU may or may not be available, but fields should be set
 	if info.GPUAvailable {
 		assert.True(t, info.GPUDevices > 0)
 	} else {
@@ -52,5 +45,4 @@ func TestDetect_GPUOnMac(t *testing.T) {
 	}
 	info := Detect()
 	assert.False(t, info.GPUAvailable, "GPU should not be detected on macOS")
->>>>>>> 125fbd4 (feat(platform): add NVIDIA GPU detection for Linux)
 }
