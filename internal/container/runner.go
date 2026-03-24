@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -101,6 +103,20 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 	if err := r.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return -1, fmt.Errorf("starting container: %w", err)
 	}
+
+	// Forward signals to container (critical for non-TTY mode;
+	// in TTY mode signals pass through the PTY naturally)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		for sig := range sigCh {
+			_ = r.client.ContainerKill(ctx, containerID, sig.String())
+		}
+	}()
+	defer func() {
+		signal.Stop(sigCh)
+		close(sigCh)
+	}()
 
 	if spec.Stdin {
 		go func() {

@@ -142,3 +142,20 @@ func TestRun_WithMount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 }
+
+func TestRun_CompletesWithSignalHandler(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// Verify container runs and exits normally with signal handler active
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:  "alpine:latest",
+		Cmd:    []string{"echo", "signal handler active"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode, "signal handler should not interfere with normal execution")
+}
