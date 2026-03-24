@@ -19,6 +19,7 @@ var builtins = map[string]Definition{
 	"gsd":         {Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", HomePaths: []string{".gsd"}},
 	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", HomePaths: []string{".aider"}},
 	"goose":       {Name: "goose", InstallType: "custom", Package: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", Binary: "goose", HomePaths: []string{".config/goose"}},
+	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", HomePaths: []string{".config/opencode"}},
 }
 
 func Lookup(name string) (Definition, bool) {

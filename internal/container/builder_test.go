@@ -212,7 +212,7 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 	for _, m := range spec.Mounts {
 		targets[m.Target] = true
 	}
-	assert.True(t, targets["/opt/ai-shim/agents/gemini-cli/bin"], "allowed agent bin should be mounted")
+	assert.True(t, targets["/usr/local/share/ai-shim/agents/gemini-cli/bin"], "allowed agent bin should be mounted")
 }
 
 func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
@@ -223,7 +223,7 @@ func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
 	// Should have mounts for agents other than the primary
 	hasOtherAgent := false
 	for _, m := range spec.Mounts {
-		if strings.Contains(m.Target, "/opt/ai-shim/agents/gemini-cli/") {
+		if strings.Contains(m.Target, "/usr/local/share/ai-shim/agents/gemini-cli/") {
 			hasOtherAgent = true
 		}
 	}

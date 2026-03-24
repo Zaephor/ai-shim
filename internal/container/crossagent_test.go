@@ -19,14 +19,9 @@ func TestCrossAgentMounts_Isolated_WithAllow(t *testing.T) {
 	mounts := CrossAgentMounts(layout, "claude-code", []string{"gemini-cli"}, true)
 	assert.NotEmpty(t, mounts)
 
-	// Should have mounts for gemini bin and home paths
-	hasGeminiBin := false
-	for _, m := range mounts {
-		if m.Target == "/opt/ai-shim/agents/gemini-cli/bin" {
-			hasGeminiBin = true
-		}
-	}
-	assert.True(t, hasGeminiBin, "should mount gemini bin")
+	// Should have bin mount only (home paths shared via profile mount)
+	assert.Len(t, mounts, 1)
+	assert.Equal(t, "/usr/local/share/ai-shim/agents/gemini-cli/bin", mounts[0].Target)
 }
 
 func TestCrossAgentMounts_NonIsolated(t *testing.T) {

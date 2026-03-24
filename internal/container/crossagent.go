@@ -1,8 +1,6 @@
 package container
 
 import (
-	"path/filepath"
-
 	"github.com/docker/docker/api/types/mount"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
@@ -10,35 +8,24 @@ import (
 )
 
 // CrossAgentMounts generates additional mounts for cross-agent access.
-// When isolated=false, all installed agents' home paths and bins are mounted.
+// When isolated=false, all installed agents' bins are mounted.
 // When isolated=true (default), only agents in allowAgents are mounted.
+// Home paths are already shared via the profile home mount.
 func CrossAgentMounts(layout storage.Layout, primaryAgent string, allowAgents []string, isolated bool) []mount.Mount {
 	var mounts []mount.Mount
 
 	agents := determineAccessibleAgents(primaryAgent, allowAgents, isolated)
 
 	for _, agentName := range agents {
-		agentDef, ok := agent.Lookup(agentName)
-		if !ok {
+		if _, ok := agent.Lookup(agentName); !ok {
 			continue
 		}
 
-		// Mount agent bin
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: layout.AgentBin(agentName),
-			Target: "/opt/ai-shim/agents/" + agentName + "/bin",
+			Target: "/usr/local/share/ai-shim/agents/" + agentName + "/bin",
 		})
-
-		// Mount agent home paths from the profile
-		for _, homePath := range agentDef.HomePaths {
-			// Home paths are relative (e.g. ".claude"), mount them in /home/user
-			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: filepath.Join(layout.Root, "agents", agentName, "home", homePath),
-				Target: "/home/user/" + homePath,
-			})
-		}
 	}
 
 	return mounts

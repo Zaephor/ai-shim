@@ -22,7 +22,7 @@ func TestLookup_NotFound(t *testing.T) {
 
 func TestAll_ContainsAllAgents(t *testing.T) {
 	all := All()
-	for _, name := range []string{"claude-code", "gemini-cli", "qwen-code", "codex", "pi", "gsd", "aider", "goose"} {
+	for _, name := range []string{"claude-code", "gemini-cli", "qwen-code", "codex", "pi", "gsd", "aider", "goose", "opencode"} {
 		_, ok := all[name]
 		assert.True(t, ok, "missing agent: %s", name)
 	}
@@ -49,6 +49,7 @@ func TestInstallTypes(t *testing.T) {
 		{"gemini-cli", "npm"},
 		{"aider", "uv"},
 		{"goose", "custom"},
+		{"opencode", "npm"},
 	}
 	for _, tt := range tests {
 		def, ok := Lookup(tt.agent)
