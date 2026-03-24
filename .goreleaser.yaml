@@ -1,5 +1,10 @@
 version: 2
 
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+
 builds:
   - main: ./cmd/ai-shim
     binary: ai-shim

@@ -10,13 +10,13 @@ import (
 
 func TestMaskSecrets_KeyPatterns(t *testing.T) {
 	env := map[string]string{
-		"API_KEY":          "some-value",
-		"SECRET_TOKEN":     "another-value",
-		"MY_PASSWORD":      "pass123",
-		"AWS_CREDENTIAL":   "cred-abc",
-		"AUTH_HEADER":      "Bearer xyz",
-		"DATABASE_SECRET":  "db-secret",
-		"NORMAL_VAR":       "safe-value",
+		"API_KEY":         "some-value",
+		"SECRET_TOKEN":    "another-value",
+		"MY_PASSWORD":     "pass123",
+		"AWS_CREDENTIAL":  "cred-abc",
+		"AUTH_HEADER":     "Bearer xyz",
+		"DATABASE_SECRET": "db-secret",
+		"NORMAL_VAR":      "safe-value",
 	}
 
 	masked := MaskSecrets(env)
@@ -53,11 +53,11 @@ func TestMaskSecrets_ValuePatterns(t *testing.T) {
 
 func TestMaskSecrets_SafeValues(t *testing.T) {
 	env := map[string]string{
-		"HOME":     "/home/user",
-		"PATH":     "/usr/bin:/usr/local/bin",
-		"LANG":     "en_US.UTF-8",
-		"EDITOR":   "vim",
-		"TERM":     "xterm-256color",
+		"HOME":   "/home/user",
+		"PATH":   "/usr/bin:/usr/local/bin",
+		"LANG":   "en_US.UTF-8",
+		"EDITOR": "vim",
+		"TERM":   "xterm-256color",
 	}
 
 	masked := MaskSecrets(env)

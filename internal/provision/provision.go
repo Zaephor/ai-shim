@@ -8,7 +8,7 @@ import (
 
 // ToolDef mirrors config.ToolDef — the tool definition from config.
 type ToolDef struct {
-	Type     string   // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
+	Type     string // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
 	URL      string
 	Binary   string
 	Files    []string // additional files for tar-extract-selective
