@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -125,6 +126,46 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 	}
 
 	return 0, nil
+}
+
+// ImageUser represents user information extracted from a Docker image.
+type ImageUser struct {
+	Username string // e.g. "runner", "ubuntu", "root"
+	HomeDir  string // e.g. "/home/runner", "/root"
+	UID      string // e.g. "1000"
+}
+
+// InspectImageUser extracts the default user and home directory from an image.
+// Falls back to the platform user info if image doesn't specify.
+func (r *Runner) InspectImageUser(ctx context.Context, image string) (ImageUser, error) {
+	inspect, _, err := r.client.ImageInspectWithRaw(ctx, image)
+	if err != nil {
+		return ImageUser{}, fmt.Errorf("inspecting image %s: %w", image, err)
+	}
+
+	result := ImageUser{
+		Username: "user",
+		HomeDir:  "/home/user",
+	}
+
+	// Check image config for User
+	if inspect.Config != nil && inspect.Config.User != "" {
+		result.UID = inspect.Config.User
+	}
+
+	// Check image config for HOME in Env
+	if inspect.Config != nil {
+		for _, env := range inspect.Config.Env {
+			if strings.HasPrefix(env, "HOME=") {
+				result.HomeDir = strings.TrimPrefix(env, "HOME=")
+			}
+			if strings.HasPrefix(env, "USER=") {
+				result.Username = strings.TrimPrefix(env, "USER=")
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // Client returns the underlying Docker client for DIND integration.

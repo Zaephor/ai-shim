@@ -110,6 +110,18 @@ func TestRun_WithHostname(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 }
 
+func TestInspectImageUser_Alpine(t *testing.T) {
+	skipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	user, err := runner.InspectImageUser(ctx, "alpine:latest")
+	require.NoError(t, err)
+	assert.NotEmpty(t, user.HomeDir)
+}
+
 func TestRun_WithMount(t *testing.T) {
 	skipIfNoDocker(t)
 	ctx := context.Background()

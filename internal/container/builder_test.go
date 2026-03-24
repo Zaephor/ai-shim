@@ -241,6 +241,34 @@ func TestBuildSpec_PackagesInEntrypoint(t *testing.T) {
 	assert.Contains(t, entrypoint, "apt-get", "should use apt-get for package installation")
 }
 
+func TestBuildSpec_CustomHomeDir(t *testing.T) {
+	p := defaultBuildParams()
+	p.HomeDir = "/home/runner"
+	spec := BuildSpec(p)
+
+	hasRunnerHome := false
+	for _, m := range spec.Mounts {
+		if m.Target == "/home/runner" {
+			hasRunnerHome = true
+		}
+	}
+	assert.True(t, hasRunnerHome, "profile home should mount to custom home dir")
+}
+
+func TestBuildSpec_DefaultHomeDir(t *testing.T) {
+	p := defaultBuildParams()
+	// HomeDir empty = default
+	spec := BuildSpec(p)
+
+	hasDefaultHome := false
+	for _, m := range spec.Mounts {
+		if m.Target == "/home/user" {
+			hasDefaultHome = true
+		}
+	}
+	assert.True(t, hasDefaultHome, "should default to /home/user when HomeDir not set")
+}
+
 func TestBuildSpec_ConfigArgsAndPassthroughMerged(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Args = []string{"--no-telemetry"}

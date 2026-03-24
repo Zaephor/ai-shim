@@ -30,6 +30,7 @@ type BuildParams struct {
 	Layout   storage.Layout
 	Platform platform.Info
 	Args     []string
+	HomeDir  string // container-side home directory (from image inspect)
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
@@ -52,10 +53,15 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		"ai-shim.profile": p.Profile,
 	}
 
+	homeDir := p.HomeDir
+	if homeDir == "" {
+		homeDir = "/home/user"
+	}
+
 	pwd, _ := os.Getwd()
 	workdir := workspace.ContainerWorkdir(p.Platform.Hostname, pwd)
 
-	mounts := buildMounts(p, pwd, workdir)
+	mounts := buildMounts(p, pwd, workdir, homeDir)
 
 	// Cross-agent access mounts
 	isolated := true
@@ -127,7 +133,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	}
 }
 
-func buildMounts(p BuildParams, pwd, workdir string) []mount.Mount {
+func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeBind,
@@ -147,7 +153,7 @@ func buildMounts(p BuildParams, pwd, workdir string) []mount.Mount {
 		{
 			Type:   mount.TypeBind,
 			Source: p.Layout.ProfileHome(p.Profile),
-			Target: "/home/user",
+			Target: homeDir,
 		},
 		{
 			Type:   mount.TypeBind,

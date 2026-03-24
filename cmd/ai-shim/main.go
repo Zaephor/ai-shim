@@ -156,7 +156,26 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
 	}
 
-	// 6. Build container spec
+	// 6. Create Docker runner
+	ctx := context.Background()
+	runner, err := container.NewRunner(ctx)
+	if err != nil {
+		return 1, fmt.Errorf("creating container runner: %w", err)
+	}
+	defer runner.Close()
+
+	// 6.5 Detect home directory from container image
+	image := cfg.Image
+	if image == "" {
+		image = container.DefaultImage
+	}
+	imageUser, err := runner.InspectImageUser(ctx, image)
+	if err != nil {
+		// Non-fatal: use defaults
+		imageUser = container.ImageUser{HomeDir: "/home/user", Username: "user"}
+	}
+
+	// 7. Build container spec
 	spec := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
@@ -164,15 +183,8 @@ func runAgent(name string, args []string) (int, error) {
 		Layout:   layout,
 		Platform: platInfo,
 		Args:     args,
+		HomeDir:  imageUser.HomeDir,
 	})
-
-	// 7. Create Docker runner
-	ctx := context.Background()
-	runner, err := container.NewRunner(ctx)
-	if err != nil {
-		return 1, fmt.Errorf("creating container runner: %w", err)
-	}
-	defer runner.Close()
 
 	// 7.5 Start DIND sidecar if enabled
 	dindEnabled := false
