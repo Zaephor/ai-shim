@@ -1,6 +1,8 @@
 package security
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -63,6 +65,110 @@ func TestMaskSecrets_SafeValues(t *testing.T) {
 	for key, val := range env {
 		if masked[key] != val {
 			t.Errorf("expected %s to pass through as %q, got %q", key, val, masked[key])
+		}
+	}
+}
+
+// --- Path Validation Tests ---
+
+func TestValidateVolumePath_Valid(t *testing.T) {
+	paths := []string{
+		"/home/user/data",
+		"/opt/app",
+		"/tmp/workspace",
+	}
+	for _, p := range paths {
+		if err := ValidateVolumePath(p); err != nil {
+			t.Errorf("expected %s to be valid, got error: %v", p, err)
+		}
+	}
+}
+
+func TestValidateVolumePath_Traversal(t *testing.T) {
+	paths := []string{
+		"/home/../etc/passwd",
+		"/home/user/../../etc/shadow",
+	}
+	for _, p := range paths {
+		if err := ValidateVolumePath(p); err == nil {
+			t.Errorf("expected %s to be rejected for traversal", p)
+		}
+	}
+}
+
+func TestValidateVolumePath_Sensitive(t *testing.T) {
+	paths := []string{
+		"/etc",
+		"/etc/passwd",
+		"/proc",
+		"/proc/1/status",
+		"/sys",
+		"/sys/class",
+		"/dev",
+		"/dev/sda",
+		"/var/run",
+		"/var/run/something",
+	}
+	for _, p := range paths {
+		if err := ValidateVolumePath(p); err == nil {
+			t.Errorf("expected %s to be rejected as sensitive", p)
+		}
+	}
+}
+
+func TestValidateVolumePath_DockerSocket(t *testing.T) {
+	if err := ValidateVolumePath("/var/run/docker.sock"); err != nil {
+		t.Errorf("expected /var/run/docker.sock to be allowed, got error: %v", err)
+	}
+}
+
+// --- Safe Directory Tests ---
+
+func TestValidateWorkingDirectory_Valid(t *testing.T) {
+	dirs := []string{
+		"/home/user/projects",
+		"/opt/app",
+		"/tmp/workspace",
+	}
+	for _, d := range dirs {
+		if err := ValidateWorkingDirectory(d); err != nil {
+			t.Errorf("expected %s to be valid, got error: %v", d, err)
+		}
+	}
+}
+
+func TestValidateWorkingDirectory_Root(t *testing.T) {
+	if err := ValidateWorkingDirectory("/"); err == nil {
+		t.Error("expected / to be rejected")
+	}
+}
+
+func TestValidateWorkingDirectory_Home(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME not set")
+	}
+	if err := ValidateWorkingDirectory(home); err == nil {
+		t.Errorf("expected exact HOME (%s) to be rejected", home)
+	}
+}
+
+func TestValidateWorkingDirectory_HomeSubdir(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME not set")
+	}
+	subdir := filepath.Join(home, "projects")
+	if err := ValidateWorkingDirectory(subdir); err != nil {
+		t.Errorf("expected HOME subdir (%s) to be valid, got error: %v", subdir, err)
+	}
+}
+
+func TestValidateWorkingDirectory_System(t *testing.T) {
+	dirs := []string{"/etc", "/var", "/usr", "/bin", "/sbin", "/proc", "/sys", "/dev"}
+	for _, d := range dirs {
+		if err := ValidateWorkingDirectory(d); err == nil {
+			t.Errorf("expected %s to be rejected", d)
 		}
 	}
 }
