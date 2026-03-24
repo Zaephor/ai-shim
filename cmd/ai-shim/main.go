@@ -59,12 +59,12 @@ func runManage(args []string) error {
 		if err != nil {
 			return fmt.Errorf("checking for updates: %w", err)
 		}
-		if selfupdate.NeedsUpdate(version, latest) {
-			fmt.Printf("Update available: %s -> %s\n", version, latest)
-			// TODO: implement actual binary replacement
+		if !selfupdate.NeedsUpdate(version, latest) {
+			fmt.Printf("ai-shim %s is up to date (latest: %s)\n", version, latest)
 			return nil
 		}
-		fmt.Printf("ai-shim %s is up to date\n", version)
+		fmt.Printf("Update available: %s -> %s\n", version, latest)
+		fmt.Println("Download from: https://github.com/ai-shim/ai-shim/releases/latest")
 		return nil
 
 	case "manage":
@@ -109,8 +109,89 @@ func runManageSubcommand(args []string) error {
 		fmt.Print(cli.Doctor())
 		return nil
 
+	case "symlinks":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage symlinks <list|create|remove> [args...]")
+		}
+		exe, _ := os.Executable()
+		switch args[1] {
+		case "list":
+			dir := "."
+			if len(args) > 2 {
+				dir = args[2]
+			}
+			links, err := cli.ListSymlinks(dir, exe)
+			if err != nil {
+				return err
+			}
+			if len(links) == 0 {
+				fmt.Println("No ai-shim symlinks found.")
+			} else {
+				for _, l := range links {
+					fmt.Println("  " + l)
+				}
+			}
+			return nil
+		case "create":
+			if len(args) < 3 {
+				return fmt.Errorf("usage: ai-shim manage symlinks create <agent> [profile] [dir]")
+			}
+			agentName := args[2]
+			profile := "default"
+			dir := "."
+			if len(args) > 3 {
+				profile = args[3]
+			}
+			if len(args) > 4 {
+				dir = args[4]
+			}
+			path, err := cli.CreateSymlink(agentName, profile, dir, exe)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Created symlink: %s\n", path)
+			return nil
+		case "remove":
+			if len(args) < 3 {
+				return fmt.Errorf("usage: ai-shim manage symlinks remove <path>")
+			}
+			return cli.RemoveSymlink(args[2])
+		default:
+			return fmt.Errorf("unknown symlinks subcommand: %s", args[1])
+		}
+
+	case "dry-run":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: ai-shim manage dry-run <agent> <profile> [args...]")
+		}
+		var extraArgs []string
+		if len(args) > 3 {
+			extraArgs = args[3:]
+		}
+		output, err := cli.DryRun(layout, args[1], args[2], extraArgs)
+		if err != nil {
+			return err
+		}
+		fmt.Print(output)
+		return nil
+
+	case "cleanup":
+		removed, err := cli.Cleanup()
+		if err != nil {
+			return err
+		}
+		if len(removed) == 0 {
+			fmt.Println("No orphaned containers found.")
+		} else {
+			fmt.Printf("Removed %d orphaned container(s):\n", len(removed))
+			for _, r := range removed {
+				fmt.Println("  " + r)
+			}
+		}
+		return nil
+
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, cleanup", args[0])
 	}
 }
 

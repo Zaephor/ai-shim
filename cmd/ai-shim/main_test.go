@@ -41,3 +41,24 @@ func TestRunManage_UnknownCommand(t *testing.T) {
 	assert.Error(t, err, "unknown command should return error")
 	assert.Contains(t, err.Error(), "unknown")
 }
+
+func TestRunManage_ManageSymlinks(t *testing.T) {
+	err := runManage([]string{"manage", "symlinks"})
+	// Should return usage error, not "unknown command"
+	if err != nil {
+		assert.NotContains(t, err.Error(), "unknown")
+	}
+}
+
+func TestRunManage_ManageDryRun(t *testing.T) {
+	err := runManage([]string{"manage", "dry-run"})
+	// Should return usage error, not "unknown command"
+	if err != nil {
+		assert.NotContains(t, err.Error(), "unknown")
+	}
+}
+
+func TestRunManage_ManageCleanup(t *testing.T) {
+	err := runManage([]string{"manage", "cleanup"})
+	assert.NoError(t, err, "cleanup should work (may find 0 containers)")
+}

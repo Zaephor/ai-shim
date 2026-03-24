@@ -10,6 +10,8 @@ import (
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	container_types "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
 
@@ -120,6 +122,155 @@ func Doctor() string {
 	b.WriteString(fmt.Sprintf("  Config dir:     %s\n", layout.ConfigDir))
 
 	return b.String()
+}
+
+// CreateSymlink creates a symlink for an agent+profile combination.
+func CreateSymlink(agent, profile, targetDir string, shimPath string) (string, error) {
+	name := agent
+	if profile != "" && profile != "default" {
+		name = agent + "_" + profile
+	}
+	linkPath := filepath.Join(targetDir, name)
+
+	if _, err := os.Lstat(linkPath); err == nil {
+		return "", fmt.Errorf("symlink %s already exists", linkPath)
+	}
+
+	if err := os.Symlink(shimPath, linkPath); err != nil {
+		return "", fmt.Errorf("creating symlink: %w", err)
+	}
+	return linkPath, nil
+}
+
+// ListSymlinks finds all symlinks pointing to ai-shim in a directory.
+func ListSymlinks(dir string, shimPath string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var links []string
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(filepath.Join(dir, e.Name()))
+			if err == nil && (target == shimPath || filepath.Base(target) == "ai-shim") {
+				links = append(links, e.Name())
+			}
+		}
+	}
+	return links, nil
+}
+
+// RemoveSymlink removes a symlink if it points to ai-shim.
+func RemoveSymlink(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s is not a symlink", path)
+	}
+	return os.Remove(path)
+}
+
+// DryRun returns a formatted representation of the container spec that would be created.
+func DryRun(layout storage.Layout, agentName, profile string, args []string) (string, error) {
+	cfg, err := config.Resolve(layout.ConfigDir, agentName, profile)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Dry run for %s_%s:\n\n", agentName, profile))
+
+	image := cfg.Image
+	if image == "" {
+		image = "ghcr.io/catthehacker/ubuntu:act-24.04"
+	}
+	hostname := cfg.Hostname
+	if hostname == "" {
+		hostname = "ai-shim"
+	}
+
+	b.WriteString(fmt.Sprintf("  Image:     %s\n", image))
+	b.WriteString(fmt.Sprintf("  Hostname:  %s\n", hostname))
+
+	if cfg.Version != "" {
+		b.WriteString(fmt.Sprintf("  Version:   %s\n", cfg.Version))
+	}
+
+	if len(cfg.Env) > 0 {
+		b.WriteString("  Env:\n")
+		for k, v := range cfg.Env {
+			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+		}
+	}
+
+	if len(cfg.Volumes) > 0 {
+		b.WriteString("  Volumes:\n")
+		for _, v := range cfg.Volumes {
+			b.WriteString(fmt.Sprintf("    %s\n", v))
+		}
+	}
+
+	if len(cfg.Ports) > 0 {
+		b.WriteString("  Ports:\n")
+		for _, p := range cfg.Ports {
+			b.WriteString(fmt.Sprintf("    %s\n", p))
+		}
+	}
+
+	if len(cfg.Args) > 0 {
+		b.WriteString(fmt.Sprintf("  Default args: %s\n", strings.Join(cfg.Args, " ")))
+	}
+	if len(args) > 0 {
+		b.WriteString(fmt.Sprintf("  Passthrough:  %s\n", strings.Join(args, " ")))
+	}
+
+	dind := "disabled"
+	if cfg.DIND != nil && *cfg.DIND {
+		dind = "enabled"
+	}
+	b.WriteString(fmt.Sprintf("  DIND:      %s\n", dind))
+
+	gpu := "disabled"
+	if cfg.GPU != nil && *cfg.GPU {
+		gpu = "enabled"
+	}
+	b.WriteString(fmt.Sprintf("  GPU:       %s\n", gpu))
+
+	return b.String(), nil
+}
+
+// Cleanup finds and removes orphaned ai-shim containers.
+func Cleanup() ([]string, error) {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("connecting to Docker: %w", err)
+	}
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+
+	var removed []string
+	for _, c := range containers {
+		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
+			continue
+		}
+		name := c.ID[:12]
+		if len(c.Names) > 0 {
+			name = c.Names[0]
+		}
+		removed = append(removed, name)
+	}
+
+	return removed, nil
 }
 
 func readDirNames(root, subdir string) ([]string, error) {
