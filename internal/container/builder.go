@@ -9,6 +9,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/install"
 	"github.com/ai-shim/ai-shim/internal/platform"
+	"github.com/ai-shim/ai-shim/internal/provision"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/workspace"
 	"github.com/docker/docker/api/types/mount"
@@ -55,13 +56,47 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	mounts := buildMounts(p, pwd, workdir)
 
+	// Cross-agent access mounts
+	isolated := true
+	if p.Config.Isolated != nil {
+		isolated = *p.Config.Isolated
+	}
+	crossMounts := CrossAgentMounts(p.Layout, p.Agent.Name, p.Config.AllowAgents, isolated)
+	mounts = append(mounts, crossMounts...)
+
+	// Tool provisioning script
+	var toolScript string
+	if len(p.Config.Tools) > 0 {
+		provTools := make(map[string]provision.ToolDef)
+		for name, td := range p.Config.Tools {
+			provTools[name] = provision.ToolDef{
+				Type: td.Type, URL: td.URL, Binary: td.Binary,
+				Files: td.Files, Package: td.Package,
+				Install: td.Install, Checksum: td.Checksum,
+			}
+		}
+		toolScript = provision.GenerateInstallScript(provTools, "/usr/local/share/ai-shim/bin")
+	}
+
+	// Package installation script
+	var packageScript string
+	if len(p.Config.Packages) > 0 {
+		packageScript = "apt-get update -qq && apt-get install -y -qq " + strings.Join(p.Config.Packages, " ") + " 2>/dev/null\n"
+	}
+
+	// Merge config args with passthrough args
+	allArgs := append(p.Config.Args, p.Args...)
+
 	entrypoint := install.GenerateEntrypoint(install.EntrypointParams{
 		InstallType: p.Agent.InstallType,
 		Package:     p.Agent.Package,
 		Binary:      p.Agent.Binary,
 		Version:     p.Config.Version,
-		AgentArgs:   p.Args,
+		AgentArgs:   allArgs,
 	})
+
+	// Prepend tool and package scripts to entrypoint
+	fullScript := toolScript + packageScript + entrypoint
 
 	env := buildEnv(p.Config.Env)
 
@@ -80,7 +115,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		Env:          env,
 		Mounts:       mounts,
 		WorkingDir:   workdir,
-		Entrypoint:   []string{"sh", "-c", entrypoint},
+		Entrypoint:   []string{"sh", "-c", fullScript},
 		User:         user,
 		Labels:       labels,
 		Ports:        ports,
@@ -119,6 +154,19 @@ func buildMounts(p BuildParams, pwd, workdir string) []mount.Mount {
 			Target: workdir,
 		},
 	}
+
+	// Custom volumes from config
+	for _, vol := range p.Config.Volumes {
+		parts := strings.SplitN(vol, ":", 2)
+		if len(parts) == 2 {
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: parts[0],
+				Target: parts[1],
+			})
+		}
+	}
+
 	return mounts
 }
 

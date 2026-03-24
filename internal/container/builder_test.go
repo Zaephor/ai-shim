@@ -1,6 +1,7 @@
 package container
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
@@ -174,4 +175,79 @@ func TestBuildSpec_WorkingDir(t *testing.T) {
 	spec := BuildSpec(p)
 
 	assert.Contains(t, spec.WorkingDir, "/workspace/")
+}
+
+func TestBuildSpec_CustomVolumesFromConfig(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Volumes = []string{"/host/data:/container/data", "/host/logs:/container/logs"}
+	spec := BuildSpec(p)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	assert.True(t, targets["/container/data"], "custom volume /host/data:/container/data should be mounted")
+	assert.True(t, targets["/container/logs"], "custom volume /host/logs:/container/logs should be mounted")
+}
+
+func TestBuildSpec_ToolProvisioningInEntrypoint(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Tools = map[string]config.ToolDef{
+		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
+	}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2] // the shell script
+	assert.Contains(t, entrypoint, "act", "tool provisioning should be in entrypoint")
+	assert.Contains(t, entrypoint, "curl", "tool download should be in entrypoint")
+}
+
+func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.AllowAgents = []string{"gemini-cli"}
+	p.Config.Isolated = boolPtr(true)
+	spec := BuildSpec(p)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	assert.True(t, targets["/opt/ai-shim/agents/gemini-cli/bin"], "allowed agent bin should be mounted")
+}
+
+func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Isolated = boolPtr(false)
+	spec := BuildSpec(p)
+
+	// Should have mounts for agents other than the primary
+	hasOtherAgent := false
+	for _, m := range spec.Mounts {
+		if strings.Contains(m.Target, "/opt/ai-shim/agents/gemini-cli/") {
+			hasOtherAgent = true
+		}
+	}
+	assert.True(t, hasOtherAgent, "non-isolated mode should mount other agent bins")
+}
+
+func TestBuildSpec_PackagesInEntrypoint(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Packages = []string{"tmux", "jq"}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, "tmux", "packages should be installed in entrypoint")
+	assert.Contains(t, entrypoint, "jq", "packages should be installed in entrypoint")
+	assert.Contains(t, entrypoint, "apt-get", "should use apt-get for package installation")
+}
+
+func TestBuildSpec_ConfigArgsAndPassthroughMerged(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Args = []string{"--no-telemetry"}
+	p.Args = []string{"--verbose"}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, "--no-telemetry", "config args should be in entrypoint")
+	assert.Contains(t, entrypoint, "--verbose", "passthrough args should be in entrypoint")
 }
