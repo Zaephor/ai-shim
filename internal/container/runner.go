@@ -127,6 +127,11 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 	return 0, nil
 }
 
+// Client returns the underlying Docker client for DIND integration.
+func (r *Runner) Client() *client.Client {
+	return r.client
+}
+
 // Close closes the Docker client connection.
 func (r *Runner) Close() error {
 	return r.client.Close()

@@ -7,10 +7,14 @@ import (
 	"path/filepath"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
+	"github.com/ai-shim/ai-shim/internal/cli"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/container"
+	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/invocation"
 	"github.com/ai-shim/ai-shim/internal/platform"
+	"github.com/ai-shim/ai-shim/internal/security"
+	"github.com/ai-shim/ai-shim/internal/selfupdate"
 	"github.com/ai-shim/ai-shim/internal/storage"
 )
 
@@ -40,11 +44,74 @@ func main() {
 }
 
 func runManage(args []string) error {
-	if len(args) == 0 || args[0] == "version" {
+	if len(args) == 0 {
 		fmt.Printf("ai-shim %s\n", version)
 		return nil
 	}
-	return fmt.Errorf("unknown command: %s", args[0])
+
+	switch args[0] {
+	case "version":
+		fmt.Printf("ai-shim %s\n", version)
+		return nil
+
+	case "update":
+		latest, err := selfupdate.CheckLatest()
+		if err != nil {
+			return fmt.Errorf("checking for updates: %w", err)
+		}
+		if selfupdate.NeedsUpdate(version, latest) {
+			fmt.Printf("Update available: %s -> %s\n", version, latest)
+			// TODO: implement actual binary replacement
+			return nil
+		}
+		fmt.Printf("ai-shim %s is up to date\n", version)
+		return nil
+
+	case "manage":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage <subcommand>")
+		}
+		return runManageSubcommand(args[1:])
+
+	default:
+		return fmt.Errorf("unknown command: %s\nAvailable: version, update, manage", args[0])
+	}
+}
+
+func runManageSubcommand(args []string) error {
+	layout := storage.NewLayout(storage.DefaultRoot())
+
+	switch args[0] {
+	case "agents":
+		fmt.Print(cli.ListAgents())
+		return nil
+
+	case "profiles":
+		output, err := cli.ListProfiles(layout)
+		if err != nil {
+			return err
+		}
+		fmt.Print(output)
+		return nil
+
+	case "config":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: ai-shim manage config <agent> <profile>")
+		}
+		output, err := cli.ShowConfig(layout, args[1], args[2])
+		if err != nil {
+			return err
+		}
+		fmt.Print(output)
+		return nil
+
+	case "doctor":
+		fmt.Print(cli.Doctor())
+		return nil
+
+	default:
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor", args[0])
+	}
 }
 
 func runAgent(name string, args []string) (int, error) {
@@ -75,6 +142,20 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("resolving config: %w", err)
 	}
 
+	// 5.5 Validate working directory
+	pwd, err := os.Getwd()
+	if err != nil {
+		return 1, fmt.Errorf("getting working directory: %w", err)
+	}
+	if err := security.ValidateWorkingDirectory(pwd); err != nil {
+		return 1, err
+	}
+
+	// 5.6 Validate config volumes
+	if errs := container.ValidateConfigVolumes(cfg.Volumes); len(errs) > 0 {
+		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
+	}
+
 	// 6. Build container spec
 	spec := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
@@ -92,6 +173,34 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("creating container runner: %w", err)
 	}
 	defer runner.Close()
+
+	// 7.5 Start DIND sidecar if enabled
+	dindEnabled := false
+	if cfg.DIND != nil && *cfg.DIND {
+		dindEnabled = true
+	}
+
+	if dindEnabled {
+		dindGPU := false
+		if cfg.DINDGpu != nil {
+			dindGPU = *cfg.DINDGpu
+		}
+
+		useSysbox := dind.DetectSysbox(ctx, runner.Client())
+
+		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
+			GPU:       dindGPU,
+			UseSysbox: useSysbox,
+			Labels:    spec.Labels,
+		})
+		if err != nil {
+			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
+		}
+		defer sidecar.Stop(ctx)
+
+		// Add DOCKER_HOST env var pointing to DIND
+		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+sidecar.ContainerID()+":2375")
+	}
 
 	// 8. Run container, return its exit code
 	exitCode, err := runner.Run(ctx, spec)

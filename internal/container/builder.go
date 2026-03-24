@@ -10,6 +10,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/install"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/provision"
+	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/workspace"
 	"github.com/docker/docker/api/types/mount"
@@ -212,6 +213,21 @@ func isTTY() bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// ValidateConfigVolumes checks all volume mount paths for security issues.
+func ValidateConfigVolumes(volumes []string) []error {
+	var errs []error
+	for _, vol := range volumes {
+		parts := strings.SplitN(vol, ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		if err := security.ValidateVolumePath(parts[0]); err != nil {
+			errs = append(errs, fmt.Errorf("volume %s: %w", vol, err))
+		}
+	}
+	return errs
 }
 
 // boolPtr is a helper for tests.
