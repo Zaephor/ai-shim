@@ -1,4 +1,4 @@
-.PHONY: build test lint clean setup fmt vet e2e verify
+.PHONY: build test lint clean setup fmt vet e2e verify check-silent-failures
 
 BINARY := ai-shim
 MODULE := github.com/ai-shim/ai-shim
@@ -28,7 +28,15 @@ vet:
 e2e:
 	go test ./test/e2e/ -v -count=1
 
-verify: fmt vet lint test
+check-silent-failures:
+	@echo "Checking for silent failure patterns in production code..."
+	@if grep -rn '2>/dev/null' internal/ --include='*.go' | grep -v '_test.go' | grep -v 'command -v'; then \
+		echo "ERROR: Found 2>/dev/null in production code (silent failure pattern)"; \
+		exit 1; \
+	fi
+	@echo "No silent failure patterns found."
+
+verify: fmt vet lint test check-silent-failures
 
 setup:
 	git config core.hooksPath .githooks
