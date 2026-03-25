@@ -36,7 +36,7 @@ func CheckLatest() (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("github API returned status %d", resp.StatusCode)
 	}
 
 	var release Release

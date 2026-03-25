@@ -370,6 +370,33 @@ func TestBuildSpec_NoDINDSocketMount(t *testing.T) {
 	}
 }
 
+func TestRandomSuffix_Length(t *testing.T) {
+	s := randomSuffix(4)
+	assert.Len(t, s, 4, "suffix should be exactly 4 characters")
+	assert.Regexp(t, "^[0-9a-f]+$", s, "suffix should be hex characters only")
+}
+
+func TestRandomSuffix_Unique(t *testing.T) {
+	s1 := randomSuffix(4)
+	s2 := randomSuffix(4)
+	assert.NotEqual(t, s1, s2, "two calls should produce different suffixes")
+}
+
+func TestBuildSpec_WorkdirUsesRealPwd(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+	// WorkingDir should start with /workspace/ and have a hash
+	assert.True(t, len(spec.WorkingDir) > len("/workspace/"), "workdir should have hash suffix")
+}
+
+func TestBuildSpec_ContainerNameUnder63Chars(t *testing.T) {
+	p := defaultBuildParams()
+	p.Agent.Name = "claude-code"
+	p.Profile = "work"
+	spec := BuildSpec(p)
+	assert.True(t, len(spec.Name) <= 63, "container name should not exceed Docker's 63-char limit, got %d: %s", len(spec.Name), spec.Name)
+}
+
 func TestParsePorts_InvalidFormat(t *testing.T) {
 	portMap, portSet := parsePorts([]string{"invalid-port", "8080:80"})
 	// Valid port should still be parsed

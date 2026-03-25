@@ -297,7 +297,7 @@ func runAgent(name string, args []string) (int, error) {
 			dindHostname = cfg.DINDHostname
 		}
 
-		wsHash := workspace.HashPath(platInfo.Hostname, pwd)[:8]
+		wsHash := workspace.HashPath(platInfo.Hostname, pwd)
 		networkName := network.ResolveName(cfg.NetworkScope, agentName, profileName, wsHash)
 
 		netHandle, err := network.EnsureNetwork(ctx, runner.Client(), networkName, spec.Labels)

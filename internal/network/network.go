@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"time"
 
 	"github.com/docker/docker/api/types/filters"
 	dnetwork "github.com/docker/docker/api/types/network"
@@ -33,13 +34,17 @@ func ResolveName(scope, agentName, profile, workspaceHash string) string {
 		return prefix + "-" + profile + "-" + workspaceHash
 	case "isolated", "":
 		suffix := make([]byte, 4)
-		rand.Read(suffix)
-		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix)
+		if _, err := rand.Read(suffix); err != nil {
+			suffix = []byte(fmt.Sprintf("%x", time.Now().UnixNano())[:8])
+		}
+		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix[:4])
 	default:
 		// Unknown scope defaults to isolated
 		suffix := make([]byte, 4)
-		rand.Read(suffix)
-		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix)
+		if _, err := rand.Read(suffix); err != nil {
+			suffix = []byte(fmt.Sprintf("%x", time.Now().UnixNano())[:8])
+		}
+		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix[:4])
 	}
 }
 

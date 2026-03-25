@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
@@ -60,10 +61,14 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		homeDir = "/home/user"
 	}
 
-	pwd, _ := os.Getwd()
+	pwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: cannot determine working directory: %v\n", err)
+		pwd = "/tmp"
+	}
 	workdir := workspace.ContainerWorkdir(p.Platform.Hostname, pwd)
 
-	wsHash := workspace.HashPath(p.Platform.Hostname, pwd)[:8]
+	wsHash := workspace.HashPath(p.Platform.Hostname, pwd)
 	name := generateContainerName(p.Agent.Name, p.Profile, wsHash)
 
 	mounts := buildMounts(p, pwd, workdir, homeDir)
@@ -250,7 +255,10 @@ func generateContainerName(agentName, profile, workspaceHash string) string {
 
 func randomSuffix(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp-based suffix if crypto/rand fails
+		return fmt.Sprintf("%x", time.Now().UnixNano())[:n]
+	}
 	return fmt.Sprintf("%x", b)[:n]
 }
 

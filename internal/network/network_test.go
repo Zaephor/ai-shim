@@ -45,6 +45,12 @@ func TestResolveName_UnknownScopeDefaultsToIsolated(t *testing.T) {
 	assert.Contains(t, name, "ai-shim-claude-code-work-a1b2c3d4")
 }
 
+func TestResolveName_IsolatedHasRandomSuffix(t *testing.T) {
+	n1 := ResolveName("isolated", "claude", "work", "abc123")
+	n2 := ResolveName("isolated", "claude", "work", "abc123")
+	assert.NotEqual(t, n1, n2, "isolated names should differ due to random suffix")
+}
+
 func TestEnsureNetwork_CreatesAndReturns(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
