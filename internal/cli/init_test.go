@@ -54,6 +54,18 @@ func TestInit_CreatesDirectories(t *testing.T) {
 	}
 }
 
+func TestInit_SeedsExampleConfigs(t *testing.T) {
+	layout := storage.NewLayout(filepath.Join(t.TempDir(), ".ai-shim"))
+	err := Init(layout)
+	require.NoError(t, err)
+
+	// Check example configs were created
+	_, err = os.Stat(filepath.Join(layout.ConfigDir, "agents", "claude-code.yaml"))
+	assert.NoError(t, err, "should create example agent config")
+	_, err = os.Stat(filepath.Join(layout.ConfigDir, "profiles", "work.yaml"))
+	assert.NoError(t, err, "should create example profile config")
+}
+
 func TestInit_DoesNotOverwriteExistingConfig(t *testing.T) {
 	layout := storage.NewLayout(filepath.Join(t.TempDir(), ".ai-shim"))
 	require.NoError(t, os.MkdirAll(layout.ConfigDir, 0755))
