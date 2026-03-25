@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunManage_Version(t *testing.T) {
@@ -61,4 +64,35 @@ func TestRunManage_ManageDryRun(t *testing.T) {
 func TestRunManage_ManageCleanup(t *testing.T) {
 	err := runManage([]string{"manage", "cleanup"})
 	assert.NoError(t, err, "cleanup should work (may find 0 containers)")
+}
+
+func TestHelpText_ListsAllEnvVarOverrides(t *testing.T) {
+	// Read resolver.go to find all AI_SHIM_ env var names
+	data, err := os.ReadFile("../../internal/config/resolver.go")
+	require.NoError(t, err)
+
+	// Extract AI_SHIM_* variable names from os.Getenv calls
+	var envVars []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, `os.Getenv("AI_SHIM_`) {
+			start := strings.Index(line, `"AI_SHIM_`)
+			end := strings.Index(line[start+1:], `"`) + start + 1
+			envVar := line[start+1 : end]
+			envVars = append(envVars, envVar)
+		}
+	}
+
+	require.NotEmpty(t, envVars, "should find AI_SHIM_* env vars in resolver.go")
+
+	// Capture help text
+	// We can't easily capture stdout from printHelp(), so read main.go
+	// and check the help string contains each env var
+	mainData, err := os.ReadFile("main.go")
+	require.NoError(t, err)
+	mainStr := string(mainData)
+
+	for _, envVar := range envVars {
+		assert.Contains(t, mainStr, envVar,
+			"help text in main.go should mention %s (defined in resolver.go)", envVar)
+	}
 }
