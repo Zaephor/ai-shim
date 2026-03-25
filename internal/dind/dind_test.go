@@ -2,11 +2,15 @@ package dind
 
 import (
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
@@ -136,7 +140,18 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	defer cli.Close()
 	ctx := context.Background()
 
-	cacheDir := t.TempDir()
+	// Pull registry image if needed (skip if pull fails)
+	pullReader, err := cli.ImagePull(ctx, "docker.io/library/registry:2", image.PullOptions{})
+	if err != nil {
+		t.Skip("Cannot pull registry:2 image:", err)
+	}
+	io.Copy(io.Discard, pullReader)
+	pullReader.Close()
+
+	// Use a path accessible to the Docker daemon
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache")
+	os.MkdirAll(cacheDir, 0755)
+	t.Cleanup(func() { os.RemoveAll(cacheDir) })
 	addr, err := EnsureCache(ctx, cli, cacheDir, "")
 	require.NoError(t, err)
 	assert.Contains(t, addr, CacheContainerName)
