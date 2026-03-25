@@ -8,7 +8,7 @@ import (
 
 // ToolDef mirrors config.ToolDef — the tool definition from config.
 type ToolDef struct {
-	Type     string // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
+	Type     string   // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
 	URL      string
 	Binary   string
 	Files    []string // additional files for tar-extract-selective
@@ -29,13 +29,13 @@ func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
 
 	for name, tool := range tools {
 		b.WriteString(fmt.Sprintf("\n# Install: %s\n", name))
-		b.WriteString(generateToolInstall(name, tool, targetDir))
+		b.WriteString(generateToolInstall(tool, targetDir))
 	}
 
 	return b.String()
 }
 
-func generateToolInstall(name string, tool ToolDef, targetDir string) string {
+func generateToolInstall(tool ToolDef, targetDir string) string {
 	var b strings.Builder
 
 	switch tool.Type {
@@ -51,8 +51,9 @@ func generateToolInstall(name string, tool ToolDef, targetDir string) string {
 
 	case "tar-extract":
 		b.WriteString(fmt.Sprintf("if [ ! -f \"%s/%s\" ]; then\n", targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards '*/%s' 2>/dev/null || \\\n", tool.URL, targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C /tmp && find /tmp -name \"%s\" -exec mv {} \"%s/\" \\;\n", tool.URL, tool.Binary, targetDir))
+		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards '*/%s' || \\\n", tool.URL, targetDir, tool.Binary))
+		b.WriteString(fmt.Sprintf("  { echo \"Fallback: extracting %s via find...\"; curl -fsSL \"%s\" | tar xz -C /tmp && find /tmp -name \"%s\" -exec mv {} \"%s/\" \\; ; } || \\\n", tool.Binary, tool.URL, tool.Binary, targetDir))
+		b.WriteString(fmt.Sprintf("  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", tool.Binary))
 		b.WriteString(fmt.Sprintf("  chmod +x \"%s/%s\"\n", targetDir, tool.Binary))
 		b.WriteString("fi\n")
 
@@ -63,14 +64,14 @@ func generateToolInstall(name string, tool ToolDef, targetDir string) string {
 		for i, f := range files {
 			wildcards[i] = fmt.Sprintf("'*/%s'", f)
 		}
-		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards %s 2>/dev/null\n",
-			tool.URL, targetDir, strings.Join(wildcards, " ")))
+		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
+			tool.URL, targetDir, strings.Join(wildcards, " "), tool.Binary))
 		b.WriteString(fmt.Sprintf("  chmod +x \"%s/%s\"\n", targetDir, tool.Binary))
 		b.WriteString("fi\n")
 
 	case "apt":
 		b.WriteString(fmt.Sprintf("if ! command -v %s >/dev/null 2>&1; then\n", tool.Binary))
-		b.WriteString(fmt.Sprintf("  apt-get update -qq && apt-get install -y -qq %s\n", tool.Package))
+		b.WriteString(fmt.Sprintf("  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: apt install failed for %s\"; exit 1; }\n", tool.Package, tool.Package))
 		b.WriteString("fi\n")
 
 	case "go-install":
@@ -80,16 +81,13 @@ func generateToolInstall(name string, tool ToolDef, targetDir string) string {
 
 	case "custom":
 		b.WriteString(tool.Install + "\n")
-
-	default:
-		b.WriteString(fmt.Sprintf("echo \"ERROR: unknown tool type: %s for tool %s\"\n", tool.Type, name))
 	}
 
 	return b.String()
 }
 
-// verifyChecksum verifies a file's SHA256 checksum.
-func verifyChecksum(expected string, data []byte) bool {
+// VerifyChecksum verifies a file's SHA256 checksum.
+func VerifyChecksum(expected string, data []byte) bool {
 	actual := fmt.Sprintf("%x", sha256.Sum256(data))
 	return actual == expected
 }

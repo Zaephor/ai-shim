@@ -88,7 +88,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	// Package installation script
 	var packageScript string
 	if len(p.Config.Packages) > 0 {
-		packageScript = "apt-get update -qq && apt-get install -y -qq " + strings.Join(p.Config.Packages, " ") + " 2>/dev/null\n"
+		packageScript = "echo \"Installing packages: " + strings.Join(p.Config.Packages, " ") + "\"\napt-get update -qq && apt-get install -y -qq " + strings.Join(p.Config.Packages, " ") + " || { echo \"ERROR: package installation failed\"; exit 1; }\n"
 	}
 
 	// Merge config args with passthrough args
@@ -166,7 +166,7 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 	for _, vol := range p.Config.Volumes {
 		parts := strings.SplitN(vol, ":", 2)
 		if len(parts) != 2 {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume %q (expected host:container)\n", vol)
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping malformed volume %q (expected source:target)\n", vol)
 			continue
 		}
 		if err := security.ValidateVolumePath(parts[0]); err != nil {
@@ -203,14 +203,12 @@ func parsePorts(ports []string) (nat.PortMap, nat.PortSet) {
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) != 2 {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port mapping %q (expected host:container)\n", p)
 			continue
 		}
 		hostPort := parts[0]
 		containerPort := parts[1]
 		port, err := nat.NewPort("tcp", containerPort)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port %q: %v\n", p, err)
 			continue
 		}
 		portMap[port] = []nat.PortBinding{

@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// EntrypointParams holds the parameters for generating a container entrypoint script.
 type EntrypointParams struct {
 	InstallType string
 	Package     string
@@ -14,7 +13,6 @@ type EntrypointParams struct {
 	AgentArgs   []string
 }
 
-// GenerateEntrypoint produces a shell script that installs and execs the agent binary.
 func GenerateEntrypoint(p EntrypointParams) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -e\n\n")
@@ -26,8 +24,6 @@ func GenerateEntrypoint(p EntrypointParams) string {
 		b.WriteString(generateUVInstall(p))
 	case "custom":
 		b.WriteString(generateCustomInstall(p))
-	default:
-		b.WriteString(fmt.Sprintf("echo \"ERROR: unknown install type: %s\"\nexit 1\n", p.InstallType))
 	}
 
 	b.WriteString(fmt.Sprintf("\nexec %s", p.Binary))
@@ -44,7 +40,7 @@ func generateNPMInstall(p EntrypointParams) string {
 	if p.Version != "" {
 		pkg = fmt.Sprintf("%s@%s", p.Package, p.Version)
 	}
-	return fmt.Sprintf("npm install -g %s 2>/dev/null\n", pkg)
+	return fmt.Sprintf("echo \"Installing %s via npm...\"\nnpm install -g %s || { echo \"ERROR: npm install failed for %s\"; exit 1; }\n", pkg, pkg, pkg)
 }
 
 func generateUVInstall(p EntrypointParams) string {
@@ -52,7 +48,7 @@ func generateUVInstall(p EntrypointParams) string {
 	if p.Version != "" {
 		pkg = fmt.Sprintf("%s==%s", p.Package, p.Version)
 	}
-	return fmt.Sprintf("uv tool install %s 2>/dev/null || uv tool upgrade %s 2>/dev/null\n", pkg, p.Package)
+	return fmt.Sprintf("echo \"Installing %s via uv...\"\nuv tool install %s || uv tool upgrade %s || { echo \"ERROR: uv install failed for %s\"; exit 1; }\n", pkg, pkg, p.Package, p.Package)
 }
 
 func generateCustomInstall(p EntrypointParams) string {

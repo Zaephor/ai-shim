@@ -113,10 +113,7 @@ func runManageSubcommand(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("usage: ai-shim manage symlinks <list|create|remove> [args...]")
 		}
-		exe, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("cannot determine executable path: %w", err)
-		}
+		exe, _ := os.Executable()
 		switch args[1] {
 		case "list":
 			dir := "."
@@ -179,16 +176,24 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "cleanup":
-		removed, err := cli.Cleanup()
+		result, err := cli.Cleanup()
 		if err != nil {
 			return err
 		}
-		if len(removed) == 0 {
+		if len(result.Removed) == 0 && len(result.Failed) == 0 {
 			fmt.Println("No orphaned containers found.")
 		} else {
-			fmt.Printf("Removed %d orphaned container(s):\n", len(removed))
-			for _, r := range removed {
-				fmt.Println("  " + r)
+			if len(result.Removed) > 0 {
+				fmt.Printf("Removed %d orphaned container(s):\n", len(result.Removed))
+				for _, r := range result.Removed {
+					fmt.Println("  " + r)
+				}
+			}
+			if len(result.Failed) > 0 {
+				fmt.Printf("Failed to remove %d container(s):\n", len(result.Failed))
+				for _, f := range result.Failed {
+					fmt.Println("  " + f)
+				}
 			}
 		}
 		return nil
@@ -237,10 +242,7 @@ func runAgent(name string, args []string) (int, error) {
 
 	// 5.6 Validate config volumes
 	if errs := container.ValidateConfigVolumes(cfg.Volumes); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintf(os.Stderr, "ai-shim: %v\n", e)
-		}
-		return 1, fmt.Errorf("invalid volume configuration (%d error(s))", len(errs))
+		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
 	}
 
 	// 6. Create Docker runner

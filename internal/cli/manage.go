@@ -241,12 +241,18 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	return b.String(), nil
 }
 
+// CleanupResult holds the results of a cleanup operation.
+type CleanupResult struct {
+	Removed []string
+	Failed  []string
+}
+
 // Cleanup finds and removes orphaned ai-shim containers.
-func Cleanup() ([]string, error) {
+func Cleanup() (CleanupResult, error) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("connecting to docker: %w", err)
+		return CleanupResult{}, fmt.Errorf("connecting to Docker: %w", err)
 	}
 	defer cli.Close()
 
@@ -255,12 +261,18 @@ func Cleanup() ([]string, error) {
 		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
+		return CleanupResult{}, fmt.Errorf("listing containers: %w", err)
 	}
 
 	var removed []string
+	var failed []string
 	for _, c := range containers {
 		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
+			name := c.ID[:12]
+			if len(c.Names) > 0 {
+				name = c.Names[0]
+			}
+			failed = append(failed, fmt.Sprintf("%s: %v", name, err))
 			continue
 		}
 		name := c.ID[:12]
@@ -270,7 +282,7 @@ func Cleanup() ([]string, error) {
 		removed = append(removed, name)
 	}
 
-	return removed, nil
+	return CleanupResult{Removed: removed, Failed: failed}, nil
 }
 
 func readDirNames(root, subdir string) ([]string, error) {

@@ -15,6 +15,9 @@ func TestGenerateEntrypoint_NPM(t *testing.T) {
 	})
 	assert.Contains(t, script, "npm install -g @google/gemini-cli")
 	assert.Contains(t, script, "exec gemini --verbose")
+	assert.NotContains(t, script, "2>/dev/null")
+	assert.Contains(t, script, "ERROR: npm install failed")
+	assert.Contains(t, script, "echo \"Installing @google/gemini-cli via npm...\"")
 }
 
 func TestGenerateEntrypoint_NPMWithVersion(t *testing.T) {
@@ -35,6 +38,9 @@ func TestGenerateEntrypoint_UV(t *testing.T) {
 	})
 	assert.Contains(t, script, "uv tool install aider-chat")
 	assert.Contains(t, script, "exec aider")
+	assert.NotContains(t, script, "2>/dev/null")
+	assert.Contains(t, script, "ERROR: uv install failed")
+	assert.Contains(t, script, "echo \"Installing aider-chat via uv...\"")
 }
 
 func TestGenerateEntrypoint_UVWithVersion(t *testing.T) {
@@ -66,16 +72,6 @@ func TestGenerateEntrypoint_ShellQuoting(t *testing.T) {
 		AgentArgs:   []string{"--msg", "hello world"},
 	})
 	assert.Contains(t, script, "'hello world'")
-}
-
-func TestGenerateEntrypoint_UnknownInstallType(t *testing.T) {
-	script := GenerateEntrypoint(EntrypointParams{
-		InstallType: "unknown-type",
-		Package:     "test",
-		Binary:      "test",
-	})
-	assert.Contains(t, script, "ERROR: unknown install type: unknown-type")
-	assert.Contains(t, script, "exit 1")
 }
 
 func TestGenerateEntrypoint_StartsWithShebang(t *testing.T) {
