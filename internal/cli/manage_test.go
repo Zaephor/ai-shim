@@ -212,6 +212,89 @@ packages:
 	assert.Contains(t, output, "packages:")
 }
 
+func TestShowConfig_CoversAllConfigFields(t *testing.T) {
+	// Create a config with ALL fields populated
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	// Write a config that sets every field
+	fullConfig := `
+image: "test-image"
+hostname: "test-host"
+version: "1.0.0"
+env:
+  KEY: "value"
+variables:
+  var1: "val1"
+args:
+  - "--flag"
+volumes:
+  - "/a:/b"
+ports:
+  - "8080:80"
+packages:
+  - tmux
+dind: true
+dind_gpu: true
+gpu: true
+network_scope: global
+dind_hostname: my-dind
+dind_mirrors:
+  - https://mirror.example.com
+dind_cache: true
+isolated: false
+allow_agents:
+  - gemini-cli
+resources:
+  memory: "2g"
+  cpus: "1.0"
+dind_resources:
+  memory: "1g"
+  cpus: "0.5"
+tools:
+  act:
+    type: binary-download
+    url: https://example.com/act
+    binary: act
+`
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(fullConfig), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowConfig(layout, "test", "test")
+	require.NoError(t, err)
+
+	// Every config concept should appear in output
+	expectedSubstrings := []string{
+		"test-image",     // image
+		"test-host",      // hostname
+		"1.0.0",          // version
+		"KEY=value",      // env
+		"--flag",         // args
+		"/a:/b",          // volumes
+		"8080:80",        // ports
+		"tmux",           // packages
+		"dind:",          // dind toggle
+		"gpu:",           // gpu toggle
+		"network_scope:", // network scope
+		"dind_hostname:", // dind hostname
+		"mirror.example", // dind mirrors
+		"dind_cache:",    // dind cache
+		"isolated:",      // isolation
+		"gemini-cli",     // allow_agents
+		"2g",             // resources memory
+		"1.0",            // resources cpus
+		"1g",             // dind_resources memory
+		"act",            // tools
+	}
+
+	for _, sub := range expectedSubstrings {
+		assert.Contains(t, output, sub, "ShowConfig should display: %s", sub)
+	}
+}
+
 func TestDryRun_ShowsResources(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")
