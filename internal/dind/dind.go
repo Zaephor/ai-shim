@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
@@ -127,14 +127,18 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 	// Resource limits for DIND
 	if cfg.Resources != nil {
 		if cfg.Resources.Memory != "" {
-			memBytes, err := parseMemoryDIND(cfg.Resources.Memory)
-			if err == nil {
+			memBytes, err := parse.Memory(cfg.Resources.Memory)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", cfg.Resources.Memory, err)
+			} else {
 				hostCfg.Resources.Memory = memBytes
 			}
 		}
 		if cfg.Resources.CPUs != "" {
 			cpus, err := strconv.ParseFloat(cfg.Resources.CPUs, 64)
-			if err == nil {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", cfg.Resources.CPUs, err)
+			} else {
 				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
 			}
 		}
@@ -198,26 +202,6 @@ func (s *Sidecar) Stop(ctx context.Context) error {
 		}
 	}
 	return firstErr
-}
-
-func parseMemoryDIND(s string) (int64, error) {
-	s = strings.TrimSpace(strings.ToLower(s))
-	var multiplier int64 = 1
-	if strings.HasSuffix(s, "g") {
-		multiplier = 1024 * 1024 * 1024
-		s = s[:len(s)-1]
-	} else if strings.HasSuffix(s, "m") {
-		multiplier = 1024 * 1024
-		s = s[:len(s)-1]
-	} else if strings.HasSuffix(s, "k") {
-		multiplier = 1024
-		s = s[:len(s)-1]
-	}
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, err
-	}
-	return int64(val * float64(multiplier)), nil
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

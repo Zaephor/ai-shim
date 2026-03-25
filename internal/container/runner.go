@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -121,14 +122,18 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 
 	if spec.Resources != nil {
 		if spec.Resources.Memory != "" {
-			memBytes, err := parseMemory(spec.Resources.Memory)
-			if err == nil {
+			memBytes, err := parse.Memory(spec.Resources.Memory)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", spec.Resources.Memory, err)
+			} else {
 				hostCfg.Resources.Memory = memBytes
 			}
 		}
 		if spec.Resources.CPUs != "" {
 			cpus, err := strconv.ParseFloat(spec.Resources.CPUs, 64)
-			if err == nil {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", spec.Resources.CPUs, err)
+			} else {
 				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
 			}
 		}
@@ -274,22 +279,3 @@ func (r *Runner) Close() error {
 	return r.client.Close()
 }
 
-func parseMemory(s string) (int64, error) {
-	s = strings.TrimSpace(strings.ToLower(s))
-	var multiplier int64 = 1
-	if strings.HasSuffix(s, "g") {
-		multiplier = 1024 * 1024 * 1024
-		s = s[:len(s)-1]
-	} else if strings.HasSuffix(s, "m") {
-		multiplier = 1024 * 1024
-		s = s[:len(s)-1]
-	} else if strings.HasSuffix(s, "k") {
-		multiplier = 1024
-		s = s[:len(s)-1]
-	}
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, err
-	}
-	return int64(val * float64(multiplier)), nil
-}

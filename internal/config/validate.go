@@ -1,6 +1,11 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/ai-shim/ai-shim/internal/parse"
+)
 
 // ValidateNetworkScope checks if a network scope value is valid.
 func ValidateNetworkScope(scope string) error {
@@ -26,5 +31,27 @@ func (c Config) Validate() []string {
 		warnings = append(warnings, err.Error())
 	}
 
+	warnings = append(warnings, validateResourceLimits("resources", c.Resources)...)
+	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
+
+	return warnings
+}
+
+// validateResourceLimits checks that resource limit values are parseable.
+func validateResourceLimits(name string, r *ResourceLimits) []string {
+	if r == nil {
+		return nil
+	}
+	var warnings []string
+	if r.Memory != "" {
+		if _, err := parse.Memory(r.Memory); err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s.memory: %v", name, err))
+		}
+	}
+	if r.CPUs != "" {
+		if _, err := strconv.ParseFloat(r.CPUs, 64); err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s.cpus: invalid value %q", name, r.CPUs))
+		}
+	}
 	return warnings
 }

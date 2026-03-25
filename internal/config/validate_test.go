@@ -28,3 +28,15 @@ func TestConfig_Validate_InvalidNetworkScope(t *testing.T) {
 	assert.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "invalid network_scope")
 }
+
+func TestValidate_ResourceLimits(t *testing.T) {
+	cfg := Config{Resources: &ResourceLimits{Memory: "2gb", CPUs: "abc"}}
+	warnings := cfg.Validate()
+	assert.Len(t, warnings, 2, "should warn about invalid memory and cpus")
+}
+
+func TestValidate_ValidResourceLimits(t *testing.T) {
+	cfg := Config{Resources: &ResourceLimits{Memory: "2g", CPUs: "1.5"}}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}

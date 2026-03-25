@@ -420,19 +420,3 @@ func TestBuildSpec_WithResourceLimits(t *testing.T) {
 	assert.Equal(t, "2.0", spec.Resources.CPUs)
 }
 
-func TestParseMemory(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int64
-	}{
-		{"1g", 1073741824},
-		{"512m", 536870912},
-		{"1024k", 1048576},
-		{"2.5g", 2684354560},
-	}
-	for _, tt := range tests {
-		result, err := parseMemory(tt.input)
-		require.NoError(t, err)
-		assert.Equal(t, tt.expected, result, "input: %s", tt.input)
-	}
-}
