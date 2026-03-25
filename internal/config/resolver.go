@@ -42,7 +42,15 @@ func Resolve(configDir, agent, profile string) (Config, error) {
 }
 
 // loadEnvOverrides reads AI_SHIM_* environment variables and returns a Config
-// representing tier 5 overrides.
+// representing tier 5 overrides. Supported variables:
+//   - AI_SHIM_IMAGE         — override container image
+//   - AI_SHIM_VERSION       — pin agent version
+//   - AI_SHIM_DIND          — toggle DIND sidecar (0/1/true/false)
+//   - AI_SHIM_DIND_GPU      — toggle GPU for DIND (0/1/true/false)
+//   - AI_SHIM_GPU           — toggle GPU for agent container (0/1/true/false)
+//   - AI_SHIM_NETWORK_SCOPE — override network scope
+//   - AI_SHIM_DIND_HOSTNAME — override DIND sidecar hostname
+//   - AI_SHIM_DIND_CACHE    — toggle pull-through registry cache (0/1/true/false)
 func loadEnvOverrides() Config {
 	var cfg Config
 

@@ -51,6 +51,20 @@
 # Enable GPU passthrough for agent container. Default: false
 # gpu: false
 
+# Network scope for container isolation.
+# Options: global, profile, workspace, profile-workspace, isolated (default)
+# network_scope: isolated
+
+# Hostname for the DIND sidecar container. Default: ai-shim-dind
+# dind_hostname: ai-shim-dind
+
+# Registry mirrors for DIND. Default: mirror.gcr.io
+# dind_mirrors:
+#   - https://mirror.gcr.io
+
+# Enable pull-through registry cache. Default: false
+# dind_cache: false
+
 # Cross-agent access: list of agent names whose home dirs get mounted.
 # allow_agents: []
 

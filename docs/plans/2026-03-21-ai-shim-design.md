@@ -64,6 +64,11 @@ volumes:
 dind: false
 dind_gpu: false
 gpu: false
+network_scope: isolated  # global, profile, workspace, profile-workspace, isolated (default)
+dind_hostname: ai-shim-dind  # hostname for the DIND sidecar container
+dind_mirrors:            # registry mirror URLs (default: mirror.gcr.io)
+  - https://mirror.gcr.io
+dind_cache: false        # enable pull-through registry cache
 
 # cross-agent access
 allow_agents: []     # agents whose homes get mounted
@@ -283,15 +288,17 @@ ai-shim version                # print version info
 ### Environment Variable Overrides
 
 ```
-AI_SHIM_VERBOSE=1              # debug logging to stderr
+AI_SHIM_IMAGE=<image>          # override container image
+AI_SHIM_VERSION=<ver>          # pin agent version
 AI_SHIM_DIND=0/1               # toggle DIND sidecar
 AI_SHIM_DIND_GPU=0/1           # toggle GPU for DIND
 AI_SHIM_GPU=0/1                # toggle GPU for agent container
-AI_SHIM_IMAGE=<image>          # override container image
-AI_SHIM_VERSION=<ver>          # pin agent version
+AI_SHIM_NETWORK_SCOPE=<scope>  # override network scope
+AI_SHIM_DIND_HOSTNAME=<host>   # override DIND sidecar hostname
+AI_SHIM_DIND_CACHE=0/1         # toggle pull-through registry cache
 ```
 
-ai-shim produces no output by default (transparent sandbox). Errors print to stderr. `AI_SHIM_VERBOSE=1` enables debug logging. Verbose output applies pattern-based secret masking — values matching `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*CREDENTIAL*`, `*AUTH*` and known API key patterns (e.g. `sk-ant-*`, `sk-*`, `gsk_*`) are redacted.
+ai-shim produces no output by default (transparent sandbox). Errors print to stderr.
 
 ## Security
 
@@ -348,8 +355,10 @@ ai-shim/
     dind/                  # DIND sidecar management
     install/               # agent install types (npm, uv, binary)
     invocation/            # symlink name parsing (agent + profile extraction)
+    network/               # Docker network creation and scoping
     provision/             # tool provisioning (typed installers)
     storage/               # storage layout, path resolution
+    testutil/              # shared test helpers (Docker availability checks)
     workspace/             # workspace hashing, mount generation
     selfupdate/            # self-update from GitHub releases
     platform/              # platform abstraction (socket, uid, gpu detection)
@@ -374,11 +383,15 @@ ai-shim/
 | Agent install | Built-in definitions (npm/uv/binary/custom), overridable via config |
 | Tool provisioning | Typed installers + custom shell escape hatch |
 | DIND | Opt-in per invocation, Sysbox preferred, privileged fallback |
+| DIND socket sharing | Volume-mounted Unix socket (not TCP), exposed at `/var/run/dind/docker.sock` |
+| Network scope | Configurable isolation: global, profile, workspace, profile-workspace, isolated (default) |
+| Registry mirrors | Default `mirror.gcr.io`, configurable via `dind_mirrors` |
+| Pull-through cache | Opt-in registry cache for offline/faster pulls via `dind_cache` |
 | GPU | Independent toggles for agent container and DIND |
 | Cross-agent access | `allow_agents` selective home mounts, `isolated` flag |
 | Signal handling | Transparent passthrough, ai-shim watches container exit |
 | TTY | Auto-detect, allocate when stdin is a TTY |
-| ai-shim output | Silent by default, `AI_SHIM_VERBOSE=1` for debug |
+| ai-shim output | Silent by default, errors to stderr |
 | Self-update | `ai-shim update` via GitHub releases |
 | Commit enforcement | Local git hook (commit-msg), lightweight CI check on PR titles |
 | Versioning | Conventional commits, semver, goreleaser |

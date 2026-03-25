@@ -61,6 +61,11 @@ args:
 
 dind: false
 gpu: false
+network_scope: isolated     # global, profile, workspace, profile-workspace, isolated
+dind_hostname: ai-shim-dind # hostname for the DIND sidecar container
+dind_mirrors:               # registry mirrors (default: mirror.gcr.io)
+  - https://mirror.gcr.io
+dind_cache: false            # enable pull-through registry cache
 
 packages:
   - tmux
@@ -81,6 +86,12 @@ See `configs/examples/` for annotated example files and
   access, with Sysbox preferred and privileged fallback
 - **GPU passthrough** -- independent toggles for the agent container and DIND
   sidecar (`gpu`, `dind_gpu`)
+- **Network scopes** -- configurable network isolation per invocation: global,
+  profile, workspace, profile-workspace, or fully isolated (default)
+- **Registry mirrors** -- DIND sidecar uses configurable registry mirrors
+  (default: `mirror.gcr.io`) for faster and more reliable image pulls
+- **Pull-through cache** -- opt-in registry cache for offline-capable and
+  faster container image pulls via `dind_cache`
 - **Cross-agent access** -- selectively mount other agents' home directories
   via `allow_agents`, or disable isolation entirely
 - **Tool provisioning** -- typed installers (tar-extract, binary-download, apt,
@@ -135,6 +146,9 @@ AI_SHIM_VERSION=<ver>           # pin agent version
 AI_SHIM_DIND=0/1                # toggle DIND sidecar
 AI_SHIM_DIND_GPU=0/1            # toggle GPU for DIND
 AI_SHIM_GPU=0/1                 # toggle GPU for agent container
+AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
+AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
+AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
 ```
 
 ## Building from Source
