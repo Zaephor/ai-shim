@@ -313,6 +313,34 @@ func TestBuildSpec_VolumeValidationSkipsMalformed(t *testing.T) {
 	}
 }
 
+func TestBuildSpec_ContainerName(t *testing.T) {
+	p := defaultBuildParams()
+	p.Agent.Name = "claude-code"
+	p.Profile = "work"
+	spec := BuildSpec(p)
+
+	assert.NotEmpty(t, spec.Name, "container should have a name")
+	assert.Contains(t, spec.Name, "claude-code-work-", "name should contain agent-profile prefix")
+	// Name format: agent-profile-workspacehash-randomsuffix
+	parts := strings.Split(spec.Name, "-")
+	// claude-code = 2 parts, work = 1, hash = 1, suffix = 1 => at least 5
+	assert.True(t, len(parts) >= 5, "name should have at least 5 dash-separated parts")
+}
+
+func TestBuildSpec_ContainerNameDeterministicPrefix(t *testing.T) {
+	p := defaultBuildParams()
+	p.Agent.Name = "gemini-cli"
+	p.Profile = "personal"
+	spec1 := BuildSpec(p)
+	spec2 := BuildSpec(p)
+
+	// Prefix should be the same (deterministic), but suffix differs (random)
+	prefix1 := spec1.Name[:strings.LastIndex(spec1.Name, "-")]
+	prefix2 := spec2.Name[:strings.LastIndex(spec2.Name, "-")]
+	assert.Equal(t, prefix1, prefix2, "name prefix should be deterministic")
+	assert.NotEqual(t, spec1.Name, spec2.Name, "full name should differ due to random suffix")
+}
+
 func TestParsePorts_InvalidFormat(t *testing.T) {
 	portMap, portSet := parsePorts([]string{"invalid-port", "8080:80"})
 	// Valid port should still be parsed

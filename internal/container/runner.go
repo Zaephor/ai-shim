@@ -19,6 +19,7 @@ import (
 
 // ContainerSpec describes a container to create and run.
 type ContainerSpec struct {
+	Name         string // container display name
 	Image        string
 	Hostname     string
 	Env          []string
@@ -83,7 +84,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		}
 	}
 
-	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, &network.NetworkingConfig{}, nil, "")
+	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, &network.NetworkingConfig{}, nil, spec.Name)
 	if err != nil {
 		return -1, fmt.Errorf("creating container: %w", err)
 	}
@@ -137,11 +138,10 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		if err != nil {
 			return -1, fmt.Errorf("waiting for container: %w", err)
 		}
+		return 0, nil
 	case status := <-statusCh:
 		return int(status.StatusCode), nil
 	}
-
-	return 0, nil
 }
 
 // ImageUser represents user information extracted from a Docker image.

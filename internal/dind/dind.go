@@ -22,14 +22,17 @@ type Sidecar struct {
 	client      *client.Client
 	containerID string
 	networkID   string
+	hostname    string
 }
 
 // Config holds DIND sidecar configuration.
 type Config struct {
-	Image     string // defaults to docker:dind
-	GPU       bool   // GPU passthrough for DIND
-	UseSysbox bool   // use sysbox runtime if available
-	Labels    map[string]string
+	Image         string // defaults to docker:dind
+	GPU           bool   // GPU passthrough for DIND
+	UseSysbox     bool   // use sysbox runtime if available
+	Labels        map[string]string
+	ContainerName string // display name for the DIND container
+	Hostname      string // hostname inside the DIND container
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -48,9 +51,10 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 	}
 
 	containerCfg := &container.Config{
-		Image:  image,
-		Labels: cfg.Labels,
-		Env:    []string{"DOCKER_TLS_CERTDIR="}, // disable TLS for simplicity
+		Image:    image,
+		Hostname: cfg.Hostname,
+		Labels:   cfg.Labels,
+		Env:      []string{"DOCKER_TLS_CERTDIR="}, // disable TLS for simplicity
 	}
 
 	hostCfg := &container.HostConfig{
@@ -71,7 +75,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		}
 	}
 
-	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, "")
+	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
 		// Clean up network on failure
 		if cleanupErr := cli.NetworkRemove(ctx, networkResp.ID); cleanupErr != nil {
@@ -94,6 +98,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		client:      cli,
 		containerID: resp.ID,
 		networkID:   networkResp.ID,
+		hostname:    cfg.Hostname,
 	}
 
 	return sidecar, nil
@@ -102,6 +107,11 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 // ContainerID returns the DIND container ID for network attachment.
 func (s *Sidecar) ContainerID() string {
 	return s.containerID
+}
+
+// Hostname returns the hostname configured for the DIND container.
+func (s *Sidecar) Hostname() string {
+	return s.hostname
 }
 
 // NetworkID returns the shared network ID.

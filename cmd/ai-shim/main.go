@@ -289,18 +289,27 @@ func runAgent(name string, args []string) (int, error) {
 
 		useSysbox := dind.DetectSysbox(ctx, runner.Client())
 
+		dindHostname := "ai-shim-dind"
+		if cfg.DINDHostname != "" {
+			dindHostname = cfg.DINDHostname
+		}
+
+		dindName := spec.Name + "-dind"
+
 		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
-			GPU:       dindGPU,
-			UseSysbox: useSysbox,
-			Labels:    spec.Labels,
+			GPU:           dindGPU,
+			UseSysbox:     useSysbox,
+			Labels:        spec.Labels,
+			ContainerName: dindName,
+			Hostname:      dindHostname,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
 		defer sidecar.Stop(ctx)
 
-		// Add DOCKER_HOST env var pointing to DIND
-		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+sidecar.ContainerID()+":2375")
+		// Add DOCKER_HOST env var pointing to DIND using hostname
+		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+dindHostname+":2375")
 	}
 
 	// 8. Run container, return its exit code

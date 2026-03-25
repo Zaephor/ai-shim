@@ -11,6 +11,7 @@ type Config struct {
 	Volumes     []string           `yaml:"volumes,omitempty"`
 	Ports       []string           `yaml:"ports,omitempty"`
 	Packages    []string           `yaml:"packages,omitempty"`
+	DINDHostname string             `yaml:"dind_hostname,omitempty"`
 	DIND        *bool              `yaml:"dind,omitempty"`
 	DINDGpu     *bool              `yaml:"dind_gpu,omitempty"`
 	GPU         *bool              `yaml:"gpu,omitempty"`

@@ -1,6 +1,7 @@
 package container
 
 import (
+	"crypto/rand"
 	"fmt"
 	"os"
 	"strings"
@@ -61,6 +62,9 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	pwd, _ := os.Getwd()
 	workdir := workspace.ContainerWorkdir(p.Platform.Hostname, pwd)
 
+	wsHash := workspace.HashPath(p.Platform.Hostname, pwd)[:8]
+	name := generateContainerName(p.Agent.Name, p.Profile, wsHash)
+
 	mounts := buildMounts(p, pwd, workdir, homeDir)
 
 	// Cross-agent access mounts
@@ -117,6 +121,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	tty := isTTY()
 
 	return ContainerSpec{
+		Name:         name,
 		Image:        image,
 		Hostname:     hostname,
 		Env:          env,
@@ -225,6 +230,17 @@ func isTTY() bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func generateContainerName(agentName, profile, workspaceHash string) string {
+	suffix := randomSuffix(4)
+	return fmt.Sprintf("%s-%s-%s-%s", agentName, profile, workspaceHash, suffix)
+}
+
+func randomSuffix(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)[:n]
 }
 
 // ValidateConfigVolumes checks all volume mount paths for security issues.

@@ -104,6 +104,13 @@ func TestMerge_BothNilMaps(t *testing.T) {
 	assert.Nil(t, result.Env)
 }
 
+func TestMerge_DINDHostname(t *testing.T) {
+	base := Config{DINDHostname: "default-dind"}
+	over := Config{DINDHostname: "custom-dind"}
+	result := Merge(base, over)
+	assert.Equal(t, "custom-dind", result.DINDHostname)
+}
+
 func TestMerge_EmptyListAppend(t *testing.T) {
 	base := Config{Args: nil}
 	over := Config{Args: []string{"--flag"}}

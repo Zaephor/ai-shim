@@ -51,6 +51,22 @@ func TestStart_CustomImage(t *testing.T) {
 	assert.NotEmpty(t, sidecar.ContainerID())
 }
 
+func TestStart_ContainerName(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	sidecar, err := Start(ctx, cli, Config{
+		ContainerName: "test-dind-container",
+		Hostname:      "test-dind-host",
+		Labels:        map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	assert.Equal(t, "test-dind-host", sidecar.Hostname())
+}
+
 func TestDetectSysbox(t *testing.T) {
 	cli := getClient(t)
 	defer cli.Close()
