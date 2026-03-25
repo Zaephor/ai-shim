@@ -363,7 +363,7 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, cleanup", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup", args[0])
 	}
 }
 
