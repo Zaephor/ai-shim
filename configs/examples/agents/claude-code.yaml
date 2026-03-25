@@ -1,0 +1,30 @@
+# ai-shim agent override for claude-code
+#
+# This file applies to all claude-code invocations regardless of profile.
+# Place it at: ~/.ai-shim/config/agents/claude-code.yaml
+#
+# Tier 2 -- overrides default.yaml, overridden by profile and agent-profile.
+
+env:
+  ANTHROPIC_API_KEY: "sk-ant-your-key-here"
+
+# Pin to a specific version (empty = latest).
+# version: "1.0.0"
+
+# Default arguments for every claude-code invocation.
+args:
+  - "--no-telemetry"
+
+# Enable DIND so claude can run Docker commands inside the sandbox.
+dind: true
+
+# Install additional tools available to claude-code.
+tools:
+  gh:
+    type: tar-extract
+    url: "https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_amd64.tar.gz"
+    binary: gh
+
+packages:
+  - git
+  - jq

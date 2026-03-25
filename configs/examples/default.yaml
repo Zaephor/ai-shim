@@ -1,0 +1,71 @@
+# ai-shim default configuration
+#
+# This file is loaded as tier 1 (lowest precedence) for every invocation.
+# Place it at: ~/.ai-shim/config/default.yaml
+#
+# All fields are optional. Missing fields use built-in defaults.
+
+# Template variables -- available in {{ .varname }} expressions below.
+# These are NOT injected into the container environment.
+# variables:
+#   llm_host: "my-llm-host:8080"
+
+# Environment variables injected into the container.
+# Supports Go text/template syntax using variables defined above.
+# env:
+#   LLM_ENDPOINT: "https://{{ .llm_host }}/v1"
+
+# Container image. Default: ghcr.io/catthehacker/ubuntu:act-24.04
+# image: "ghcr.io/catthehacker/ubuntu:act-24.04"
+
+# Container hostname. Default: ai-shim
+# hostname: "ai-shim"
+
+# Pin agent version. Empty string means latest.
+# version: ""
+
+# Default arguments passed to the agent CLI before any passthrough args.
+# args:
+#   - "--no-telemetry"
+
+# Additional bind-mount volumes (host:container format).
+# Automatic mounts for storage, workspace, and home are always included.
+# volumes:
+#   - "/host/path:/container/path"
+
+# Port mappings (host:container format).
+# ports:
+#   - "8080:8080"
+
+# Apt packages to install in the container at startup.
+# packages:
+#   - tmux
+#   - git
+
+# Enable Docker-in-Docker sidecar. Default: false
+# dind: false
+
+# Enable GPU passthrough for DIND sidecar. Default: false
+# dind_gpu: false
+
+# Enable GPU passthrough for agent container. Default: false
+# gpu: false
+
+# Cross-agent access: list of agent names whose home dirs get mounted.
+# allow_agents: []
+
+# Isolation mode. When false, all installed agents are visible.
+# Default: true
+# isolated: true
+
+# Tool provisioning. Install dev tools into the container.
+# tools:
+#   act:
+#     type: tar-extract
+#     url: "https://github.com/nektos/act/releases/download/v0.2.74/act_Linux_x86_64.tar.gz"
+#     binary: act
+#     checksum: "sha256:abc123..."
+#   custom-tool:
+#     type: custom
+#     install: |
+#       curl -fsSL https://example.com/install.sh | bash

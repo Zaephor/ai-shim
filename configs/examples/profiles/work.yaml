@@ -1,0 +1,29 @@
+# ai-shim profile configuration for "work"
+#
+# This file applies to all agents invoked with the "work" profile.
+# Place it at: ~/.ai-shim/config/profiles/work.yaml
+#
+# Tier 3 -- overrides default.yaml and agent configs, overridden by
+# agent-profile configs and environment variables.
+
+variables:
+  corp_proxy: "http://proxy.corp.example.com:8080"
+
+env:
+  HTTP_PROXY: "{{ .corp_proxy }}"
+  HTTPS_PROXY: "{{ .corp_proxy }}"
+  NO_PROXY: "localhost,127.0.0.1,.corp.example.com"
+
+# Mount a shared credentials directory (read-only via Docker).
+volumes:
+  - "/home/user/.ssh:/home/user/.ssh"
+
+# Forward a local dev server port.
+ports:
+  - "3000:3000"
+  - "8080:8080"
+
+# Allow cross-agent access so claude can invoke gemini and vice versa.
+allow_agents:
+  - gemini-cli
+  - claude-code
