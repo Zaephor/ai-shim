@@ -192,13 +192,12 @@ Signals are passed through transparently to the container. ai-shim does not inte
 Defined in the Go binary as structs:
 
 ```go
-type AgentDef struct {
-    Name        string            // "claude", "gemini", "pi"
-    InstallType string            // "npm", "uv", "binary", "custom"
-    Package     string            // "@anthropic/claude-code", etc.
-    Binary      string            // "claude", "gemini", etc.
-    HomePaths   []string          // ["~/.claude", "~/.claude.json"]
-    DefaultEnv  map[string]string // agent-specific defaults
+type Definition struct {
+    Name        string   // "claude-code", "gemini-cli", "pi"
+    InstallType string   // "npm", "uv", "binary", "custom"
+    Package     string   // "@google/gemini-cli", etc.
+    Binary      string   // "claude", "gemini", etc.
+    HomePaths   []string // [".claude", ".claude.json"]
 }
 ```
 
@@ -208,14 +207,15 @@ Users never need to define these for supported agents. Config tiers can override
 
 | Agent | InstallType | Package / Source | Binary | HomePaths |
 |---|---|---|---|---|
-| claude-code | custom | `curl -fsSL https://claude.ai/install.sh \| bash` | `claude` | `~/.claude`, `~/.claude.json` |
-| gemini-cli | npm | `@google/gemini-cli` | `gemini` | `~/.gemini` |
-| qwen-code | npm | `@qwen-code/qwen-code` | `qwen` | `~/.qwen` |
-| codex | npm | `@openai/codex` | `codex` | `~/.codex` |
-| pi | npm | `@mariozechner/pi-coding-agent` | `pi` | `~/.pi` |
-| gsd | npm | `gsd-pi` | `gsd` | `~/.gsd` |
-| aider | uv | `aider-chat` | `aider` | `~/.aider` |
-| goose | custom | `curl -fsSL .../download_cli.sh \| bash` | `goose` | `~/.config/goose` |
+| claude-code | custom | `curl -fsSL https://claude.ai/install.sh \| bash` | `claude` | `.claude`, `.claude.json` |
+| gemini-cli | npm | `@google/gemini-cli` | `gemini` | `.gemini` |
+| qwen-code | npm | `@qwen-code/qwen-code` | `qwen` | `.qwen` |
+| codex | npm | `@openai/codex` | `codex` | `.codex` |
+| pi | npm | `@mariozechner/pi-coding-agent` | `pi` | `.pi` |
+| gsd | npm | `gsd-pi` | `gsd` | `.gsd` |
+| aider | uv | `aider-chat` | `aider` | `.aider` |
+| goose | custom | `curl -fsSL .../download_cli.sh \| bash` | `goose` | `.config/goose` |
+| opencode | npm | `opencode-ai` | `opencode` | `.config/opencode` |
 
 ### Install Types
 
@@ -342,10 +342,12 @@ ai-shim/
       main.go              # entrypoint, symlink detection
   internal/
     agent/                 # built-in agent definitions
+    cli/                   # management subcommands (agents, profiles, doctor, etc.)
     config/                # YAML loading, tier merge, templating
     container/             # Docker client, container lifecycle
     dind/                  # DIND sidecar management
     install/               # agent install types (npm, uv, binary)
+    invocation/            # symlink name parsing (agent + profile extraction)
     provision/             # tool provisioning (typed installers)
     storage/               # storage layout, path resolution
     workspace/             # workspace hashing, mount generation
