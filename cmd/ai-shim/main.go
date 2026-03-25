@@ -256,11 +256,16 @@ func runAgent(name string, args []string) (int, error) {
 	}
 	defer runner.Close()
 
-	// 6.5 Detect home directory from container image
+	// 6.5 Ensure container image is available
 	image := cfg.Image
 	if image == "" {
 		image = container.DefaultImage
 	}
+	if err := runner.EnsureImage(ctx, image); err != nil {
+		return 1, fmt.Errorf("preparing image: %w", err)
+	}
+
+	// 6.6 Detect home directory from container image
 	imageUser, err := runner.InspectImageUser(ctx, image)
 	if err != nil {
 		// Non-fatal: use defaults
@@ -330,6 +335,12 @@ func runAgent(name string, args []string) (int, error) {
 			} else {
 				cacheAddr = addr
 			}
+		}
+
+		// Pull DIND image if needed
+		dindImage := dind.DefaultImage
+		if err := runner.EnsureImage(ctx, dindImage); err != nil {
+			return 1, fmt.Errorf("preparing DIND image: %w", err)
 		}
 
 		// Start DIND sidecar on same network

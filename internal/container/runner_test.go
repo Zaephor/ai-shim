@@ -134,6 +134,27 @@ func TestRun_WithMount(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 }
 
+func TestEnsureImage_AlreadyLocal(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// alpine:latest should already be cached from other tests
+	err = runner.EnsureImage(ctx, "alpine:latest")
+	assert.NoError(t, err)
+}
+
+func TestNewRunner_ErrorMessage(t *testing.T) {
+	// Can't easily test Docker-not-running, but verify the runner works when Docker IS available
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	runner.Close()
+}
+
 func TestRun_CompletesWithSignalHandler(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()

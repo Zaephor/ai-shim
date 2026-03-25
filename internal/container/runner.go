@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/docker/docker/api/types/container"
+	image_types "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -46,12 +47,34 @@ type Runner struct {
 func NewRunner(ctx context.Context) (*Runner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("creating docker client: %w", err)
+		return nil, fmt.Errorf("creating docker client: %w\n\nIs Docker installed? Check: https://docs.docker.com/get-docker/", err)
 	}
 	if _, err := cli.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("connecting to docker: %w", err)
+		cli.Close()
+		return nil, fmt.Errorf("cannot connect to docker daemon: %w\n\nIs Docker running? Try:\n  Linux: sudo systemctl start docker\n  macOS: open -a Docker\n  Check: docker info", err)
 	}
 	return &Runner{client: cli}, nil
+}
+
+// EnsureImage pulls a Docker image if it's not available locally.
+// Provides progress output to stderr.
+func (r *Runner) EnsureImage(ctx context.Context, image string) error {
+	// Check if image exists locally
+	_, _, err := r.client.ImageInspectWithRaw(ctx, image)
+	if err == nil {
+		return nil // already available
+	}
+
+	fmt.Fprintf(os.Stderr, "ai-shim: pulling image %s...\n", image)
+	reader, err := r.client.ImagePull(ctx, image, image_types.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("pulling image %s: %w", image, err)
+	}
+	defer reader.Close()
+	// Consume the reader to complete the pull
+	io.Copy(io.Discard, reader)
+	fmt.Fprintf(os.Stderr, "ai-shim: image %s ready\n", image)
+	return nil
 }
 
 // Run creates, starts, attaches to, and waits for a container. Returns exit code.
