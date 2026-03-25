@@ -309,6 +309,29 @@ func runAgent(name string, args []string) (int, error) {
 		// Attach agent container to network
 		spec.NetworkID = netHandle.ID
 
+		// Registry mirrors (default includes Google's mirror)
+		mirrors := cfg.DINDMirrors
+		if len(mirrors) == 0 {
+			mirrors = []string{"https://mirror.gcr.io"}
+		}
+
+		// Pull-through cache
+		var cacheAddr string
+		cacheEnabled := false
+		if cfg.DINDCache != nil && *cfg.DINDCache {
+			cacheEnabled = true
+		}
+
+		if cacheEnabled {
+			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
+			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir, netHandle.ID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to start registry cache: %v\n", err)
+			} else {
+				cacheAddr = addr
+			}
+		}
+
 		// Start DIND sidecar on same network
 		dindName := spec.Name + "-dind"
 		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
@@ -318,11 +341,18 @@ func runAgent(name string, args []string) (int, error) {
 			ContainerName: dindName,
 			Hostname:      dindHostname,
 			NetworkID:     netHandle.ID,
+			Mirrors:       mirrors,
+			CacheAddr:     cacheAddr,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
-		defer sidecar.Stop(ctx)
+		defer func() {
+			sidecar.Stop(ctx)
+			if cacheEnabled {
+				dind.MaybeStopCache(ctx, runner.Client())
+			}
+		}()
 
 		// Mount DIND socket into agent container
 		spec.Mounts = append(spec.Mounts, mount.Mount{

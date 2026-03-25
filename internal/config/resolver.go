@@ -70,6 +70,10 @@ func loadEnvOverrides() Config {
 	if v := os.Getenv("AI_SHIM_DIND_HOSTNAME"); v != "" {
 		cfg.DINDHostname = v
 	}
+	if v := os.Getenv("AI_SHIM_DIND_CACHE"); v != "" {
+		b := v == "1" || v == "true"
+		cfg.DINDCache = &b
+	}
 
 	return cfg
 }

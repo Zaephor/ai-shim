@@ -16,6 +16,8 @@ type Config struct {
 	DIND        *bool              `yaml:"dind,omitempty"`
 	DINDGpu     *bool              `yaml:"dind_gpu,omitempty"`
 	GPU         *bool              `yaml:"gpu,omitempty"`
+	DINDMirrors []string           `yaml:"dind_mirrors,omitempty"` // registry mirror URLs
+	DINDCache   *bool              `yaml:"dind_cache,omitempty"`   // enable pull-through cache
 	AllowAgents []string           `yaml:"allow_agents,omitempty"`
 	Isolated    *bool              `yaml:"isolated,omitempty"`
 	Tools       map[string]ToolDef `yaml:"tools,omitempty"`

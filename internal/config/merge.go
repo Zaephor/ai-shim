@@ -33,6 +33,9 @@ func Merge(base, over Config) Config {
 	if over.Isolated != nil {
 		result.Isolated = over.Isolated
 	}
+	if over.DINDCache != nil {
+		result.DINDCache = over.DINDCache
+	}
 
 	result.Env = mergeMaps(result.Env, over.Env)
 	result.Variables = mergeMaps(result.Variables, over.Variables)
@@ -43,6 +46,7 @@ func Merge(base, over Config) Config {
 	result.Ports = appendUnique(result.Ports, over.Ports)
 	result.Packages = appendUnique(result.Packages, over.Packages)
 	result.AllowAgents = appendUnique(result.AllowAgents, over.AllowAgents)
+	result.DINDMirrors = appendUnique(result.DINDMirrors, over.DINDMirrors)
 
 	return result
 }

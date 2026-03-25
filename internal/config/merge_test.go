@@ -117,3 +117,18 @@ func TestMerge_EmptyListAppend(t *testing.T) {
 	result := Merge(base, over)
 	assert.Equal(t, []string{"--flag"}, result.Args)
 }
+
+func TestMerge_DINDMirrors(t *testing.T) {
+	base := Config{DINDMirrors: []string{"https://mirror1.example.com"}}
+	over := Config{DINDMirrors: []string{"https://mirror2.example.com"}}
+	result := Merge(base, over)
+	assert.Contains(t, result.DINDMirrors, "https://mirror1.example.com")
+	assert.Contains(t, result.DINDMirrors, "https://mirror2.example.com")
+}
+
+func TestMerge_DINDCache(t *testing.T) {
+	base := Config{DINDCache: boolPtr(false)}
+	over := Config{DINDCache: boolPtr(true)}
+	result := Merge(base, over)
+	assert.True(t, *result.DINDCache)
+}

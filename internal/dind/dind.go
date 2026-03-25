@@ -34,7 +34,9 @@ type Config struct {
 	Labels        map[string]string
 	ContainerName string // display name for the DIND container
 	Hostname      string // hostname inside the DIND container
-	NetworkID     string // pre-created network ID to join
+	NetworkID     string   // pre-created network ID to join
+	Mirrors       []string // registry mirror URLs
+	CacheAddr     string   // pull-through cache address (added as mirror)
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -59,11 +61,33 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		return nil, fmt.Errorf("creating DIND socket volume: %w", err)
 	}
 
+	// Build dockerd command with mirrors
+	var entrypoint []string
+	dockerdArgs := []string{"dockerd"}
+	for _, mirror := range cfg.Mirrors {
+		dockerdArgs = append(dockerdArgs, "--registry-mirror="+mirror)
+	}
+	if cfg.CacheAddr != "" {
+		dockerdArgs = append(dockerdArgs, "--registry-mirror="+cfg.CacheAddr)
+	}
+	if len(dockerdArgs) > 1 {
+		entrypoint = dockerdArgs
+	}
+
+	labels := cfg.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	if cfg.CacheAddr != "" {
+		labels["ai-shim.uses-cache"] = "true"
+	}
+
 	containerCfg := &container.Config{
-		Image:    image,
-		Hostname: cfg.Hostname,
-		Labels:   cfg.Labels,
-		Env:      []string{"DOCKER_TLS_CERTDIR="}, // disable TLS for simplicity
+		Image:      image,
+		Hostname:   cfg.Hostname,
+		Labels:     labels,
+		Env:        []string{"DOCKER_TLS_CERTDIR="}, // disable TLS for simplicity
+		Entrypoint: entrypoint,
 	}
 
 	hostCfg := &container.HostConfig{
