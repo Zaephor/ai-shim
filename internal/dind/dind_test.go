@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ai-shim/ai-shim/internal/network"
@@ -164,6 +165,47 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	for _, c := range containers {
 		cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
 	}
+}
+
+func TestMaybeStopCache_DoesNothingWhenNoCache(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	// Should not panic or error when no cache exists
+	MaybeStopCache(ctx, cli)
+}
+
+func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-mirrors-verify", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind",
+		Mirrors:   []string{"https://mirror.gcr.io", "https://custom.mirror.io"},
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	// Inspect container to verify mirrors in entrypoint
+	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	require.NoError(t, err)
+
+	// Entrypoint should contain --registry-mirror flags
+	entrypoint := strings.Join(inspect.Config.Entrypoint, " ")
+	assert.Contains(t, entrypoint, "--registry-mirror=https://mirror.gcr.io")
+	assert.Contains(t, entrypoint, "--registry-mirror=https://custom.mirror.io")
 }
 
 func TestDetectSysbox(t *testing.T) {

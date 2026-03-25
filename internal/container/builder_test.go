@@ -8,12 +8,11 @@ import (
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func boolPtr(b bool) *bool { return &b }
 
 func defaultBuildParams() BuildParams {
 	return BuildParams{
@@ -76,14 +75,14 @@ func TestBuildSpec_GPU(t *testing.T) {
 
 	t.Run("GPU enabled", func(t *testing.T) {
 		p := defaultBuildParams()
-		p.Config.GPU = boolPtr(true)
+		p.Config.GPU = testutil.BoolPtr(true)
 		spec := BuildSpec(p)
 		assert.True(t, spec.GPU)
 	})
 
 	t.Run("GPU disabled", func(t *testing.T) {
 		p := defaultBuildParams()
-		p.Config.GPU = boolPtr(false)
+		p.Config.GPU = testutil.BoolPtr(false)
 		spec := BuildSpec(p)
 		assert.False(t, spec.GPU)
 	})
@@ -208,7 +207,7 @@ func TestBuildSpec_ToolProvisioningInEntrypoint(t *testing.T) {
 func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.AllowAgents = []string{"gemini-cli"}
-	p.Config.Isolated = boolPtr(true)
+	p.Config.Isolated = testutil.BoolPtr(true)
 	spec := BuildSpec(p)
 
 	targets := map[string]bool{}
@@ -220,7 +219,7 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 
 func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
 	p := defaultBuildParams()
-	p.Config.Isolated = boolPtr(false)
+	p.Config.Isolated = testutil.BoolPtr(false)
 	spec := BuildSpec(p)
 
 	// Should have mounts for agents other than the primary

@@ -3,10 +3,9 @@ package config
 import (
 	"testing"
 
+	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
-
-func boolPtr(b bool) *bool { return &b }
 
 func TestMerge_ScalarsLastWins(t *testing.T) {
 	base := Config{Image: "base-image", Hostname: "base-host", Version: "1.0"}
@@ -52,8 +51,8 @@ func TestMerge_ListsAppend(t *testing.T) {
 }
 
 func TestMerge_BoolPtrsLastWins(t *testing.T) {
-	base := Config{DIND: boolPtr(true), GPU: boolPtr(false)}
-	over := Config{DIND: boolPtr(false)}
+	base := Config{DIND: testutil.BoolPtr(true), GPU: testutil.BoolPtr(false)}
+	over := Config{DIND: testutil.BoolPtr(false)}
 	result := Merge(base, over)
 	assert.Equal(t, false, *result.DIND, "overridden bool")
 	assert.Equal(t, false, *result.GPU, "preserved bool")
@@ -127,8 +126,8 @@ func TestMerge_DINDMirrors(t *testing.T) {
 }
 
 func TestMerge_DINDCache(t *testing.T) {
-	base := Config{DINDCache: boolPtr(false)}
-	over := Config{DINDCache: boolPtr(true)}
+	base := Config{DINDCache: testutil.BoolPtr(false)}
+	over := Config{DINDCache: testutil.BoolPtr(true)}
 	result := Merge(base, over)
 	assert.True(t, *result.DINDCache)
 }

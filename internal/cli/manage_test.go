@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/storage"
 )
 
@@ -125,6 +126,23 @@ func TestRemoveSymlink(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Lstat(linkPath)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestDryRun_UsesDefaultImage(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	// Write a config with no image set so the default is used
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte("hostname: \"\"\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "work", nil)
+	require.NoError(t, err)
+	assert.Contains(t, output, container.DefaultImage, "should use container.DefaultImage when no image configured")
+	assert.Contains(t, output, container.DefaultHostname, "should use container.DefaultHostname when no hostname configured")
 }
 
 func TestDryRun(t *testing.T) {

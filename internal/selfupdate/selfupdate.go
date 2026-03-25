@@ -54,14 +54,16 @@ func NeedsUpdate(current, latest string) bool {
 	return current != latest && current != "dev"
 }
 
-// AssetName returns the expected asset filename for the current platform.
+// AssetName returns the expected release asset filename for the current platform.
+// Used by the update command to find the correct binary to download.
 func AssetName() string {
 	os := runtime.GOOS
 	arch := runtime.GOARCH
 	return fmt.Sprintf("ai-shim_%s_%s", os, arch)
 }
 
-// FindAssetURL finds the download URL for the current platform in a release.
+// FindAssetURL locates the download URL for the current platform in a release.
+// Used by the update command to download the correct binary.
 func FindAssetURL(release Release) (string, error) {
 	name := AssetName()
 	for _, asset := range release.Assets {

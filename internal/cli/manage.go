@@ -9,6 +9,7 @@ import (
 
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
+	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -184,11 +185,11 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 
 	image := cfg.Image
 	if image == "" {
-		image = "ghcr.io/catthehacker/ubuntu:act-24.04"
+		image = container.DefaultImage
 	}
 	hostname := cfg.Hostname
 	if hostname == "" {
-		hostname = "ai-shim"
+		hostname = container.DefaultHostname
 	}
 
 	b.WriteString(fmt.Sprintf("  Image:     %s\n", image))
