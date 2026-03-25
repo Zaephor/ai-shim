@@ -2,6 +2,7 @@ package agent
 
 import "sort"
 
+// Definition describes a built-in coding agent and how to install it.
 type Definition struct {
 	Name        string
 	InstallType string
@@ -22,11 +23,13 @@ var builtins = map[string]Definition{
 	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", HomePaths: []string{".config/opencode"}},
 }
 
+// Lookup returns the built-in agent definition for the given name.
 func Lookup(name string) (Definition, bool) {
 	def, ok := builtins[name]
 	return def, ok
 }
 
+// All returns a copy of all built-in agent definitions.
 func All() map[string]Definition {
 	result := make(map[string]Definition, len(builtins))
 	for k, v := range builtins {
@@ -35,6 +38,7 @@ func All() map[string]Definition {
 	return result
 }
 
+// Names returns a sorted list of all built-in agent names.
 func Names() []string {
 	names := make([]string, 0, len(builtins))
 	for k := range builtins {

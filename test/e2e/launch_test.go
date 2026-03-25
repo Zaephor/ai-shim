@@ -14,19 +14,10 @@ import (
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func skipIfNoDocker(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	runner, err := container.NewRunner(ctx)
-	if err != nil {
-		t.Skip("Docker not available:", err)
-	}
-	runner.Close()
-}
 
 // dockerTempDir creates a temp directory that is accessible from both the test
 // process and the Docker daemon. In environments where Docker runs on the host
@@ -104,7 +95,7 @@ func TestE2E_EntrypointContainsInstallCommand(t *testing.T) {
 // TestE2E_ContainerLaunchWithEnvAndHostname tests that a container starts
 // with the correct environment and hostname.
 func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -123,7 +114,7 @@ func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 
 // TestE2E_ContainerMountsAccessible tests that storage mounts are accessible.
 func TestE2E_ContainerMountsAccessible(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -151,7 +142,7 @@ func TestE2E_ContainerMountsAccessible(t *testing.T) {
 
 // TestE2E_ContainerWorkspaceMount tests workspace path hashing and mounting.
 func TestE2E_ContainerWorkspaceMount(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -179,7 +170,7 @@ func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 
 // TestE2E_ContainerUserMapping tests UID/GID mapping.
 func TestE2E_ContainerUserMapping(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -201,7 +192,7 @@ func TestE2E_ContainerUserMapping(t *testing.T) {
 // in a container produces expected output even without API keys.
 // The agent should install/start and then fail with auth error, not crash.
 func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	if testing.Short() {
 		t.Skip("skipping slow E2E test")
 	}
@@ -231,7 +222,7 @@ func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
 // TestE2E_FullBuildSpecProducesValidContainer tests the complete flow:
 // config resolve -> build spec -> container runs
 func TestE2E_FullBuildSpecProducesValidContainer(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)

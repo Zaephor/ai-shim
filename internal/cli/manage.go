@@ -246,7 +246,7 @@ func Cleanup() ([]string, error) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("connecting to Docker: %w", err)
+		return nil, fmt.Errorf("connecting to docker: %w", err)
 	}
 	defer cli.Close()
 

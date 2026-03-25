@@ -26,6 +26,8 @@ var sensitiveValuePrefixes = []string{
 }
 
 // MaskSecrets replaces sensitive values in a key=value map with "***".
+// It is intended to sanitize environment variables before logging or
+// displaying them in verbose/debug output.
 // Masks based on key name patterns (*KEY*, *SECRET*, *TOKEN*, *PASSWORD*, *CREDENTIAL*, *AUTH*)
 // and value patterns (sk-ant-*, sk-*, gsk_*, etc.)
 func MaskSecrets(env map[string]string) map[string]string {

@@ -4,23 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func skipIfNoDocker(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	if err != nil {
-		t.Skip("Docker not available:", err)
-	}
-	runner.Close()
-}
-
 func TestNewRunner(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -28,7 +19,7 @@ func TestNewRunner(t *testing.T) {
 }
 
 func TestRun_SimpleCommand(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -44,7 +35,7 @@ func TestRun_SimpleCommand(t *testing.T) {
 }
 
 func TestRun_ExitCode(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -60,7 +51,7 @@ func TestRun_ExitCode(t *testing.T) {
 }
 
 func TestRun_WithEnv(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -77,7 +68,7 @@ func TestRun_WithEnv(t *testing.T) {
 }
 
 func TestRun_WithWorkdir(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -94,7 +85,7 @@ func TestRun_WithWorkdir(t *testing.T) {
 }
 
 func TestRun_WithHostname(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -111,7 +102,7 @@ func TestRun_WithHostname(t *testing.T) {
 }
 
 func TestInspectImageUser_Alpine(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -123,7 +114,7 @@ func TestInspectImageUser_Alpine(t *testing.T) {
 }
 
 func TestRun_WithMount(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)
@@ -144,7 +135,7 @@ func TestRun_WithMount(t *testing.T) {
 }
 
 func TestRun_CompletesWithSignalHandler(t *testing.T) {
-	skipIfNoDocker(t)
+	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
 	require.NoError(t, err)

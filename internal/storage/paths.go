@@ -13,6 +13,7 @@ type Layout struct {
 	SharedCache string
 }
 
+// NewLayout creates a Layout with all paths derived from the given root directory.
 func NewLayout(root string) Layout {
 	return Layout{
 		Root:        root,
@@ -22,23 +23,28 @@ func NewLayout(root string) Layout {
 	}
 }
 
+// DefaultRoot returns the default ai-shim storage root (~/.ai-shim).
 func DefaultRoot() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".ai-shim")
 }
 
+// AgentBin returns the bin directory path for the given agent.
 func (l Layout) AgentBin(agent string) string {
 	return filepath.Join(l.Root, "agents", agent, "bin")
 }
 
+// AgentCache returns the cache directory path for the given agent.
 func (l Layout) AgentCache(agent string) string {
 	return filepath.Join(l.Root, "agents", agent, "cache")
 }
 
+// ProfileHome returns the home directory path for the given profile.
 func (l Layout) ProfileHome(profile string) string {
 	return filepath.Join(l.Root, "profiles", profile, "home")
 }
 
+// EnsureDirectories creates all required directories for the given agent and profile.
 func (l Layout) EnsureDirectories(agent, profile string) error {
 	dirs := []string{
 		l.ConfigDir,

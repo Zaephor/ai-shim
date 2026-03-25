@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,13 +12,10 @@ import (
 
 func getClient(t *testing.T) *client.Client {
 	t.Helper()
+	testutil.SkipIfNoDocker(t)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		t.Skip("Docker not available:", err)
-	}
-	ctx := context.Background()
-	if _, err := cli.Ping(ctx); err != nil {
-		t.Skip("Docker not available:", err)
+		t.Fatal("failed to create docker client:", err)
 	}
 	return cli
 }

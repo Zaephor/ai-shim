@@ -3,6 +3,7 @@ package dind
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -73,13 +74,19 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, "")
 	if err != nil {
 		// Clean up network on failure
-		cli.NetworkRemove(ctx, networkResp.ID)
+		if cleanupErr := cli.NetworkRemove(ctx, networkResp.ID); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up network: %v\n", cleanupErr)
+		}
 		return nil, fmt.Errorf("creating DIND container: %w", err)
 	}
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
-		cli.NetworkRemove(ctx, networkResp.ID)
+		if cleanupErr := cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up container: %v\n", cleanupErr)
+		}
+		if cleanupErr := cli.NetworkRemove(ctx, networkResp.ID); cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up network: %v\n", cleanupErr)
+		}
 		return nil, fmt.Errorf("starting DIND container: %w", err)
 	}
 
