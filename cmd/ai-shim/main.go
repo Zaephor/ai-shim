@@ -74,6 +74,7 @@ Environment Variables:
   AI_SHIM_IMAGE         Override container image
   AI_SHIM_VERSION       Pin agent version
   AI_SHIM_DIND          Enable/disable DIND (0/1)
+  AI_SHIM_DIND_GPU      Enable/disable GPU for DIND (0/1)
   AI_SHIM_GPU           Enable/disable GPU (0/1)
   AI_SHIM_NETWORK_SCOPE Network isolation scope
   AI_SHIM_DIND_HOSTNAME DIND container hostname
@@ -280,17 +281,30 @@ func runManageSubcommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		if len(result.Removed) == 0 && len(result.Failed) == 0 {
-			fmt.Println("No orphaned containers found.")
+		totalRemoved := len(result.RemovedContainers) + len(result.RemovedNetworks) + len(result.RemovedVolumes)
+		if totalRemoved == 0 && len(result.Failed) == 0 {
+			fmt.Println("No orphaned resources found.")
 		} else {
-			if len(result.Removed) > 0 {
-				fmt.Printf("Removed %d orphaned container(s):\n", len(result.Removed))
-				for _, r := range result.Removed {
+			if len(result.RemovedContainers) > 0 {
+				fmt.Printf("Removed %d orphaned container(s):\n", len(result.RemovedContainers))
+				for _, r := range result.RemovedContainers {
+					fmt.Println("  " + r)
+				}
+			}
+			if len(result.RemovedNetworks) > 0 {
+				fmt.Printf("Removed %d orphaned network(s):\n", len(result.RemovedNetworks))
+				for _, r := range result.RemovedNetworks {
+					fmt.Println("  " + r)
+				}
+			}
+			if len(result.RemovedVolumes) > 0 {
+				fmt.Printf("Removed %d orphaned volume(s):\n", len(result.RemovedVolumes))
+				for _, r := range result.RemovedVolumes {
 					fmt.Println("  " + r)
 				}
 			}
 			if len(result.Failed) > 0 {
-				fmt.Printf("Failed to remove %d container(s):\n", len(result.Failed))
+				fmt.Printf("Failed to remove %d resource(s):\n", len(result.Failed))
 				for _, f := range result.Failed {
 					fmt.Println("  " + f)
 				}
@@ -388,6 +402,15 @@ func runAgent(name string, args []string) (int, error) {
 	logging.Debug("agent=%s profile=%s", agentName, profileName)
 	logging.Debug("platform: uid=%d gid=%d hostname=%s", platInfo.UID, platInfo.GID, platInfo.Hostname)
 	logging.Debug("image=%s hostname=%s", image, cfg.Hostname)
+	if cfg.Resources != nil {
+		logging.Debug("resources: memory=%s cpus=%s", cfg.Resources.Memory, cfg.Resources.CPUs)
+	}
+	if cfg.DIND != nil && *cfg.DIND {
+		logging.Debug("dind: enabled, hostname=%s, network_scope=%s", cfg.DINDHostname, cfg.NetworkScope)
+		if cfg.DINDResources != nil {
+			logging.Debug("dind resources: memory=%s cpus=%s", cfg.DINDResources.Memory, cfg.DINDResources.CPUs)
+		}
+	}
 
 	spec := container.BuildSpec(container.BuildParams{
 		Config:   cfg,

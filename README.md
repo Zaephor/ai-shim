@@ -62,6 +62,10 @@ args:
 dind: false
 gpu: false
 network_scope: isolated     # global, profile, workspace, profile-workspace, isolated
+
+# resources:                # optional container resource limits
+#   memory: "4g"
+#   cpus: "2.0"
 dind_hostname: ai-shim-dind # hostname for the DIND sidecar container
 dind_mirrors:               # registry mirrors (default: mirror.gcr.io)
   - https://mirror.gcr.io
@@ -102,6 +106,8 @@ See `configs/examples/` for annotated example files and
   so work and personal contexts stay separate
 - **Port mapping** -- forward ports from host to container
 - **Package installation** -- install apt packages at container startup
+- **Resource limits** -- optional memory and CPU limits for agent and DIND
+  containers independently via `resources` and `dind_resources`
 
 ## CLI Reference
 

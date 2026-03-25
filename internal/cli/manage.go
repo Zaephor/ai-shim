@@ -13,6 +13,8 @@ import (
 	"github.com/ai-shim/ai-shim/internal/storage"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	network_types "github.com/docker/docker/api/types/network"
+	volume_types "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 )
 
@@ -92,6 +94,84 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
+	if len(cfg.Packages) > 0 {
+		b.WriteString("  packages:\n")
+		for _, p := range cfg.Packages {
+			b.WriteString(fmt.Sprintf("    - %s\n", p))
+		}
+	}
+
+	dindStr := "false"
+	if cfg.DIND != nil && *cfg.DIND {
+		dindStr = "true"
+	}
+	b.WriteString(fmt.Sprintf("  dind:          %s\n", dindStr))
+
+	gpuStr := "false"
+	if cfg.GPU != nil && *cfg.GPU {
+		gpuStr = "true"
+	}
+	b.WriteString(fmt.Sprintf("  gpu:           %s\n", gpuStr))
+
+	if cfg.NetworkScope != "" {
+		b.WriteString(fmt.Sprintf("  network_scope: %s\n", cfg.NetworkScope))
+	}
+	if cfg.DINDHostname != "" {
+		b.WriteString(fmt.Sprintf("  dind_hostname: %s\n", cfg.DINDHostname))
+	}
+
+	if cfg.Resources != nil {
+		b.WriteString("  resources:\n")
+		if cfg.Resources.Memory != "" {
+			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.Resources.Memory))
+		}
+		if cfg.Resources.CPUs != "" {
+			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.Resources.CPUs))
+		}
+	}
+	if cfg.DINDResources != nil {
+		b.WriteString("  dind_resources:\n")
+		if cfg.DINDResources.Memory != "" {
+			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.DINDResources.Memory))
+		}
+		if cfg.DINDResources.CPUs != "" {
+			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.DINDResources.CPUs))
+		}
+	}
+
+	if len(cfg.DINDMirrors) > 0 {
+		b.WriteString("  dind_mirrors:\n")
+		for _, m := range cfg.DINDMirrors {
+			b.WriteString(fmt.Sprintf("    - %s\n", m))
+		}
+	}
+
+	dindCacheStr := "false"
+	if cfg.DINDCache != nil && *cfg.DINDCache {
+		dindCacheStr = "true"
+	}
+	b.WriteString(fmt.Sprintf("  dind_cache:    %s\n", dindCacheStr))
+
+	isolatedStr := "true"
+	if cfg.Isolated != nil && !*cfg.Isolated {
+		isolatedStr = "false"
+	}
+	b.WriteString(fmt.Sprintf("  isolated:      %s\n", isolatedStr))
+
+	if len(cfg.AllowAgents) > 0 {
+		b.WriteString("  allow_agents:\n")
+		for _, a := range cfg.AllowAgents {
+			b.WriteString(fmt.Sprintf("    - %s\n", a))
+		}
+	}
+
+	if len(cfg.Tools) > 0 {
+		b.WriteString("  tools:\n")
+		for name, tool := range cfg.Tools {
+			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
+		}
+	}
+
 	return b.String(), nil
 }
 
@@ -112,6 +192,14 @@ func Doctor() string {
 		} else {
 			info, _ := cli.Info(ctx)
 			b.WriteString(fmt.Sprintf("  Docker daemon:  OK (server %s)\n", info.ServerVersion))
+		}
+
+		// Check default image
+		_, _, imgErr := cli.ImageInspectWithRaw(ctx, container.DefaultImage)
+		if imgErr != nil {
+			b.WriteString(fmt.Sprintf("  Default image:  NOT CACHED (%s) — will be pulled on first use\n", container.DefaultImage))
+		} else {
+			b.WriteString(fmt.Sprintf("  Default image:  OK (%s)\n", container.DefaultImage))
 		}
 	}
 
@@ -239,16 +327,37 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	}
 	b.WriteString(fmt.Sprintf("  GPU:       %s\n", gpu))
 
+	if cfg.Resources != nil {
+		b.WriteString("  Resources:\n")
+		if cfg.Resources.Memory != "" {
+			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.Resources.Memory))
+		}
+		if cfg.Resources.CPUs != "" {
+			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.Resources.CPUs))
+		}
+	}
+	if cfg.DINDResources != nil {
+		b.WriteString("  DIND Resources:\n")
+		if cfg.DINDResources.Memory != "" {
+			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.DINDResources.Memory))
+		}
+		if cfg.DINDResources.CPUs != "" {
+			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.DINDResources.CPUs))
+		}
+	}
+
 	return b.String(), nil
 }
 
 // CleanupResult holds the results of a cleanup operation.
 type CleanupResult struct {
-	Removed []string
-	Failed  []string
+	RemovedContainers []string
+	RemovedNetworks   []string
+	RemovedVolumes    []string
+	Failed            []string
 }
 
-// Cleanup finds and removes orphaned ai-shim containers.
+// Cleanup finds and removes orphaned ai-shim containers, networks, and volumes.
 func Cleanup() (CleanupResult, error) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -257,6 +366,9 @@ func Cleanup() (CleanupResult, error) {
 	}
 	defer cli.Close()
 
+	var result CleanupResult
+
+	// Clean orphaned containers
 	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
 		All:     true,
 		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
@@ -265,25 +377,47 @@ func Cleanup() (CleanupResult, error) {
 		return CleanupResult{}, fmt.Errorf("listing containers: %w", err)
 	}
 
-	var removed []string
-	var failed []string
 	for _, c := range containers {
 		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
 			name := c.ID[:12]
 			if len(c.Names) > 0 {
 				name = c.Names[0]
 			}
-			failed = append(failed, fmt.Sprintf("%s: %v", name, err))
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", name, err))
 			continue
 		}
 		name := c.ID[:12]
 		if len(c.Names) > 0 {
 			name = c.Names[0]
 		}
-		removed = append(removed, name)
+		result.RemovedContainers = append(result.RemovedContainers, name)
 	}
 
-	return CleanupResult{Removed: removed, Failed: failed}, nil
+	// Clean orphaned networks
+	networks, err := cli.NetworkList(ctx, network_types.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+	})
+	if err == nil {
+		for _, n := range networks {
+			if err := cli.NetworkRemove(ctx, n.ID); err == nil {
+				result.RemovedNetworks = append(result.RemovedNetworks, n.Name)
+			}
+		}
+	}
+
+	// Clean orphaned volumes
+	volumes, err := cli.VolumeList(ctx, volume_types.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+	})
+	if err == nil {
+		for _, v := range volumes.Volumes {
+			if err := cli.VolumeRemove(ctx, v.Name, true); err == nil {
+				result.RemovedVolumes = append(result.RemovedVolumes, v.Name)
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // Status returns a formatted list of running ai-shim containers.

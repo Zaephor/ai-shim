@@ -65,6 +65,16 @@
 # Enable pull-through registry cache. Default: false
 # dind_cache: false
 
+# Container resource limits (optional, disabled by default)
+# resources:
+#   memory: "4g"     # e.g. "512m", "2g", "4g"
+#   cpus: "2.0"      # decimal CPU count
+
+# DIND container resource limits (optional, disabled by default)
+# dind_resources:
+#   memory: "2g"
+#   cpus: "1.0"
+
 # Cross-agent access: list of agent names whose home dirs get mounted.
 # allow_agents: []
 

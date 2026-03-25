@@ -65,6 +65,23 @@ func TestDoctor(t *testing.T) {
 	assert.Contains(t, output, "Docker")
 }
 
+func TestDoctor_ChecksDefaultImage(t *testing.T) {
+	output := Doctor()
+	// Should mention the default image regardless of whether it's cached
+	assert.Contains(t, output, container.DefaultImage)
+}
+
+func TestCleanup_ReturnsResult(t *testing.T) {
+	result, err := Cleanup()
+	require.NoError(t, err)
+	// Verify the result type has container, network, and volume fields.
+	// With no orphaned resources these are nil slices, but the fields must exist.
+	_ = result.RemovedContainers
+	_ = result.RemovedNetworks
+	_ = result.RemovedVolumes
+	_ = result.Failed
+}
+
 func TestCreateSymlink(t *testing.T) {
 	dir := t.TempDir()
 	shimPath := filepath.Join(dir, "ai-shim")
@@ -166,4 +183,60 @@ func TestDryRun(t *testing.T) {
 	assert.Contains(t, output, "test:latest")
 	assert.Contains(t, output, "test")
 	assert.Contains(t, output, "--verbose")
+}
+
+func TestShowConfig_ShowsAllFields(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+hostname: "test"
+dind: true
+gpu: false
+network_scope: profile
+dind_hostname: my-dind
+packages:
+  - tmux
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowConfig(layout, "claude-code", "work")
+	require.NoError(t, err)
+	assert.Contains(t, output, "dind:")
+	assert.Contains(t, output, "gpu:")
+	assert.Contains(t, output, "network_scope:")
+	assert.Contains(t, output, "packages:")
+}
+
+func TestDryRun_ShowsResources(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+hostname: "test"
+resources:
+  memory: "4g"
+  cpus: "2.0"
+dind_resources:
+  memory: "2g"
+  cpus: "1.0"
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "work", nil)
+	require.NoError(t, err)
+	assert.Contains(t, output, "Resources:")
+	assert.Contains(t, output, "memory: 4g")
+	assert.Contains(t, output, "cpus:   2.0")
+	assert.Contains(t, output, "DIND Resources:")
+	assert.Contains(t, output, "memory: 2g")
+	assert.Contains(t, output, "cpus:   1.0")
 }

@@ -70,6 +70,16 @@ dind_mirrors:            # registry mirror URLs (default: mirror.gcr.io)
   - https://mirror.gcr.io
 dind_cache: false        # enable pull-through registry cache
 
+# Container resource limits (optional, disabled by default)
+# resources:
+#   memory: "4g"
+#   cpus: "2.0"
+
+# DIND container resource limits (optional, disabled by default)
+# dind_resources:
+#   memory: "2g"
+#   cpus: "1.0"
+
 # cross-agent access
 allow_agents: []     # agents whose homes get mounted
 isolated: true       # when false, all installed agents visible
@@ -404,3 +414,4 @@ ai-shim/
 | Dry-run | `ai-shim manage dry-run` shows full container spec |
 | Doctor | `ai-shim manage doctor` checks prerequisites |
 | Tool caching | Skip downloads when cache is warm (offline-friendly) |
+| Resource limits | Optional memory/CPU limits for agent and DIND containers independently |
