@@ -51,3 +51,11 @@ func TestLoadFile_Empty(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", cfg.Image)
 }
+
+func TestLoadFile_MalformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("invalid: yaml: [unterminated"), 0644))
+	_, err := LoadFile(path)
+	assert.Error(t, err, "malformed YAML should return error")
+}

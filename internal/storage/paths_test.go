@@ -57,3 +57,12 @@ func TestDefaultRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(home, ".ai-shim"), DefaultRoot())
 }
+
+func TestLayout_EnsureDirectories_Idempotent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+
+	// Call twice -- should not error on second call
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+}

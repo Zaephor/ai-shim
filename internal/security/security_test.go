@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // --- Secret Masking Tests ---
@@ -171,4 +173,29 @@ func TestValidateWorkingDirectory_System(t *testing.T) {
 			t.Errorf("expected %s to be rejected", d)
 		}
 	}
+}
+
+func TestValidateVolumePath_EmptyPath(t *testing.T) {
+	// Empty path cleans to "." which should be allowed
+	err := ValidateVolumePath("")
+	// At minimum it shouldn't panic
+	_ = err
+}
+
+func TestValidateVolumePath_RelativePath(t *testing.T) {
+	err := ValidateVolumePath("relative/path")
+	// Relative paths should be allowed (Docker resolves them)
+	assert.NoError(t, err)
+}
+
+func TestMaskSecrets_NilMap(t *testing.T) {
+	result := MaskSecrets(nil)
+	assert.NotNil(t, result, "nil input should return empty map, not nil")
+	assert.Empty(t, result)
+}
+
+func TestMaskSecrets_EmptyMap(t *testing.T) {
+	result := MaskSecrets(map[string]string{})
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
 }

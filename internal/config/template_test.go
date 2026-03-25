@@ -57,3 +57,11 @@ func TestResolveTemplates_UndefinedVariable(t *testing.T) {
 	_, err := ResolveTemplates(cfg)
 	assert.Error(t, err, "undefined template variable should error")
 }
+
+func TestResolveTemplates_MalformedTemplate(t *testing.T) {
+	cfg := Config{
+		Env: map[string]string{"X": "{{ .unclosed"},
+	}
+	_, err := ResolveTemplates(cfg)
+	assert.Error(t, err, "malformed template syntax should return error")
+}

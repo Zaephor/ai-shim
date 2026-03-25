@@ -91,3 +91,13 @@ func TestVerifyChecksum_Mismatch(t *testing.T) {
 	data := []byte("hello world")
 	assert.False(t, VerifyChecksum("wrong", data))
 }
+
+func TestGenerateInstallScript_UnknownType(t *testing.T) {
+	tools := map[string]ToolDef{
+		"mystery": {Type: "unknown-type", Binary: "mystery"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// Should either produce an error message or be empty -- not silently skip
+	// Verify current behavior
+	assert.NotEmpty(t, script, "unknown type should produce some output (at least a comment)")
+}

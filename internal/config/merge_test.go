@@ -89,3 +89,24 @@ func TestMergeAll_FiveTiers(t *testing.T) {
 	assert.Equal(t, "env-override", result.Env["A"])
 	assert.Equal(t, []string{"/default", "/profile"}, result.Volumes)
 }
+
+func TestMerge_NilMaps(t *testing.T) {
+	base := Config{Env: nil}
+	over := Config{Env: map[string]string{"A": "1"}}
+	result := Merge(base, over)
+	assert.Equal(t, "1", result.Env["A"])
+}
+
+func TestMerge_BothNilMaps(t *testing.T) {
+	base := Config{Env: nil}
+	over := Config{Env: nil}
+	result := Merge(base, over)
+	assert.Nil(t, result.Env)
+}
+
+func TestMerge_EmptyListAppend(t *testing.T) {
+	base := Config{Args: nil}
+	over := Config{Args: []string{"--flag"}}
+	result := Merge(base, over)
+	assert.Equal(t, []string{"--flag"}, result.Args)
+}

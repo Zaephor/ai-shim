@@ -46,3 +46,18 @@ func TestParseName_Empty(t *testing.T) {
 	_, _, err := ParseName("")
 	assert.Error(t, err)
 }
+
+func TestParseName_LeadingUnderscore(t *testing.T) {
+	_, _, err := ParseName("_profile")
+	assert.Error(t, err, "leading underscore means empty agent")
+}
+
+func TestParseName_TrailingUnderscore(t *testing.T) {
+	_, _, err := ParseName("agent_")
+	assert.Error(t, err, "trailing underscore means empty profile")
+}
+
+func TestParseName_OnlyUnderscore(t *testing.T) {
+	_, _, err := ParseName("_")
+	assert.Error(t, err, "just underscore should error")
+}

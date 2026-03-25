@@ -42,3 +42,15 @@ func TestContainerWorkdir(t *testing.T) {
 	assert.Contains(t, w, "/workspace/")
 	assert.Len(t, w, len("/workspace/")+12)
 }
+
+func TestHashPath_EmptyHostname(t *testing.T) {
+	h1 := HashPath("", "/path")
+	h2 := HashPath("", "/path")
+	assert.Equal(t, h1, h2, "empty hostname should still be deterministic")
+	assert.Len(t, h1, 12)
+}
+
+func TestHashPath_EmptyPath(t *testing.T) {
+	h := HashPath("host", "")
+	assert.Len(t, h, 12)
+}
