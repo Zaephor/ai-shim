@@ -169,6 +169,14 @@ func TestStatus(t *testing.T) {
 	assert.NotEmpty(t, output)
 }
 
+func TestStatus_Format(t *testing.T) {
+	output, err := Status()
+	require.NoError(t, err)
+	// Output should have headers or "No running" message
+	assert.True(t, strings.Contains(output, "NAME") || strings.Contains(output, "No running"),
+		"should have table headers or empty message")
+}
+
 func TestDryRun(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")
@@ -293,6 +301,34 @@ tools:
 	for _, sub := range expectedSubstrings {
 		assert.Contains(t, output, sub, "ShowConfig should display: %s", sub)
 	}
+}
+
+func TestBackupProfile_NonExistent(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	err := BackupProfile(layout, "nonexistent", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestDiskUsage(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+	os.MkdirAll(layout.SharedBin, 0755)
+	os.MkdirAll(layout.ConfigDir, 0755)
+	os.WriteFile(filepath.Join(layout.SharedBin, "test"), []byte("data"), 0644)
+
+	output, err := DiskUsage(layout)
+	require.NoError(t, err)
+	assert.Contains(t, output, "Shared")
+	assert.Contains(t, output, "Total")
+}
+
+func TestFormatBytes(t *testing.T) {
+	assert.Equal(t, "0 B", formatBytes(0))
+	assert.Equal(t, "500 B", formatBytes(500))
+	assert.Equal(t, "1.0 KB", formatBytes(1024))
+	assert.Equal(t, "1.5 MB", formatBytes(1572864))
+	assert.Equal(t, "2.0 GB", formatBytes(2147483648))
 }
 
 func TestDryRun_ShowsResources(t *testing.T) {

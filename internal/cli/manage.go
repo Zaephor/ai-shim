@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
@@ -442,8 +444,8 @@ func Status() (string, error) {
 
 	var b strings.Builder
 	b.WriteString("Running ai-shim containers:\n\n")
-	b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", "NAME", "AGENT", "PROFILE", "STATUS"))
-	b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", "----", "-----", "-------", "------"))
+	b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", "NAME", "AGENT", "PROFILE", "IMAGE", "STATUS"))
+	b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", "----", "-----", "-------", "-----", "------"))
 
 	for _, c := range containers {
 		name := c.ID[:12]
@@ -452,11 +454,128 @@ func Status() (string, error) {
 		}
 		agent := c.Labels["ai-shim.agent"]
 		profile := c.Labels["ai-shim.profile"]
-		status := c.Status
 
-		b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", name, agent, profile, status))
+		// Mark cache and DIND containers
+		if c.Labels["ai-shim.cache"] == "true" {
+			agent = "(cache)"
+			profile = ""
+		} else if strings.HasSuffix(name, "-dind") {
+			agent = agent + " (dind)"
+		}
+
+		image := c.Image
+		if len(image) > 25 {
+			image = image[:22] + "..."
+		}
+
+		b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", name, agent, profile, image, c.Status))
 	}
 	return b.String(), nil
+}
+
+// BackupProfile creates a tar.gz archive of a profile's home directory.
+func BackupProfile(layout storage.Layout, profile, outputPath string) error {
+	profileDir := layout.ProfileHome(profile)
+	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
+		return fmt.Errorf("profile %q does not exist", profile)
+	}
+
+	if outputPath == "" {
+		outputPath = fmt.Sprintf("ai-shim-backup-%s-%s.tar.gz", profile, time.Now().Format("20060102-150405"))
+	}
+
+	cmd := exec.Command("tar", "czf", outputPath, "-C", filepath.Dir(profileDir), filepath.Base(profileDir))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("creating backup: %s: %w", string(output), err)
+	}
+
+	return nil
+}
+
+// RestoreProfile extracts a tar.gz archive into a profile's home directory.
+func RestoreProfile(layout storage.Layout, profile, archivePath string) error {
+	profileDir := layout.ProfileHome(profile)
+	if err := os.MkdirAll(filepath.Dir(profileDir), 0755); err != nil {
+		return fmt.Errorf("creating profile directory: %w", err)
+	}
+
+	cmd := exec.Command("tar", "xzf", archivePath, "-C", filepath.Dir(profileDir))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("restoring backup: %s: %w", string(output), err)
+	}
+
+	return nil
+}
+
+// DiskUsage returns a formatted report of ai-shim storage usage.
+func DiskUsage(layout storage.Layout) (string, error) {
+	var b strings.Builder
+	b.WriteString("ai-shim disk usage:\n\n")
+
+	dirs := []struct {
+		name string
+		path string
+	}{
+		{"Shared", filepath.Join(layout.Root, "shared")},
+		{"Agents", filepath.Join(layout.Root, "agents")},
+		{"Profiles", filepath.Join(layout.Root, "profiles")},
+		{"Config", layout.ConfigDir},
+		{"Logs", filepath.Join(layout.Root, "logs")},
+	}
+
+	var total int64
+	for _, dir := range dirs {
+		size, err := dirSize(dir.path)
+		if err != nil {
+			b.WriteString(fmt.Sprintf("  %-12s  (not found)\n", dir.name))
+			continue
+		}
+		total += size
+		b.WriteString(fmt.Sprintf("  %-12s  %s\n", dir.name, formatBytes(size)))
+	}
+	b.WriteString(fmt.Sprintf("\n  %-12s  %s\n", "Total", formatBytes(total)))
+
+	// Per-profile breakdown
+	profilesDir := filepath.Join(layout.Root, "profiles")
+	entries, _ := os.ReadDir(profilesDir)
+	if len(entries) > 0 {
+		b.WriteString("\nPer-profile:\n")
+		for _, e := range entries {
+			if e.IsDir() {
+				size, _ := dirSize(filepath.Join(profilesDir, e.Name()))
+				b.WriteString(fmt.Sprintf("  %-20s  %s\n", e.Name(), formatBytes(size)))
+			}
+		}
+	}
+
+	return b.String(), nil
+}
+
+func dirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
 func readDirNames(root, subdir string) ([]string, error) {

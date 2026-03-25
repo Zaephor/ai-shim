@@ -66,6 +66,28 @@ func TestRunManage_ManageCleanup(t *testing.T) {
 	assert.NoError(t, err, "cleanup should work (may find 0 containers)")
 }
 
+func TestRunManage_CompletionBash(t *testing.T) {
+	err := runManage([]string{"completion", "bash"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_CompletionZsh(t *testing.T) {
+	err := runManage([]string{"completion", "zsh"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_CompletionMissingShell(t *testing.T) {
+	err := runManage([]string{"completion"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_CompletionUnsupportedShell(t *testing.T) {
+	err := runManage([]string{"completion", "fish"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported shell")
+}
+
 func TestHelpText_ListsAllEnvVarOverrides(t *testing.T) {
 	// Read resolver.go to find all AI_SHIM_ env var names
 	data, err := os.ReadFile("../../internal/config/resolver.go")

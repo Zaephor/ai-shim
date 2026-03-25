@@ -66,8 +66,12 @@ Commands:
   manage doctor                  Run diagnostics
   manage symlinks <sub> [args]   Manage symlinks (create/list/remove)
   manage dry-run <agent> <profile> Preview container config
+  manage backup <profile> [path]  Backup profile to tar.gz
+  manage restore <profile> <archive> Restore profile from tar.gz
+  manage disk-usage              Show storage usage breakdown
   manage cleanup                 Remove orphaned containers
   manage status                  Show running containers
+  completion <bash|zsh>          Generate shell completion script
   help                           Show this help
 
 Environment Variables:
@@ -158,6 +162,20 @@ func runManage(args []string) error {
 			return fmt.Errorf("updating binary: %w", err)
 		}
 		fmt.Printf("Updated to %s successfully. Backup at %s\n", latest, selfupdate.BackupPath(exe))
+		return nil
+
+	case "completion":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim completion <bash|zsh>")
+		}
+		switch args[1] {
+		case "bash":
+			fmt.Print(cli.BashCompletion())
+		case "zsh":
+			fmt.Print(cli.ZshCompletion())
+		default:
+			return fmt.Errorf("unsupported shell: %s (supported: bash, zsh)", args[1])
+		}
 		return nil
 
 	case "manage":
@@ -270,6 +288,38 @@ func runManageSubcommand(args []string) error {
 
 	case "status":
 		output, err := cli.Status()
+		if err != nil {
+			return err
+		}
+		fmt.Print(output)
+		return nil
+
+	case "backup":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage backup <profile> [output-path]")
+		}
+		outputPath := ""
+		if len(args) > 2 {
+			outputPath = args[2]
+		}
+		if err := cli.BackupProfile(layout, args[1], outputPath); err != nil {
+			return err
+		}
+		fmt.Printf("Profile %s backed up successfully\n", args[1])
+		return nil
+
+	case "restore":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: ai-shim manage restore <profile> <archive-path>")
+		}
+		if err := cli.RestoreProfile(layout, args[1], args[2]); err != nil {
+			return err
+		}
+		fmt.Printf("Profile %s restored successfully\n", args[1])
+		return nil
+
+	case "disk-usage":
+		output, err := cli.DiskUsage(layout)
 		if err != nil {
 			return err
 		}
