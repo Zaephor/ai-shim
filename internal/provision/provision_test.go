@@ -75,14 +75,22 @@ func TestGenerateInstallScript_Custom(t *testing.T) {
 	assert.Contains(t, script, "curl -fsSL https://example.com/install.sh | bash")
 }
 
+func TestGenerateInstallScript_UnknownType(t *testing.T) {
+	tools := map[string]ToolDef{
+		"mytool": {Type: "unknown-type", Binary: "mytool"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	assert.Contains(t, script, "ERROR: unknown tool type: unknown-type for tool mytool")
+}
+
 func TestVerifyChecksum_Match(t *testing.T) {
 	data := []byte("hello world")
 	// SHA256 of "hello world"
 	expected := "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-	assert.True(t, VerifyChecksum(expected, data))
+	assert.True(t, verifyChecksum(expected, data))
 }
 
 func TestVerifyChecksum_Mismatch(t *testing.T) {
 	data := []byte("hello world")
-	assert.False(t, VerifyChecksum("wrong", data))
+	assert.False(t, verifyChecksum("wrong", data))
 }

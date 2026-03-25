@@ -162,16 +162,22 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		},
 	}
 
-	// Custom volumes from config
+	// Custom volumes from config (validated)
 	for _, vol := range p.Config.Volumes {
 		parts := strings.SplitN(vol, ":", 2)
-		if len(parts) == 2 {
-			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: parts[0],
-				Target: parts[1],
-			})
+		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume %q (expected host:container)\n", vol)
+			continue
 		}
+		if err := security.ValidateVolumePath(parts[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume %s: %v\n", vol, err)
+			continue
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: parts[0],
+			Target: parts[1],
+		})
 	}
 
 	return mounts
@@ -197,12 +203,14 @@ func parsePorts(ports []string) (nat.PortMap, nat.PortSet) {
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port mapping %q (expected host:container)\n", p)
 			continue
 		}
 		hostPort := parts[0]
 		containerPort := parts[1]
 		port, err := nat.NewPort("tcp", containerPort)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port %q: %v\n", p, err)
 			continue
 		}
 		portMap[port] = []nat.PortBinding{
@@ -234,9 +242,4 @@ func ValidateConfigVolumes(volumes []string) []error {
 		}
 	}
 	return errs
-}
-
-// boolPtr is a helper for tests.
-func boolPtr(b bool) *bool {
-	return &b
 }

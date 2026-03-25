@@ -29,13 +29,13 @@ func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
 
 	for name, tool := range tools {
 		b.WriteString(fmt.Sprintf("\n# Install: %s\n", name))
-		b.WriteString(generateToolInstall(tool, targetDir))
+		b.WriteString(generateToolInstall(name, tool, targetDir))
 	}
 
 	return b.String()
 }
 
-func generateToolInstall(tool ToolDef, targetDir string) string {
+func generateToolInstall(name string, tool ToolDef, targetDir string) string {
 	var b strings.Builder
 
 	switch tool.Type {
@@ -80,13 +80,16 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 
 	case "custom":
 		b.WriteString(tool.Install + "\n")
+
+	default:
+		b.WriteString(fmt.Sprintf("echo \"ERROR: unknown tool type: %s for tool %s\"\n", tool.Type, name))
 	}
 
 	return b.String()
 }
 
-// VerifyChecksum verifies a file's SHA256 checksum.
-func VerifyChecksum(expected string, data []byte) bool {
+// verifyChecksum verifies a file's SHA256 checksum.
+func verifyChecksum(expected string, data []byte) bool {
 	actual := fmt.Sprintf("%x", sha256.Sum256(data))
 	return actual == expected
 }

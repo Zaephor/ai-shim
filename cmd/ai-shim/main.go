@@ -113,7 +113,10 @@ func runManageSubcommand(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("usage: ai-shim manage symlinks <list|create|remove> [args...]")
 		}
-		exe, _ := os.Executable()
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("cannot determine executable path: %w", err)
+		}
 		switch args[1] {
 		case "list":
 			dir := "."
@@ -234,7 +237,10 @@ func runAgent(name string, args []string) (int, error) {
 
 	// 5.6 Validate config volumes
 	if errs := container.ValidateConfigVolumes(cfg.Volumes); len(errs) > 0 {
-		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "ai-shim: %v\n", e)
+		}
+		return 1, fmt.Errorf("invalid volume configuration (%d error(s))", len(errs))
 	}
 
 	// 6. Create Docker runner

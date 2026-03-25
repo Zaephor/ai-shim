@@ -68,6 +68,16 @@ func TestGenerateEntrypoint_ShellQuoting(t *testing.T) {
 	assert.Contains(t, script, "'hello world'")
 }
 
+func TestGenerateEntrypoint_UnknownInstallType(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "unknown-type",
+		Package:     "test",
+		Binary:      "test",
+	})
+	assert.Contains(t, script, "ERROR: unknown install type: unknown-type")
+	assert.Contains(t, script, "exit 1")
+}
+
 func TestGenerateEntrypoint_StartsWithShebang(t *testing.T) {
 	script := GenerateEntrypoint(EntrypointParams{
 		InstallType: "npm",

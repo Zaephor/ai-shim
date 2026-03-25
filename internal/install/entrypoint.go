@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// EntrypointParams holds the parameters for generating a container entrypoint script.
 type EntrypointParams struct {
 	InstallType string
 	Package     string
@@ -13,6 +14,7 @@ type EntrypointParams struct {
 	AgentArgs   []string
 }
 
+// GenerateEntrypoint produces a shell script that installs and execs the agent binary.
 func GenerateEntrypoint(p EntrypointParams) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -e\n\n")
@@ -24,6 +26,8 @@ func GenerateEntrypoint(p EntrypointParams) string {
 		b.WriteString(generateUVInstall(p))
 	case "custom":
 		b.WriteString(generateCustomInstall(p))
+	default:
+		b.WriteString(fmt.Sprintf("echo \"ERROR: unknown install type: %s\"\nexit 1\n", p.InstallType))
 	}
 
 	b.WriteString(fmt.Sprintf("\nexec %s", p.Binary))

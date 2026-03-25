@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 func defaultBuildParams() BuildParams {
 	return BuildParams{
 		Config:  config.Config{},
@@ -278,4 +280,44 @@ func TestBuildSpec_ConfigArgsAndPassthroughMerged(t *testing.T) {
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, "--no-telemetry", "config args should be in entrypoint")
 	assert.Contains(t, entrypoint, "--verbose", "passthrough args should be in entrypoint")
+}
+
+func TestBuildSpec_VolumeValidationSkipsTraversal(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Volumes = []string{
+		"/host/safe:/container/safe",
+		"/host/../etc/shadow:/container/etc",
+		"/etc/passwd:/container/passwd",
+		"/host/ok:/container/ok",
+	}
+	spec := BuildSpec(p)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	assert.True(t, targets["/container/safe"], "safe volume should be mounted")
+	assert.True(t, targets["/container/ok"], "safe volume should be mounted")
+	assert.False(t, targets["/container/etc"], "traversal volume should be skipped")
+	assert.False(t, targets["/container/passwd"], "sensitive path volume should be skipped")
+}
+
+func TestBuildSpec_VolumeValidationSkipsMalformed(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Volumes = []string{"no-colon-here"}
+	spec := BuildSpec(p)
+
+	// Should only have the base mounts, no custom ones
+	for _, m := range spec.Mounts {
+		assert.NotEqual(t, "no-colon-here", m.Source, "malformed volume should be skipped")
+	}
+}
+
+func TestParsePorts_InvalidFormat(t *testing.T) {
+	portMap, portSet := parsePorts([]string{"invalid-port", "8080:80"})
+	// Valid port should still be parsed
+	require.NotNil(t, portMap)
+	_, ok := portMap["80/tcp"]
+	assert.True(t, ok, "valid port should still be parsed")
+	assert.Len(t, portSet, 1, "only valid port should be in set")
 }
