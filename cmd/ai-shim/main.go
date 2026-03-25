@@ -12,18 +12,21 @@ import (
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/invocation"
+	"github.com/ai-shim/ai-shim/internal/logging"
 	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/platform"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/selfupdate"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/workspace"
+	"github.com/docker/docker/api/types/mount"
 )
 
 const version = "dev"
 
 func main() {
+	logging.Init()
+
 	// Use os.Args[0] instead of os.Executable() because the latter resolves
 	// symlinks, which would defeat symlink-based invocation detection.
 	name := filepath.Base(os.Args[0])
@@ -46,18 +49,76 @@ func main() {
 	os.Exit(exitCode)
 }
 
+func printHelp() {
+	fmt.Print(`ai-shim - AI coding agent container launcher
+
+Usage:
+  <agent>_<profile> [args...]    Launch agent via symlink
+  ai-shim <command> [args...]    Management commands
+
+Commands:
+  version                        Print version
+  update                         Check for and install updates
+  init                           Initialize ai-shim configuration
+  manage agents                  List available agents
+  manage profiles                List profiles
+  manage config <agent> <profile> Show resolved config
+  manage doctor                  Run diagnostics
+  manage symlinks <sub> [args]   Manage symlinks (create/list/remove)
+  manage dry-run <agent> <profile> Preview container config
+  manage cleanup                 Remove orphaned containers
+  manage status                  Show running containers
+  help                           Show this help
+
+Environment Variables:
+  AI_SHIM_IMAGE         Override container image
+  AI_SHIM_VERSION       Pin agent version
+  AI_SHIM_DIND          Enable/disable DIND (0/1)
+  AI_SHIM_GPU           Enable/disable GPU (0/1)
+  AI_SHIM_NETWORK_SCOPE Network isolation scope
+  AI_SHIM_DIND_HOSTNAME DIND container hostname
+  AI_SHIM_DIND_CACHE    Enable registry cache (0/1)
+  AI_SHIM_VERBOSE       Enable debug output (0/1)
+`)
+}
+
+func formatAgentList() string {
+	var s string
+	for _, name := range agent.Names() {
+		s += "  " + name + "\n"
+	}
+	return s
+}
+
 func runManage(args []string) error {
 	if len(args) == 0 {
-		fmt.Printf("ai-shim %s\n", version)
+		printHelp()
 		return nil
 	}
 
 	switch args[0] {
+	case "help", "--help", "-h":
+		printHelp()
+		return nil
+
+	case "init":
+		layout := storage.NewLayout(storage.DefaultRoot())
+		if err := cli.Init(layout); err != nil {
+			return err
+		}
+		fmt.Printf("Initialized ai-shim at %s\n", layout.Root)
+		fmt.Println("Next: ai-shim manage symlinks create <agent> <profile>")
+		return nil
+
 	case "version":
 		fmt.Printf("ai-shim %s\n", version)
 		return nil
 
 	case "update":
+		if version == "dev" {
+			fmt.Printf("ai-shim %s is a development build, skipping update check\n", version)
+			return nil
+		}
 		latest, err := selfupdate.CheckLatest()
 		if err != nil {
 			return fmt.Errorf("checking for updates: %w", err)
@@ -67,7 +128,35 @@ func runManage(args []string) error {
 			return nil
 		}
 		fmt.Printf("Update available: %s -> %s\n", version, latest)
-		fmt.Println("Download from: https://github.com/ai-shim/ai-shim/releases/latest")
+
+		// Fetch full release to find download URL
+		release, err := selfupdate.FetchRelease()
+		if err != nil {
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", selfupdate.GitHubRepo)
+			return fmt.Errorf("fetching release info: %w", err)
+		}
+
+		downloadURL, err := selfupdate.FindAssetURL(release)
+		if err != nil {
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", selfupdate.GitHubRepo)
+			return fmt.Errorf("finding download for your platform: %w", err)
+		}
+
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("cannot determine binary path: %w", err)
+		}
+		// Resolve symlinks to get the actual binary
+		exe, err = filepath.EvalSymlinks(exe)
+		if err != nil {
+			return fmt.Errorf("resolving binary path: %w", err)
+		}
+
+		fmt.Printf("Downloading %s...\n", downloadURL)
+		if err := selfupdate.DownloadAndReplace(downloadURL, exe); err != nil {
+			return fmt.Errorf("updating binary: %w", err)
+		}
+		fmt.Printf("Updated to %s successfully. Backup at %s\n", latest, selfupdate.BackupPath(exe))
 		return nil
 
 	case "manage":
@@ -77,7 +166,7 @@ func runManage(args []string) error {
 		return runManageSubcommand(args[1:])
 
 	default:
-		return fmt.Errorf("unknown command: %s\nAvailable: version, update, manage", args[0])
+		return fmt.Errorf("unknown command: %s\nRun 'ai-shim help' for usage", args[0])
 	}
 }
 
@@ -178,6 +267,14 @@ func runManageSubcommand(args []string) error {
 		fmt.Print(output)
 		return nil
 
+	case "status":
+		output, err := cli.Status()
+		if err != nil {
+			return err
+		}
+		fmt.Print(output)
+		return nil
+
 	case "cleanup":
 		result, err := cli.Cleanup()
 		if err != nil {
@@ -202,7 +299,7 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, cleanup", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, cleanup", args[0])
 	}
 }
 
@@ -216,7 +313,7 @@ func runAgent(name string, args []string) (int, error) {
 	// 2. Lookup agent definition
 	agentDef, ok := agent.Lookup(agentName)
 	if !ok {
-		return 1, fmt.Errorf("unknown agent: %s", agentName)
+		return 1, fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s\nUse 'ai-shim manage agents' for details", agentName, formatAgentList())
 	}
 
 	// 3. Detect platform
@@ -224,6 +321,12 @@ func runAgent(name string, args []string) (int, error) {
 
 	// 4. Setup storage layout, ensure directories
 	layout := storage.NewLayout(storage.DefaultRoot())
+
+	// Check for first run
+	if cli.IsFirstRun(layout) {
+		cli.PrintFirstRunHelp(layout)
+		return 1, fmt.Errorf("run 'ai-shim init' to set up")
+	}
 	if err := layout.EnsureDirectories(agentName, profileName); err != nil {
 		return 1, fmt.Errorf("setting up directories: %w", err)
 	}
@@ -232,6 +335,13 @@ func runAgent(name string, args []string) (int, error) {
 	cfg, err := config.Resolve(layout.ConfigDir, agentName, profileName)
 	if err != nil {
 		return 1, fmt.Errorf("resolving config: %w", err)
+	}
+
+	// 5.1 Validate config
+	if warnings := cfg.Validate(); len(warnings) > 0 {
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "ai-shim: config warning: %s\n", w)
+		}
 	}
 
 	// 5.5 Validate working directory
@@ -273,6 +383,12 @@ func runAgent(name string, args []string) (int, error) {
 	}
 
 	// 7. Build container spec
+	logDir := filepath.Join(layout.Root, "logs")
+
+	logging.Debug("agent=%s profile=%s", agentName, profileName)
+	logging.Debug("platform: uid=%d gid=%d hostname=%s", platInfo.UID, platInfo.GID, platInfo.Hostname)
+	logging.Debug("image=%s hostname=%s", image, cfg.Hostname)
+
 	spec := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
@@ -281,7 +397,15 @@ func runAgent(name string, args []string) (int, error) {
 		Platform: platInfo,
 		Args:     args,
 		HomeDir:  imageUser.HomeDir,
+		LogDir:   logDir,
 	})
+
+	logging.Debug("workdir=%s", spec.WorkingDir)
+	if logging.IsVerbose() {
+		logging.Debug("environment:")
+		logging.DebugEnv(cfg.Env)
+	}
+	logging.Debug("container name=%s", spec.Name)
 
 	// 7.5 Create shared network and start DIND sidecar if enabled
 	dindEnabled := false
@@ -345,6 +469,13 @@ func runAgent(name string, args []string) (int, error) {
 
 		// Start DIND sidecar on same network
 		dindName := spec.Name + "-dind"
+		var dindResources *dind.ResourceLimits
+		if cfg.DINDResources != nil {
+			dindResources = &dind.ResourceLimits{
+				Memory: cfg.DINDResources.Memory,
+				CPUs:   cfg.DINDResources.CPUs,
+			}
+		}
 		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
 			GPU:           dindGPU,
 			UseSysbox:     useSysbox,
@@ -354,6 +485,7 @@ func runAgent(name string, args []string) (int, error) {
 			NetworkID:     netHandle.ID,
 			Mirrors:       mirrors,
 			CacheAddr:     cacheAddr,
+			Resources:     dindResources,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)

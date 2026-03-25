@@ -6,8 +6,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"
@@ -17,6 +20,12 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 )
+
+// ResourceLimits defines container resource constraints.
+type ResourceLimits struct {
+	Memory string
+	CPUs   string
+}
 
 // ContainerSpec describes a container to create and run.
 type ContainerSpec struct {
@@ -35,7 +44,9 @@ type ContainerSpec struct {
 	TTY          bool
 	Stdin        bool
 	GPU          bool
-	NetworkID    string // Docker network ID to attach container to
+	NetworkID    string           // Docker network ID to attach container to
+	Resources    *ResourceLimits  // optional resource constraints
+	LogDir       string           // directory for exit logs (empty = no logging)
 }
 
 // Runner manages container lifecycle via the Docker API.
@@ -108,6 +119,21 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		}
 	}
 
+	if spec.Resources != nil {
+		if spec.Resources.Memory != "" {
+			memBytes, err := parseMemory(spec.Resources.Memory)
+			if err == nil {
+				hostCfg.Resources.Memory = memBytes
+			}
+		}
+		if spec.Resources.CPUs != "" {
+			cpus, err := strconv.ParseFloat(spec.Resources.CPUs, 64)
+			if err == nil {
+				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
+			}
+		}
+	}
+
 	networkCfg := &network.NetworkingConfig{}
 	if spec.NetworkID != "" {
 		networkCfg.EndpointsConfig = map[string]*network.EndpointSettings{
@@ -171,7 +197,12 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		}
 		return 0, nil
 	case status := <-statusCh:
-		return int(status.StatusCode), nil
+		exitCode := int(status.StatusCode)
+		if exitCode != 0 {
+			r.saveExitLog(spec.LogDir, spec.Name, exitCode)
+			fmt.Fprintf(os.Stderr, "ai-shim: container exited with code %d\n", exitCode)
+		}
+		return exitCode, nil
 	}
 }
 
@@ -215,6 +246,24 @@ func (r *Runner) InspectImageUser(ctx context.Context, image string) (ImageUser,
 	return result, nil
 }
 
+// saveExitLog appends an exit log entry to a log file for the container.
+func (r *Runner) saveExitLog(logDir, name string, exitCode int) {
+	if logDir == "" {
+		return
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return
+	}
+	logFile := filepath.Join(logDir, name+".log")
+	entry := fmt.Sprintf("%s container=%s exit_code=%d\n", time.Now().Format(time.RFC3339), name, exitCode)
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(entry)
+}
+
 // Client returns the underlying Docker client for DIND integration.
 func (r *Runner) Client() *client.Client {
 	return r.client
@@ -223,4 +272,24 @@ func (r *Runner) Client() *client.Client {
 // Close closes the Docker client connection.
 func (r *Runner) Close() error {
 	return r.client.Close()
+}
+
+func parseMemory(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	var multiplier int64 = 1
+	if strings.HasSuffix(s, "g") {
+		multiplier = 1024 * 1024 * 1024
+		s = s[:len(s)-1]
+	} else if strings.HasSuffix(s, "m") {
+		multiplier = 1024 * 1024
+		s = s[:len(s)-1]
+	} else if strings.HasSuffix(s, "k") {
+		multiplier = 1024
+		s = s[:len(s)-1]
+	}
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(val * float64(multiplier)), nil
 }

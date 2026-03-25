@@ -404,3 +404,35 @@ func TestParsePorts_InvalidFormat(t *testing.T) {
 	assert.True(t, ok, "valid port should still be parsed")
 	assert.Len(t, portSet, 1, "only valid port should be in set")
 }
+
+func TestBuildSpec_NoResourceLimits(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+	assert.Nil(t, spec.Resources, "resources should be nil when not configured")
+}
+
+func TestBuildSpec_WithResourceLimits(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Resources = &config.ResourceLimits{Memory: "4g", CPUs: "2.0"}
+	spec := BuildSpec(p)
+	require.NotNil(t, spec.Resources)
+	assert.Equal(t, "4g", spec.Resources.Memory)
+	assert.Equal(t, "2.0", spec.Resources.CPUs)
+}
+
+func TestParseMemory(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"1g", 1073741824},
+		{"512m", 536870912},
+		{"1024k", 1048576},
+		{"2.5g", 2684354560},
+	}
+	for _, tt := range tests {
+		result, err := parseMemory(tt.input)
+		require.NoError(t, err)
+		assert.Equal(t, tt.expected, result, "input: %s", tt.input)
+	}
+}

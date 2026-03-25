@@ -3,7 +3,10 @@ package selfupdate
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -72,4 +75,77 @@ func FindAssetURL(release Release) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no release asset found for %s", name)
+}
+
+// BackupPath returns the backup file path for the current binary.
+func BackupPath(currentPath string) string {
+	return currentPath + ".bak"
+}
+
+// DownloadAndReplace downloads a binary from url and replaces the file at currentPath.
+// Creates a backup at currentPath.bak before replacing.
+func DownloadAndReplace(url, currentPath string) error {
+	// Download to temp file
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("downloading update: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(currentPath), "ai-shim-update-*")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // cleanup on error
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("writing update: %w", err)
+	}
+	tmpFile.Close()
+
+	// Make executable
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		return fmt.Errorf("setting permissions: %w", err)
+	}
+
+	// Backup current binary
+	backupPath := BackupPath(currentPath)
+	if err := os.Rename(currentPath, backupPath); err != nil {
+		return fmt.Errorf("backing up current binary: %w", err)
+	}
+
+	// Replace with new binary
+	if err := os.Rename(tmpPath, currentPath); err != nil {
+		// Restore backup on failure
+		os.Rename(backupPath, currentPath)
+		return fmt.Errorf("replacing binary: %w", err)
+	}
+
+	return nil
+}
+
+// FetchRelease fetches the full release info for the latest version.
+func FetchRelease() (Release, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases/latest", GitHubAPI, GitHubRepo)
+	resp, err := http.Get(url)
+	if err != nil {
+		return Release{}, fmt.Errorf("fetching release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return Release{}, fmt.Errorf("github API returned status %d", resp.StatusCode)
+	}
+
+	var release Release
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return Release{}, fmt.Errorf("parsing release info: %w", err)
+	}
+	return release, nil
 }

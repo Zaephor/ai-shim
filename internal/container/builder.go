@@ -34,6 +34,7 @@ type BuildParams struct {
 	Args     []string
 	HomeDir          string // container-side home directory (from image inspect)
 	DINDSocketVolume string // Docker volume name for DIND socket (empty = no DIND)
+	LogDir           string // directory for exit logs (empty = no logging)
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
@@ -134,6 +135,15 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		gpu = *p.Config.GPU
 	}
 
+	// Resource limits (optional)
+	var resources *ResourceLimits
+	if p.Config.Resources != nil {
+		resources = &ResourceLimits{
+			Memory: p.Config.Resources.Memory,
+			CPUs:   p.Config.Resources.CPUs,
+		}
+	}
+
 	tty := isTTY()
 
 	return ContainerSpec{
@@ -151,6 +161,8 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		TTY:          tty,
 		Stdin:        tty,
 		GPU:          gpu,
+		Resources:    resources,
+		LogDir:       p.LogDir,
 	}
 }
 

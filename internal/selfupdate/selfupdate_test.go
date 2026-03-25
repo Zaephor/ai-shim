@@ -44,6 +44,16 @@ func TestFindAssetURL_Found(t *testing.T) {
 	assert.NotEmpty(t, url)
 }
 
+func TestDownloadAndReplace_InvalidURL(t *testing.T) {
+	err := DownloadAndReplace("http://invalid.example.com/nonexistent", "/tmp/fake-binary")
+	assert.Error(t, err, "should error on invalid download URL")
+}
+
+func TestBackupPath(t *testing.T) {
+	path := BackupPath("/usr/local/bin/ai-shim")
+	assert.Equal(t, "/usr/local/bin/ai-shim.bak", path)
+}
+
 func TestFindAssetURL_NotFound(t *testing.T) {
 	release := Release{
 		Assets: []Asset{

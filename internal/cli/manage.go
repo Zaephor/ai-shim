@@ -286,6 +286,45 @@ func Cleanup() (CleanupResult, error) {
 	return CleanupResult{Removed: removed, Failed: failed}, nil
 }
 
+// Status returns a formatted list of running ai-shim containers.
+func Status() (string, error) {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return "", fmt.Errorf("connecting to docker: %w", err)
+	}
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+	})
+	if err != nil {
+		return "", fmt.Errorf("listing containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return "No running ai-shim containers.\n", nil
+	}
+
+	var b strings.Builder
+	b.WriteString("Running ai-shim containers:\n\n")
+	b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", "NAME", "AGENT", "PROFILE", "STATUS"))
+	b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", "----", "-----", "-------", "------"))
+
+	for _, c := range containers {
+		name := c.ID[:12]
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		agent := c.Labels["ai-shim.agent"]
+		profile := c.Labels["ai-shim.profile"]
+		status := c.Status
+
+		b.WriteString(fmt.Sprintf("  %-40s %-15s %-10s %s\n", name, agent, profile, status))
+	}
+	return b.String(), nil
+}
+
 func readDirNames(root, subdir string) ([]string, error) {
 	dirPath := filepath.Join(root, subdir)
 	entries, err := os.ReadDir(dirPath)

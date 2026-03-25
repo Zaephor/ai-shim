@@ -145,6 +145,13 @@ func TestDryRun_UsesDefaultImage(t *testing.T) {
 	assert.Contains(t, output, container.DefaultHostname, "should use container.DefaultHostname when no hostname configured")
 }
 
+func TestStatus(t *testing.T) {
+	output, err := Status()
+	require.NoError(t, err)
+	// May have 0 containers or some - just verify it doesn't error
+	assert.NotEmpty(t, output)
+}
+
 func TestDryRun(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")

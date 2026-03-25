@@ -36,6 +36,12 @@ func Merge(base, over Config) Config {
 	if over.DINDCache != nil {
 		result.DINDCache = over.DINDCache
 	}
+	if over.Resources != nil {
+		result.Resources = over.Resources
+	}
+	if over.DINDResources != nil {
+		result.DINDResources = over.DINDResources
+	}
 
 	result.Env = mergeMaps(result.Env, over.Env)
 	result.Variables = mergeMaps(result.Variables, over.Variables)

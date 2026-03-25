@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -26,6 +28,12 @@ type Sidecar struct {
 	socketVolume  string // Docker volume name for the DIND socket
 }
 
+// ResourceLimits defines container resource constraints for DIND.
+type ResourceLimits struct {
+	Memory string
+	CPUs   string
+}
+
 // Config holds DIND sidecar configuration.
 type Config struct {
 	Image         string // defaults to docker:dind
@@ -35,8 +43,9 @@ type Config struct {
 	ContainerName string // display name for the DIND container
 	Hostname      string // hostname inside the DIND container
 	NetworkID     string   // pre-created network ID to join
-	Mirrors       []string // registry mirror URLs
-	CacheAddr     string   // pull-through cache address (added as mirror)
+	Mirrors       []string         // registry mirror URLs
+	CacheAddr     string           // pull-through cache address (added as mirror)
+	Resources     *ResourceLimits  // optional resource constraints
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -115,6 +124,22 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		}
 	}
 
+	// Resource limits for DIND
+	if cfg.Resources != nil {
+		if cfg.Resources.Memory != "" {
+			memBytes, err := parseMemoryDIND(cfg.Resources.Memory)
+			if err == nil {
+				hostCfg.Resources.Memory = memBytes
+			}
+		}
+		if cfg.Resources.CPUs != "" {
+			cpus, err := strconv.ParseFloat(cfg.Resources.CPUs, 64)
+			if err == nil {
+				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
+			}
+		}
+	}
+
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
 		// Clean up the volume on failure
@@ -173,6 +198,26 @@ func (s *Sidecar) Stop(ctx context.Context) error {
 		}
 	}
 	return firstErr
+}
+
+func parseMemoryDIND(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	var multiplier int64 = 1
+	if strings.HasSuffix(s, "g") {
+		multiplier = 1024 * 1024 * 1024
+		s = s[:len(s)-1]
+	} else if strings.HasSuffix(s, "m") {
+		multiplier = 1024 * 1024
+		s = s[:len(s)-1]
+	} else if strings.HasSuffix(s, "k") {
+		multiplier = 1024
+		s = s[:len(s)-1]
+	}
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(val * float64(multiplier)), nil
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

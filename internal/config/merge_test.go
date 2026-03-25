@@ -5,6 +5,7 @@ import (
 
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMerge_ScalarsLastWins(t *testing.T) {
@@ -130,4 +131,27 @@ func TestMerge_DINDCache(t *testing.T) {
 	over := Config{DINDCache: testutil.BoolPtr(true)}
 	result := Merge(base, over)
 	assert.True(t, *result.DINDCache)
+}
+
+func TestMerge_Resources(t *testing.T) {
+	base := Config{Resources: &ResourceLimits{Memory: "2g", CPUs: "1.0"}}
+	over := Config{Resources: &ResourceLimits{Memory: "4g", CPUs: "2.0"}}
+	result := Merge(base, over)
+	assert.Equal(t, "4g", result.Resources.Memory)
+	assert.Equal(t, "2.0", result.Resources.CPUs)
+}
+
+func TestMerge_ResourcesNilPreserved(t *testing.T) {
+	base := Config{Resources: &ResourceLimits{Memory: "2g"}}
+	over := Config{} // nil Resources
+	result := Merge(base, over)
+	assert.Equal(t, "2g", result.Resources.Memory, "nil override should not clear resources")
+}
+
+func TestMerge_DINDResources(t *testing.T) {
+	base := Config{}
+	over := Config{DINDResources: &ResourceLimits{Memory: "1g"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.DINDResources)
+	assert.Equal(t, "1g", result.DINDResources.Memory)
 }

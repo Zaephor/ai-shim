@@ -1,5 +1,11 @@
 package config
 
+// ResourceLimits defines optional container resource constraints.
+type ResourceLimits struct {
+	Memory string `yaml:"memory,omitempty"` // e.g. "512m", "2g", "4g"
+	CPUs   string `yaml:"cpus,omitempty"`   // decimal CPU count, e.g. "1.0", "2.5"
+}
+
 // Config represents the fully resolved configuration for an agent+profile invocation.
 type Config struct {
 	Variables   map[string]string  `yaml:"variables,omitempty"`
@@ -20,7 +26,9 @@ type Config struct {
 	DINDCache   *bool              `yaml:"dind_cache,omitempty"`   // enable pull-through cache
 	AllowAgents []string           `yaml:"allow_agents,omitempty"`
 	Isolated    *bool              `yaml:"isolated,omitempty"`
-	Tools       map[string]ToolDef `yaml:"tools,omitempty"`
+	Tools         map[string]ToolDef `yaml:"tools,omitempty"`
+	Resources     *ResourceLimits    `yaml:"resources,omitempty"`      // agent container limits
+	DINDResources *ResourceLimits    `yaml:"dind_resources,omitempty"` // DIND container limits
 }
 
 // ToolDef defines a tool to provision in the container.
