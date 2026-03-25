@@ -31,7 +31,8 @@ type BuildParams struct {
 	Layout   storage.Layout
 	Platform platform.Info
 	Args     []string
-	HomeDir  string // container-side home directory (from image inspect)
+	HomeDir          string // container-side home directory (from image inspect)
+	DINDSocketVolume string // Docker volume name for DIND socket (empty = no DIND)
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
@@ -110,6 +111,16 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	fullScript := toolScript + packageScript + entrypoint
 
 	env := buildEnv(p.Config.Env)
+
+	// DIND socket mount
+	if p.DINDSocketVolume != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: p.DINDSocketVolume,
+			Target: "/var/run/dind",
+		})
+		env = append(env, "DOCKER_HOST=unix:///var/run/dind/docker.sock")
+	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
 

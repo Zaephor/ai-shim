@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 )
 
@@ -21,6 +23,7 @@ type Sidecar struct {
 	containerID   string
 	containerName string
 	hostname      string
+	socketVolume  string // Docker volume name for the DIND socket
 }
 
 // Config holds DIND sidecar configuration.
@@ -42,6 +45,20 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		image = DefaultImage
 	}
 
+	// Create a volume for the DIND docker socket
+	baseName := cfg.ContainerName
+	if baseName == "" {
+		baseName = "ai-shim-dind"
+	}
+	socketVolName := baseName + "-socket"
+	_, err := cli.VolumeCreate(ctx, volume.CreateOptions{
+		Name:   socketVolName,
+		Labels: cfg.Labels,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating DIND socket volume: %w", err)
+	}
+
 	containerCfg := &container.Config{
 		Image:    image,
 		Hostname: cfg.Hostname,
@@ -52,6 +69,13 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 	hostCfg := &container.HostConfig{
 		Privileged:  true,
 		NetworkMode: container.NetworkMode(cfg.NetworkID),
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeVolume,
+				Source: socketVolName,
+				Target: "/var/run",
+			},
+		},
 	}
 
 	// Use Sysbox if requested
@@ -69,6 +93,8 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
+		// Clean up the volume on failure
+		_ = cli.VolumeRemove(ctx, socketVolName, true)
 		return nil, fmt.Errorf("creating DIND container: %w", err)
 	}
 
@@ -84,6 +110,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		containerID:   resp.ID,
 		containerName: cfg.ContainerName,
 		hostname:      cfg.Hostname,
+		socketVolume:  socketVolName,
 	}
 
 	return sidecar, nil
@@ -104,12 +131,24 @@ func (s *Sidecar) Hostname() string {
 	return s.hostname
 }
 
-// Stop removes the DIND sidecar container.
+// SocketVolume returns the Docker volume name containing the DIND socket.
+func (s *Sidecar) SocketVolume() string {
+	return s.socketVolume
+}
+
+// Stop removes the DIND sidecar container and its socket volume.
 func (s *Sidecar) Stop(ctx context.Context) error {
+	var firstErr error
 	if err := s.client.ContainerRemove(ctx, s.containerID, container.RemoveOptions{Force: true}); err != nil {
-		return fmt.Errorf("removing DIND container: %w", err)
+		firstErr = fmt.Errorf("removing DIND container: %w", err)
 	}
-	return nil
+	// Remove the socket volume
+	if s.socketVolume != "" {
+		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("removing DIND socket volume: %w", err)
+		}
+	}
+	return firstErr
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

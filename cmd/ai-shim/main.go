@@ -14,6 +14,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/invocation"
 	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/platform"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/selfupdate"
 	"github.com/ai-shim/ai-shim/internal/storage"
@@ -323,8 +324,13 @@ func runAgent(name string, args []string) (int, error) {
 		}
 		defer sidecar.Stop(ctx)
 
-		// DOCKER_HOST uses container name for DNS (not hostname -- names are unique)
-		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+dindName+":2375")
+		// Mount DIND socket into agent container
+		spec.Mounts = append(spec.Mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: sidecar.SocketVolume(),
+			Target: "/var/run/dind",
+		})
+		spec.Env = append(spec.Env, "DOCKER_HOST=unix:///var/run/dind/docker.sock")
 	}
 
 	// 8. Run container, return its exit code

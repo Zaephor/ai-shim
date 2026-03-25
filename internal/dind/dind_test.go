@@ -85,6 +85,27 @@ func TestStart_ContainerName(t *testing.T) {
 	assert.Equal(t, "test-dind-container", sidecar.ContainerName())
 }
 
+func TestStart_ReturnsSocketVolume(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-socket", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind",
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	assert.NotEmpty(t, sidecar.SocketVolume(), "should return the Docker socket volume name")
+}
+
 func TestDetectSysbox(t *testing.T) {
 	cli := getClient(t)
 	defer cli.Close()
