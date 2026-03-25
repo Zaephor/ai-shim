@@ -324,7 +324,7 @@ func runAgent(name string, args []string) (int, error) {
 
 		if cacheEnabled {
 			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
-			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir, netHandle.ID)
+			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to start registry cache: %v\n", err)
 			} else {

@@ -152,9 +152,9 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache")
 	os.MkdirAll(cacheDir, 0755)
 	t.Cleanup(func() { os.RemoveAll(cacheDir) })
-	addr, err := EnsureCache(ctx, cli, cacheDir, "")
+	addr, err := EnsureCache(ctx, cli, cacheDir)
 	require.NoError(t, err)
-	assert.Contains(t, addr, CacheContainerName)
+	assert.Contains(t, addr, "host.docker.internal")
 	assert.Contains(t, addr, CachePort)
 
 	// Cleanup

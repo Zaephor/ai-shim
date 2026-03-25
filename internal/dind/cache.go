@@ -8,7 +8,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )
 
@@ -20,7 +19,7 @@ const (
 
 // EnsureCache starts the pull-through registry cache if it's not already running.
 // Returns the cache container's address (for use as a registry mirror).
-func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string, networkID string) (string, error) {
+func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (string, error) {
 	// Check if cache is already running
 	containers, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
@@ -30,11 +29,8 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string, netwo
 	}
 
 	if len(containers) > 0 {
-		// Already running — ensure it's on our network
-		if networkID != "" {
-			_ = cli.NetworkConnect(ctx, networkID, containers[0].ID, nil)
-		}
-		return fmt.Sprintf("http://%s:%s", CacheContainerName, CachePort), nil
+		// Already running on host network
+		return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
 	}
 
 	// Create cache directory if needed
@@ -63,20 +59,13 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string, netwo
 				Target: "/var/lib/registry",
 			},
 		},
+		// Bind to host so it's reachable via host.docker.internal from any container
+		NetworkMode:   "host",
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 	}
 
-	// Join network if provided
-	var networkCfg *network.NetworkingConfig
-	if networkID != "" {
-		networkCfg = &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				networkID: {},
-			},
-		}
-	}
 
-	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, networkCfg, nil, CacheContainerName)
+	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, CacheContainerName)
 	if err != nil {
 		return "", fmt.Errorf("creating cache container: %w", err)
 	}
@@ -86,7 +75,7 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string, netwo
 		return "", fmt.Errorf("starting cache container: %w", err)
 	}
 
-	return fmt.Sprintf("http://%s:%s", CacheContainerName, CachePort), nil
+	return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
 }
 
 // MaybeStopCache stops the cache container if no other ai-shim containers with

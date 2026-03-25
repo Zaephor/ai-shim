@@ -61,14 +61,14 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		return nil, fmt.Errorf("creating DIND socket volume: %w", err)
 	}
 
-	// Build dockerd command with mirrors
+	// Build dockerd command with mirrors (cache first = highest priority)
 	var entrypoint []string
 	dockerdArgs := []string{"dockerd"}
-	for _, mirror := range cfg.Mirrors {
-		dockerdArgs = append(dockerdArgs, "--registry-mirror="+mirror)
-	}
 	if cfg.CacheAddr != "" {
 		dockerdArgs = append(dockerdArgs, "--registry-mirror="+cfg.CacheAddr)
+	}
+	for _, mirror := range cfg.Mirrors {
+		dockerdArgs = append(dockerdArgs, "--registry-mirror="+mirror)
 	}
 	if len(dockerdArgs) > 1 {
 		entrypoint = dockerdArgs
