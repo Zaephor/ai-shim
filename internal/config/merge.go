@@ -14,6 +14,9 @@ func Merge(base, over Config) Config {
 	if over.Version != "" {
 		result.Version = over.Version
 	}
+	if over.NetworkScope != "" {
+		result.NetworkScope = over.NetworkScope
+	}
 	if over.DINDHostname != "" {
 		result.DINDHostname = over.DINDHostname
 	}

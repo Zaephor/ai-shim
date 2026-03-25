@@ -7,22 +7,20 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )
 
 const (
 	DefaultImage  = "docker:dind"
-	NetworkName   = "ai-shim-dind"
 	HealthTimeout = 30 * time.Second
 )
 
 // Sidecar manages the DIND sidecar container lifecycle.
 type Sidecar struct {
-	client      *client.Client
-	containerID string
-	networkID   string
-	hostname    string
+	client        *client.Client
+	containerID   string
+	containerName string
+	hostname      string
 }
 
 // Config holds DIND sidecar configuration.
@@ -33,21 +31,15 @@ type Config struct {
 	Labels        map[string]string
 	ContainerName string // display name for the DIND container
 	Hostname      string // hostname inside the DIND container
+	NetworkID     string // pre-created network ID to join
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
+// The caller must provide a pre-created network via cfg.NetworkID.
 func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error) {
 	image := cfg.Image
 	if image == "" {
 		image = DefaultImage
-	}
-
-	// Create a dedicated network
-	networkResp, err := cli.NetworkCreate(ctx, NetworkName+"-"+fmt.Sprintf("%d", time.Now().UnixNano()), network.CreateOptions{
-		Labels: cfg.Labels,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating DIND network: %w", err)
 	}
 
 	containerCfg := &container.Config{
@@ -59,7 +51,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 
 	hostCfg := &container.HostConfig{
 		Privileged:  true,
-		NetworkMode: container.NetworkMode(networkResp.ID),
+		NetworkMode: container.NetworkMode(cfg.NetworkID),
 	}
 
 	// Use Sysbox if requested
@@ -77,10 +69,6 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
-		// Clean up network on failure
-		if cleanupErr := cli.NetworkRemove(ctx, networkResp.ID); cleanupErr != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up network: %v\n", cleanupErr)
-		}
 		return nil, fmt.Errorf("creating DIND container: %w", err)
 	}
 
@@ -88,25 +76,27 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		if cleanupErr := cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); cleanupErr != nil {
 			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up container: %v\n", cleanupErr)
 		}
-		if cleanupErr := cli.NetworkRemove(ctx, networkResp.ID); cleanupErr != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up network: %v\n", cleanupErr)
-		}
 		return nil, fmt.Errorf("starting DIND container: %w", err)
 	}
 
 	sidecar := &Sidecar{
-		client:      cli,
-		containerID: resp.ID,
-		networkID:   networkResp.ID,
-		hostname:    cfg.Hostname,
+		client:        cli,
+		containerID:   resp.ID,
+		containerName: cfg.ContainerName,
+		hostname:      cfg.Hostname,
 	}
 
 	return sidecar, nil
 }
 
-// ContainerID returns the DIND container ID for network attachment.
+// ContainerID returns the DIND container ID.
 func (s *Sidecar) ContainerID() string {
 	return s.containerID
+}
+
+// ContainerName returns the DIND container name for DNS resolution.
+func (s *Sidecar) ContainerName() string {
+	return s.containerName
 }
 
 // Hostname returns the hostname configured for the DIND container.
@@ -114,24 +104,12 @@ func (s *Sidecar) Hostname() string {
 	return s.hostname
 }
 
-// NetworkID returns the shared network ID.
-func (s *Sidecar) NetworkID() string {
-	return s.networkID
-}
-
-// Stop removes the DIND sidecar container and its network.
+// Stop removes the DIND sidecar container.
 func (s *Sidecar) Stop(ctx context.Context) error {
-	var firstErr error
-
 	if err := s.client.ContainerRemove(ctx, s.containerID, container.RemoveOptions{Force: true}); err != nil {
-		firstErr = fmt.Errorf("removing DIND container: %w", err)
+		return fmt.Errorf("removing DIND container: %w", err)
 	}
-
-	if err := s.client.NetworkRemove(ctx, s.networkID); err != nil && firstErr == nil {
-		firstErr = fmt.Errorf("removing DIND network: %w", err)
-	}
-
-	return firstErr
+	return nil
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

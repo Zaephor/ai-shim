@@ -64,6 +64,9 @@ func loadEnvOverrides() Config {
 		b := v == "1" || v == "true"
 		cfg.GPU = &b
 	}
+	if v := os.Getenv("AI_SHIM_NETWORK_SCOPE"); v != "" {
+		cfg.NetworkScope = v
+	}
 	if v := os.Getenv("AI_SHIM_DIND_HOSTNAME"); v != "" {
 		cfg.DINDHostname = v
 	}

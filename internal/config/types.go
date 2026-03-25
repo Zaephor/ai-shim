@@ -11,6 +11,7 @@ type Config struct {
 	Volumes     []string           `yaml:"volumes,omitempty"`
 	Ports       []string           `yaml:"ports,omitempty"`
 	Packages    []string           `yaml:"packages,omitempty"`
+	NetworkScope string             `yaml:"network_scope,omitempty"` // global, profile, workspace, profile-workspace, isolated (default)
 	DINDHostname string             `yaml:"dind_hostname,omitempty"`
 	DIND        *bool              `yaml:"dind,omitempty"`
 	DINDGpu     *bool              `yaml:"dind_gpu,omitempty"`

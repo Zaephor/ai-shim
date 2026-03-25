@@ -34,6 +34,7 @@ type ContainerSpec struct {
 	TTY          bool
 	Stdin        bool
 	GPU          bool
+	NetworkID    string // Docker network ID to attach container to
 }
 
 // Runner manages container lifecycle via the Docker API.
@@ -84,7 +85,14 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		}
 	}
 
-	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, &network.NetworkingConfig{}, nil, spec.Name)
+	networkCfg := &network.NetworkingConfig{}
+	if spec.NetworkID != "" {
+		networkCfg.EndpointsConfig = map[string]*network.EndpointSettings{
+			spec.NetworkID: {},
+		}
+	}
+
+	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, networkCfg, nil, spec.Name)
 	if err != nil {
 		return -1, fmt.Errorf("creating container: %w", err)
 	}

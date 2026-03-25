@@ -12,10 +12,12 @@ import (
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/invocation"
+	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/selfupdate"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/workspace"
 )
 
 const version = "dev"
@@ -275,7 +277,7 @@ func runAgent(name string, args []string) (int, error) {
 		HomeDir:  imageUser.HomeDir,
 	})
 
-	// 7.5 Start DIND sidecar if enabled
+	// 7.5 Create shared network and start DIND sidecar if enabled
 	dindEnabled := false
 	if cfg.DIND != nil && *cfg.DIND {
 		dindEnabled = true
@@ -294,22 +296,35 @@ func runAgent(name string, args []string) (int, error) {
 			dindHostname = cfg.DINDHostname
 		}
 
-		dindName := spec.Name + "-dind"
+		wsHash := workspace.HashPath(platInfo.Hostname, pwd)[:8]
+		networkName := network.ResolveName(cfg.NetworkScope, agentName, profileName, wsHash)
 
+		netHandle, err := network.EnsureNetwork(ctx, runner.Client(), networkName, spec.Labels)
+		if err != nil {
+			return 1, fmt.Errorf("creating network: %w", err)
+		}
+		defer netHandle.Remove(ctx)
+
+		// Attach agent container to network
+		spec.NetworkID = netHandle.ID
+
+		// Start DIND sidecar on same network
+		dindName := spec.Name + "-dind"
 		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
 			GPU:           dindGPU,
 			UseSysbox:     useSysbox,
 			Labels:        spec.Labels,
 			ContainerName: dindName,
 			Hostname:      dindHostname,
+			NetworkID:     netHandle.ID,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
 		defer sidecar.Stop(ctx)
 
-		// Add DOCKER_HOST env var pointing to DIND using hostname
-		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+dindHostname+":2375")
+		// DOCKER_HOST uses container name for DNS (not hostname -- names are unique)
+		spec.Env = append(spec.Env, "DOCKER_HOST=tcp://"+dindName+":2375")
 	}
 
 	// 8. Run container, return its exit code
