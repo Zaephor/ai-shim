@@ -1,5 +1,10 @@
 package config
 
+const (
+	// DefaultImage is the default container image used when none is configured.
+	DefaultImage = "ghcr.io/catthehacker/ubuntu:act-24.04"
+)
+
 // ResourceLimits defines optional container resource constraints.
 type ResourceLimits struct {
 	Memory string `yaml:"memory,omitempty"` // e.g. "512m", "2g", "4g"
@@ -51,7 +56,7 @@ func (c Config) GetImage() string {
 	if c.Image != "" {
 		return c.Image
 	}
-	return "ghcr.io/catthehacker/ubuntu:act-24.04"
+	return DefaultImage
 }
 
 // GetHostname returns the configured hostname or the default.

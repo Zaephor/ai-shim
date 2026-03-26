@@ -40,3 +40,28 @@ func TestValidate_ValidResourceLimits(t *testing.T) {
 	warnings := cfg.Validate()
 	assert.Empty(t, warnings)
 }
+
+func TestValidate_ValidImageDigest(t *testing.T) {
+	cfg := Config{Image: "ubuntu@sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}
+
+func TestValidate_InvalidImageDigest(t *testing.T) {
+	cfg := Config{Image: "ubuntu@sha256:tooshort"}
+	warnings := cfg.Validate()
+	assert.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "64 hex characters")
+}
+
+func TestValidate_TagOnlyImage(t *testing.T) {
+	cfg := Config{Image: "ubuntu:24.04"}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}
+
+func TestValidate_EmptyImage(t *testing.T) {
+	cfg := Config{}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}

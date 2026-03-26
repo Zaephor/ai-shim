@@ -7,6 +7,17 @@ import (
 	"github.com/ai-shim/ai-shim/internal/parse"
 )
 
+// validateImageDigest checks for valid @sha256: format if present.
+func validateImageDigest(image string) []string {
+	if image == "" {
+		return nil
+	}
+	if err := parse.ImageDigest(image); err != nil {
+		return []string{err.Error()}
+	}
+	return nil
+}
+
 // ValidateNetworkScope checks if a network scope value is valid.
 func ValidateNetworkScope(scope string) error {
 	valid := map[string]bool{
@@ -31,6 +42,7 @@ func (c Config) Validate() []string {
 		warnings = append(warnings, err.Error())
 	}
 
+	warnings = append(warnings, validateImageDigest(c.Image)...)
 	warnings = append(warnings, validateResourceLimits("resources", c.Resources)...)
 	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
 

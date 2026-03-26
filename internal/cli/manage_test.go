@@ -72,6 +72,24 @@ func TestDoctor_ChecksDefaultImage(t *testing.T) {
 	assert.Contains(t, output, container.DefaultImage)
 }
 
+func TestDoctor_ShowsImagePinningStatus(t *testing.T) {
+	output := Doctor()
+	assert.Contains(t, output, "Image pinning:")
+	assert.Contains(t, output, "agent image:")
+	assert.Contains(t, output, "dind image:")
+	assert.Contains(t, output, "cache image:")
+	// Default images are tag-based
+	assert.Contains(t, output, "tag, default")
+}
+
+func TestImagePinLabel(t *testing.T) {
+	assert.Equal(t, "tag, default", imagePinLabel("ubuntu:24.04", true))
+	assert.Equal(t, "tag", imagePinLabel("ubuntu:24.04", false))
+	hash := "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+	assert.Equal(t, "pinned, default", imagePinLabel("ubuntu@sha256:"+hash, true))
+	assert.Equal(t, "pinned", imagePinLabel("ubuntu@sha256:"+hash, false))
+}
+
 func TestCleanup_ReturnsResult(t *testing.T) {
 	result, err := Cleanup()
 	require.NoError(t, err)

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	DefaultImage    = "ghcr.io/catthehacker/ubuntu:act-24.04"
+	DefaultImage    = config.DefaultImage
 	DefaultHostname = "ai-shim"
 )
 

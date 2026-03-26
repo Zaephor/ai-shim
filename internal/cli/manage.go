@@ -13,7 +13,9 @@ import (
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/container"
+	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/docker"
+	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -195,6 +197,12 @@ func Doctor() string {
 
 	// Check config dir
 	b.WriteString(fmt.Sprintf("  Config dir:     %s\n", layout.ConfigDir))
+
+	// Image pinning status
+	b.WriteString("\n  Image pinning:\n")
+	b.WriteString(fmt.Sprintf("    agent image: %s (%s)\n", container.DefaultImage, imagePinLabel(container.DefaultImage, true)))
+	b.WriteString(fmt.Sprintf("    dind image:  %s (%s)\n", dind.DefaultImage, imagePinLabel(dind.DefaultImage, true)))
+	b.WriteString(fmt.Sprintf("    cache image: %s (%s)\n", dind.CacheImage, imagePinLabel(dind.CacheImage, true)))
 
 	return b.String()
 }
@@ -560,6 +568,19 @@ func formatEnabledField(name string, val *bool) string {
 		enabled = "enabled"
 	}
 	return fmt.Sprintf("  %-12s %s\n", name+":", enabled)
+}
+
+// imagePinLabel returns a display label for an image's pinning status.
+func imagePinLabel(image string, isDefault bool) string {
+	pinned := parse.IsDigestPinned(image)
+	label := "tag"
+	if pinned {
+		label = "pinned"
+	}
+	if isDefault {
+		label += ", default"
+	}
+	return label
 }
 
 func containerDisplayName(c container_types.Summary) string {
