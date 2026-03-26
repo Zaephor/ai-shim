@@ -302,6 +302,9 @@ tools:
 	for _, sub := range expectedSubstrings {
 		assert.Contains(t, output, sub, "ShowConfig should display: %s", sub)
 	}
+
+	// dind_gpu must be displayed explicitly
+	assert.Contains(t, output, "dind_gpu:", "ShowConfig should display dind_gpu field")
 }
 
 func TestBackupProfile_NonExistent(t *testing.T) {

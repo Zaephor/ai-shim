@@ -106,6 +106,7 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 
 	b.WriteString(formatBoolField("dind", cfg.DIND, false))
 	b.WriteString(formatBoolField("gpu", cfg.GPU, false))
+	b.WriteString(formatBoolField("dind_gpu", cfg.DINDGpu, false))
 
 	if cfg.NetworkScope != "" {
 		b.WriteString(fmt.Sprintf("  network_scope: %s\n", cfg.NetworkScope))
@@ -293,6 +294,7 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 
 	b.WriteString(formatEnabledField("DIND", cfg.DIND))
 	b.WriteString(formatEnabledField("GPU", cfg.GPU))
+	b.WriteString(formatEnabledField("DIND GPU", cfg.DINDGpu))
 
 	if cfg.Resources != nil {
 		b.WriteString("  Resources:\n")

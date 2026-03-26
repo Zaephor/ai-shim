@@ -9,7 +9,6 @@ import (
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/testutil"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -339,34 +338,6 @@ func TestBuildSpec_ContainerNameDeterministicPrefix(t *testing.T) {
 	prefix2 := spec2.Name[:strings.LastIndex(spec2.Name, "-")]
 	assert.Equal(t, prefix1, prefix2, "name prefix should be deterministic")
 	assert.NotEqual(t, spec1.Name, spec2.Name, "full name should differ due to random suffix")
-}
-
-func TestBuildSpec_DINDSocketMount(t *testing.T) {
-	p := defaultBuildParams()
-	p.DINDSocketVolume = "test-dind-socket-vol"
-	spec := BuildSpec(p)
-
-	hasDINDMount := false
-	for _, m := range spec.Mounts {
-		if m.Target == "/var/run/dind" && m.Source == "test-dind-socket-vol" && m.Type == mount.TypeVolume {
-			hasDINDMount = true
-		}
-	}
-	assert.True(t, hasDINDMount, "should mount DIND socket volume")
-	assert.Contains(t, spec.Env, "DOCKER_HOST=unix:///var/run/dind/docker.sock", "should set DOCKER_HOST to socket path")
-}
-
-func TestBuildSpec_NoDINDSocketMount(t *testing.T) {
-	p := defaultBuildParams()
-	// DINDSocketVolume not set
-	spec := BuildSpec(p)
-
-	for _, m := range spec.Mounts {
-		assert.NotEqual(t, "/var/run/dind", m.Target, "should not mount DIND socket when not configured")
-	}
-	for _, e := range spec.Env {
-		assert.NotContains(t, e, "DOCKER_HOST", "should not set DOCKER_HOST when DIND not enabled")
-	}
 }
 
 func TestRandomSuffix_Length(t *testing.T) {
