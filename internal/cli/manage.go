@@ -12,12 +12,12 @@ import (
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/container"
+	"github.com/ai-shim/ai-shim/internal/docker"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	network_types "github.com/docker/docker/api/types/network"
 	volume_types "github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/client"
 )
 
 // ListAgents returns a formatted list of all built-in agents.
@@ -62,10 +62,10 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	b.WriteString(fmt.Sprintf("Resolved config for %s_%s:\n\n", agentName, profile))
 
 	if cfg.Image != "" {
-		b.WriteString(fmt.Sprintf("  image:    %s\n", cfg.Image))
+		b.WriteString(fmt.Sprintf("  image:    %s\n", cfg.GetImage()))
 	}
 	if cfg.Hostname != "" {
-		b.WriteString(fmt.Sprintf("  hostname: %s\n", cfg.Hostname))
+		b.WriteString(fmt.Sprintf("  hostname: %s\n", cfg.GetHostname()))
 	}
 	if cfg.Version != "" {
 		b.WriteString(fmt.Sprintf("  version:  %s\n", cfg.Version))
@@ -103,17 +103,8 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
-	dindStr := "false"
-	if cfg.DIND != nil && *cfg.DIND {
-		dindStr = "true"
-	}
-	b.WriteString(fmt.Sprintf("  dind:          %s\n", dindStr))
-
-	gpuStr := "false"
-	if cfg.GPU != nil && *cfg.GPU {
-		gpuStr = "true"
-	}
-	b.WriteString(fmt.Sprintf("  gpu:           %s\n", gpuStr))
+	b.WriteString(formatBoolField("dind", cfg.DIND, false))
+	b.WriteString(formatBoolField("gpu", cfg.GPU, false))
 
 	if cfg.NetworkScope != "" {
 		b.WriteString(fmt.Sprintf("  network_scope: %s\n", cfg.NetworkScope))
@@ -148,17 +139,8 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
-	dindCacheStr := "false"
-	if cfg.DINDCache != nil && *cfg.DINDCache {
-		dindCacheStr = "true"
-	}
-	b.WriteString(fmt.Sprintf("  dind_cache:    %s\n", dindCacheStr))
-
-	isolatedStr := "true"
-	if cfg.Isolated != nil && !*cfg.Isolated {
-		isolatedStr = "false"
-	}
-	b.WriteString(fmt.Sprintf("  isolated:      %s\n", isolatedStr))
+	b.WriteString(formatBoolField("dind_cache", cfg.DINDCache, false))
+	b.WriteString(formatBoolField("isolated", cfg.Isolated, true))
 
 	if len(cfg.AllowAgents) > 0 {
 		b.WriteString("  allow_agents:\n")
@@ -184,7 +166,7 @@ func Doctor() string {
 
 	// Check Docker
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := docker.NewClientNoPing()
 	if err != nil {
 		b.WriteString("  Docker client:  FAIL (" + err.Error() + ")\n")
 	} else {
@@ -273,17 +255,8 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Dry run for %s_%s:\n\n", agentName, profile))
 
-	image := cfg.Image
-	if image == "" {
-		image = container.DefaultImage
-	}
-	hostname := cfg.Hostname
-	if hostname == "" {
-		hostname = container.DefaultHostname
-	}
-
-	b.WriteString(fmt.Sprintf("  Image:     %s\n", image))
-	b.WriteString(fmt.Sprintf("  Hostname:  %s\n", hostname))
+	b.WriteString(fmt.Sprintf("  Image:     %s\n", cfg.GetImage()))
+	b.WriteString(fmt.Sprintf("  Hostname:  %s\n", cfg.GetHostname()))
 
 	if cfg.Version != "" {
 		b.WriteString(fmt.Sprintf("  Version:   %s\n", cfg.Version))
@@ -317,17 +290,8 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 		b.WriteString(fmt.Sprintf("  Passthrough:  %s\n", strings.Join(args, " ")))
 	}
 
-	dind := "disabled"
-	if cfg.DIND != nil && *cfg.DIND {
-		dind = "enabled"
-	}
-	b.WriteString(fmt.Sprintf("  DIND:      %s\n", dind))
-
-	gpu := "disabled"
-	if cfg.GPU != nil && *cfg.GPU {
-		gpu = "enabled"
-	}
-	b.WriteString(fmt.Sprintf("  GPU:       %s\n", gpu))
+	b.WriteString(formatEnabledField("DIND", cfg.DIND))
+	b.WriteString(formatEnabledField("GPU", cfg.GPU))
 
 	if cfg.Resources != nil {
 		b.WriteString("  Resources:\n")
@@ -362,9 +326,9 @@ type CleanupResult struct {
 // Cleanup finds and removes orphaned ai-shim containers, networks, and volumes.
 func Cleanup() (CleanupResult, error) {
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := docker.NewClient(ctx)
 	if err != nil {
-		return CleanupResult{}, fmt.Errorf("connecting to Docker: %w", err)
+		return CleanupResult{}, err
 	}
 	defer cli.Close()
 
@@ -425,9 +389,9 @@ func Cleanup() (CleanupResult, error) {
 // Status returns a formatted list of running ai-shim containers.
 func Status() (string, error) {
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := docker.NewClient(ctx)
 	if err != nil {
-		return "", fmt.Errorf("connecting to docker: %w", err)
+		return "", err
 	}
 	defer cli.Close()
 
@@ -576,6 +540,29 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
+}
+
+// formatBoolField formats a *bool config field with default annotation for ShowConfig output.
+func formatBoolField(name string, val *bool, defaultVal bool) string {
+	if val != nil {
+		if *val {
+			return fmt.Sprintf("  %-15s true\n", name+":")
+		}
+		return fmt.Sprintf("  %-15s false\n", name+":")
+	}
+	if defaultVal {
+		return fmt.Sprintf("  %-15s true (default)\n", name+":")
+	}
+	return fmt.Sprintf("  %-15s false (default)\n", name+":")
+}
+
+// formatEnabledField formats a *bool config field as enabled/disabled for DryRun output.
+func formatEnabledField(name string, val *bool) string {
+	enabled := "disabled"
+	if val != nil && *val {
+		enabled = "enabled"
+	}
+	return fmt.Sprintf("  %-12s %s\n", name+":", enabled)
 }
 
 func readDirNames(root, subdir string) ([]string, error) {
