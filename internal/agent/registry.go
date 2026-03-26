@@ -8,19 +8,20 @@ type Definition struct {
 	InstallType string
 	Package     string
 	Binary      string
-	HomePaths   []string
+	DataDirs    []string // directories under ~/ to persist (e.g. ".claude", ".config/goose")
+	DataFiles   []string // files under ~/ to persist (e.g. ".claude.json")
 }
 
 var builtins = map[string]Definition{
-	"claude-code": {Name: "claude-code", InstallType: "custom", Package: "curl -fsSL https://claude.ai/install.sh | bash", Binary: "claude", HomePaths: []string{".claude", ".claude.json"}},
-	"gemini-cli":  {Name: "gemini-cli", InstallType: "npm", Package: "@google/gemini-cli", Binary: "gemini", HomePaths: []string{".gemini"}},
-	"qwen-code":   {Name: "qwen-code", InstallType: "npm", Package: "@qwen-code/qwen-code", Binary: "qwen", HomePaths: []string{".qwen"}},
-	"codex":       {Name: "codex", InstallType: "npm", Package: "@openai/codex", Binary: "codex", HomePaths: []string{".codex"}},
-	"pi":          {Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", HomePaths: []string{".pi"}},
-	"gsd":         {Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", HomePaths: []string{".gsd"}},
-	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", HomePaths: []string{".aider"}},
-	"goose":       {Name: "goose", InstallType: "custom", Package: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", Binary: "goose", HomePaths: []string{".config/goose"}},
-	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", HomePaths: []string{".config/opencode"}},
+	"claude-code": {Name: "claude-code", InstallType: "custom", Package: "curl -fsSL https://claude.ai/install.sh | bash", Binary: "claude", DataDirs: []string{".claude"}, DataFiles: []string{".claude.json"}},
+	"gemini-cli":  {Name: "gemini-cli", InstallType: "npm", Package: "@google/gemini-cli", Binary: "gemini", DataDirs: []string{".gemini"}},
+	"qwen-code":   {Name: "qwen-code", InstallType: "npm", Package: "@qwen-code/qwen-code", Binary: "qwen", DataDirs: []string{".qwen"}},
+	"codex":       {Name: "codex", InstallType: "npm", Package: "@openai/codex", Binary: "codex", DataDirs: []string{".codex"}},
+	"pi":          {Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}},
+	"gsd":         {Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}},
+	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", DataDirs: []string{".aider"}},
+	"goose":       {Name: "goose", InstallType: "custom", Package: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", Binary: "goose", DataDirs: []string{".config/goose"}},
+	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", DataDirs: []string{".config/opencode"}},
 }
 
 // Lookup returns the built-in agent definition for the given name.

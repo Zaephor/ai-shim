@@ -501,6 +501,19 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
 	}
 
+	// 5.7 Pre-create agent data dirs/files for correct ownership
+	if err := layout.EnsureAgentData(profileName, agentDef.DataDirs, agentDef.DataFiles); err != nil {
+		return 1, fmt.Errorf("setting up agent data: %w", err)
+	}
+	// Also pre-create data for allowed agents
+	for _, name := range cfg.AllowAgents {
+		if allowed, ok := agent.Lookup(name); ok {
+			if err := layout.EnsureAgentData(profileName, allowed.DataDirs, allowed.DataFiles); err != nil {
+				return 1, fmt.Errorf("setting up agent data for %s: %w", name, err)
+			}
+		}
+	}
+
 	// 6. Create Docker runner
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)

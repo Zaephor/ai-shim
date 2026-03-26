@@ -109,6 +109,7 @@ func TestBuildSpec_Labels(t *testing.T) {
 
 func TestBuildSpec_RequiredMountsPresent(t *testing.T) {
 	p := defaultBuildParams()
+	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home
 	spec := BuildSpec(p)
 
 	mountTargets := make(map[string]string)
@@ -120,7 +121,7 @@ func TestBuildSpec_RequiredMountsPresent(t *testing.T) {
 	assert.Contains(t, mountTargets, "/usr/local/share/ai-shim/bin")
 	assert.Equal(t, "/tmp/ai-shim-test/shared/bin", mountTargets["/usr/local/share/ai-shim/bin"])
 
-	// Profile home mount
+	// Profile home mount (shared mode)
 	assert.Contains(t, mountTargets, "/home/user")
 	assert.Equal(t, "/tmp/ai-shim-test/profiles/default/home", mountTargets["/home/user"])
 
@@ -214,6 +215,7 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 		targets[m.Target] = true
 	}
 	assert.True(t, targets["/usr/local/share/ai-shim/agents/gemini-cli/bin"], "allowed agent bin should be mounted")
+	assert.True(t, targets["/home/user/.gemini"], "allowed agent data dir should be mounted")
 }
 
 func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
@@ -222,13 +224,51 @@ func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
 	spec := BuildSpec(p)
 
 	// Should have mounts for agents other than the primary
-	hasOtherAgent := false
+	hasOtherAgentBin := false
 	for _, m := range spec.Mounts {
 		if strings.Contains(m.Target, "/usr/local/share/ai-shim/agents/gemini-cli/") {
-			hasOtherAgent = true
+			hasOtherAgentBin = true
 		}
 	}
-	assert.True(t, hasOtherAgent, "non-isolated mode should mount other agent bins")
+	assert.True(t, hasOtherAgentBin, "non-isolated mode should mount other agent bins")
+}
+
+func TestBuildSpec_IsolatedMountsOnlyAgentData(t *testing.T) {
+	p := defaultBuildParams()
+	// Default is isolated=true
+	spec := BuildSpec(p)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	// Should have claude's data dir, not the full home
+	assert.True(t, targets["/home/user/.claude"], "primary agent data dir should be mounted")
+	assert.True(t, targets["/home/user/.claude.json"], "primary agent data file should be mounted")
+	assert.False(t, targets["/home/user"], "full home should NOT be mounted in isolated mode")
+}
+
+func TestBuildSpec_SharedModeMountsFullHome(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Isolated = testutil.BoolPtr(false)
+	spec := BuildSpec(p)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	assert.True(t, targets["/home/user"], "full home should be mounted in shared mode")
+}
+
+func TestBuildSpec_IsolatedExcludesOtherAgentData(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Isolated = testutil.BoolPtr(true)
+	spec := BuildSpec(p)
+
+	for _, m := range spec.Mounts {
+		assert.NotContains(t, m.Target, ".gemini", "isolated mode should not mount other agent data dirs")
+		assert.NotContains(t, m.Target, ".aider", "isolated mode should not mount other agent data dirs")
+	}
 }
 
 func TestBuildSpec_PackagesInEntrypoint(t *testing.T) {
@@ -245,6 +285,7 @@ func TestBuildSpec_PackagesInEntrypoint(t *testing.T) {
 func TestBuildSpec_CustomHomeDir(t *testing.T) {
 	p := defaultBuildParams()
 	p.HomeDir = "/home/runner"
+	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home mount
 	spec := BuildSpec(p)
 
 	hasRunnerHome := false
@@ -256,9 +297,25 @@ func TestBuildSpec_CustomHomeDir(t *testing.T) {
 	assert.True(t, hasRunnerHome, "profile home should mount to custom home dir")
 }
 
+func TestBuildSpec_CustomHomeDir_Isolated(t *testing.T) {
+	p := defaultBuildParams()
+	p.HomeDir = "/home/runner"
+	// Default isolated mode
+	spec := BuildSpec(p)
+
+	// Data dirs should be under custom home
+	hasCustomHomeData := false
+	for _, m := range spec.Mounts {
+		if strings.HasPrefix(m.Target, "/home/runner/.") {
+			hasCustomHomeData = true
+		}
+	}
+	assert.True(t, hasCustomHomeData, "isolated data dirs should use custom home dir")
+}
+
 func TestBuildSpec_DefaultHomeDir(t *testing.T) {
 	p := defaultBuildParams()
-	// HomeDir empty = default
+	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home mount
 	spec := BuildSpec(p)
 
 	hasDefaultHome := false

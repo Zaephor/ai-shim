@@ -83,7 +83,7 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 			Resources: &config.ResourceLimits{Memory: "2g", CPUs: "1.0"},
 			Git:       &config.GitConfig{Name: "Test User", Email: "test@example.com"},
 		},
-		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin"},
+		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin", DataDirs: []string{".test-data"}, DataFiles: []string{".test-config.json"}},
 		Profile: "work",
 		Layout:  storage.NewLayout("/tmp/test-ai-shim"),
 		Platform: platform.Info{UID: 1000, GID: 1000, Hostname: "host"},
@@ -100,7 +100,8 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	assert.Contains(t, spec.Env, "K=V")
 	assert.True(t, spec.GPU)
 	assert.NotNil(t, spec.Resources)
-	assert.Equal(t, "/home/custom", findMountTarget(spec.Mounts, "home"))
+	// HomeDir is used: in isolated mode, data dirs mount under /home/custom/
+	assert.Equal(t, "/home/custom/.test-data", findMountTarget(spec.Mounts, ".test-data"))
 	assert.NotEmpty(t, spec.Name) // container naming
 	assert.Contains(t, spec.Entrypoint[2], "--flag") // config args
 	assert.Contains(t, spec.Entrypoint[2], "--extra") // passthrough args

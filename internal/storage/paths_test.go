@@ -74,3 +74,73 @@ func TestLayout_EnsureDirectories_Idempotent(t *testing.T) {
 	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
 	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
 }
+
+func TestLayout_EnsureAgentData_Dirs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+
+	err := layout.EnsureAgentData("work", []string{".claude", ".config/goose"}, nil)
+	require.NoError(t, err)
+
+	home := layout.ProfileHome("work")
+	for _, dir := range []string{".claude", ".config/goose"} {
+		info, err := os.Stat(filepath.Join(home, dir))
+		require.NoError(t, err, "data dir should exist: %s", dir)
+		assert.True(t, info.IsDir(), "%s should be a directory", dir)
+	}
+}
+
+func TestLayout_EnsureAgentData_Files(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+
+	err := layout.EnsureAgentData("work", nil, []string{".claude.json"})
+	require.NoError(t, err)
+
+	home := layout.ProfileHome("work")
+	info, err := os.Stat(filepath.Join(home, ".claude.json"))
+	require.NoError(t, err, ".claude.json should exist")
+	assert.False(t, info.IsDir(), ".claude.json should be a file, not a directory")
+}
+
+func TestLayout_EnsureAgentData_PreservesExistingFiles(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+
+	home := layout.ProfileHome("work")
+	path := filepath.Join(home, ".claude.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"key":"value"}`), 0644))
+
+	err := layout.EnsureAgentData("work", nil, []string{".claude.json"})
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"key":"value"}`, string(data), "existing file content should be preserved")
+}
+
+func TestLayout_EnsureAgentData_Idempotent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+
+	require.NoError(t, layout.EnsureAgentData("work", []string{".claude"}, []string{".claude.json"}))
+	require.NoError(t, layout.EnsureAgentData("work", []string{".claude"}, []string{".claude.json"}))
+}
+
+func TestLayout_EnsureAgentData_NestedFileParentCreated(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
+
+	err := layout.EnsureAgentData("work", nil, []string{".config/agent/settings.json"})
+	require.NoError(t, err)
+
+	home := layout.ProfileHome("work")
+	info, err := os.Stat(filepath.Join(home, ".config/agent/settings.json"))
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+}

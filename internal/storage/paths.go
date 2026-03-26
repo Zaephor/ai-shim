@@ -72,3 +72,29 @@ func (l Layout) EnsureDirectories(agent, profile string) error {
 	}
 	return nil
 }
+
+// EnsureAgentData pre-creates agent data directories and files under the profile
+// home directory. This ensures correct ownership (host user, not root) before
+// Docker bind-mounts them. dataDirs are created as directories, dataFiles are
+// created as empty files (with parent directories).
+func (l Layout) EnsureAgentData(profile string, dataDirs, dataFiles []string) error {
+	home := l.ProfileHome(profile)
+	for _, dir := range dataDirs {
+		if err := os.MkdirAll(filepath.Join(home, dir), 0755); err != nil {
+			return err
+		}
+	}
+	for _, file := range dataFiles {
+		path := filepath.Join(home, file)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		// Create empty file if it doesn't exist, preserve existing content
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := os.WriteFile(path, nil, 0644); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

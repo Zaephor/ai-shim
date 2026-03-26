@@ -12,12 +12,19 @@ func TestLookup_BuiltinAgent(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "claude", def.Binary)
 	assert.Equal(t, "custom", def.InstallType)
-	assert.Contains(t, def.HomePaths, ".claude")
+	assert.Contains(t, def.DataDirs, ".claude")
+	assert.Contains(t, def.DataFiles, ".claude.json")
 }
 
 func TestLookup_NotFound(t *testing.T) {
 	_, ok := Lookup("nonexistent")
 	assert.False(t, ok)
+}
+
+func TestAllAgents_HaveDataDirs(t *testing.T) {
+	for name, def := range All() {
+		assert.NotEmpty(t, def.DataDirs, "%s should have at least one data dir", name)
+	}
 }
 
 func TestAll_ContainsAllAgents(t *testing.T) {

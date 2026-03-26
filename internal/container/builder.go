@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,10 +66,6 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	name := generateContainerName(p.Agent.Name, p.Profile, wsHash)
 
 	mounts := buildMounts(p, pwd, workdir, homeDir)
-
-	// Cross-agent access mounts
-	crossMounts := CrossAgentMounts(p.Layout, p.Agent.Name, p.Config.AllowAgents, p.Config.IsIsolated())
-	mounts = append(mounts, crossMounts...)
 
 	// Tool provisioning script
 	var toolScript string
@@ -152,7 +149,13 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	}
 }
 
+// sharedHomeFiles are files in the home directory that are shared across all agents
+// regardless of isolation mode, because they contain cross-agent configuration.
+var sharedHomeFiles = []string{".gitconfig"}
+
 func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
+	profileHome := p.Layout.ProfileHome(p.Profile)
+
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeBind,
@@ -171,14 +174,51 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		},
 		{
 			Type:   mount.TypeBind,
-			Source: p.Layout.ProfileHome(p.Profile),
-			Target: homeDir,
-		},
-		{
-			Type:   mount.TypeBind,
 			Source: pwd,
 			Target: workdir,
 		},
+	}
+
+	if p.Config.IsIsolated() {
+		// Isolated mode: mount only this agent's data dirs/files + allowed agents
+		mounts = append(mounts, agentDataMounts(profileHome, homeDir, p.Agent)...)
+
+		// Allowed agents: mount their bins and data
+		for _, name := range p.Config.AllowAgents {
+			if name == p.Agent.Name {
+				continue
+			}
+			if def, ok := agent.Lookup(name); ok {
+				mounts = append(mounts, mount.Mount{
+					Type:   mount.TypeBind,
+					Source: p.Layout.AgentBin(name),
+					Target: "/usr/local/share/ai-shim/agents/" + name + "/bin",
+				})
+				mounts = append(mounts, agentDataMounts(profileHome, homeDir, def)...)
+			}
+		}
+
+		// Shared home files (e.g. .gitconfig)
+		mounts = append(mounts, sharedFileMounts(profileHome, homeDir)...)
+	} else {
+		// Shared mode: mount the entire profile home
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: profileHome,
+			Target: homeDir,
+		})
+
+		// All agents' bins accessible
+		for _, name := range agent.Names() {
+			if name == p.Agent.Name {
+				continue
+			}
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: p.Layout.AgentBin(name),
+				Target: "/usr/local/share/ai-shim/agents/" + name + "/bin",
+			})
+		}
 	}
 
 	// Custom volumes from config (validated)
@@ -199,6 +239,43 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		})
 	}
 
+	return mounts
+}
+
+// agentDataMounts creates bind mounts for an agent's data dirs and files.
+func agentDataMounts(profileHome, homeDir string, def agent.Definition) []mount.Mount {
+	var mounts []mount.Mount
+	for _, dir := range def.DataDirs {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: filepath.Join(profileHome, dir),
+			Target: filepath.Join(homeDir, dir),
+		})
+	}
+	for _, file := range def.DataFiles {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: filepath.Join(profileHome, file),
+			Target: filepath.Join(homeDir, file),
+		})
+	}
+	return mounts
+}
+
+// sharedFileMounts creates bind mounts for files shared across all agents.
+func sharedFileMounts(profileHome, homeDir string) []mount.Mount {
+	var mounts []mount.Mount
+	for _, file := range sharedHomeFiles {
+		source := filepath.Join(profileHome, file)
+		// Only mount if the file exists (shared files are optional)
+		if _, err := os.Stat(source); err == nil {
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: source,
+				Target: filepath.Join(homeDir, file),
+			})
+		}
+	}
 	return mounts
 }
 
