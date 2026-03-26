@@ -37,6 +37,7 @@ func Init(layout storage.Layout) error {
 # See: https://github.com/ai-shim/ai-shim
 
 # Container image (default: ghcr.io/catthehacker/ubuntu:act-24.04)
+# Supports @sha256: digest pinning for reproducibility.
 # image: "ghcr.io/catthehacker/ubuntu:act-24.04"
 
 # Container hostname (default: ai-shim)
@@ -45,6 +46,11 @@ func Init(layout storage.Layout) error {
 # Environment variables injected into the container
 # env:
 #   MY_API_KEY: "your-key-here"
+
+# Git identity for commits made inside the container
+# git:
+#   name: "Your Name"
+#   email: "you@example.com"
 
 # Template variables (not injected, used for templating)
 # variables:
@@ -64,6 +70,9 @@ func Init(layout storage.Layout) error {
 # Uncomment and customize as needed
 # env:
 #   ANTHROPIC_API_KEY: "your-key-here"
+# git:
+#   name: "Your Name"
+#   email: "you@example.com"
 # args:
 #   - "--no-telemetry"
 `), 0644)

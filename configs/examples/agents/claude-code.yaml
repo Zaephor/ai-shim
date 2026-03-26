@@ -4,12 +4,22 @@
 # Place it at: ~/.ai-shim/config/agents/claude-code.yaml
 #
 # Tier 2 -- overrides default.yaml, overridden by profile and agent-profile.
+#
+# claude-code persists: ~/.claude (dir), ~/.claude.json (file)
 
 env:
   ANTHROPIC_API_KEY: "sk-ant-your-key-here"
 
 # Pin to a specific version (empty = latest).
 # version: "1.0.0"
+
+# Pin the image to a digest for reproducibility (doctor reports pinning status).
+# image: "ghcr.io/catthehacker/ubuntu@sha256:abcdef1234567890..."
+
+# Git identity for commits made by claude inside the container.
+git:
+  name: "Your Name"
+  email: "you@example.com"
 
 # Default arguments for every claude-code invocation.
 args:

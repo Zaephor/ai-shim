@@ -14,6 +14,11 @@ env:
   HTTPS_PROXY: "{{ .corp_proxy }}"
   NO_PROXY: "localhost,127.0.0.1,.corp.example.com"
 
+# Git identity for this profile's commits.
+git:
+  name: "Work User"
+  email: "user@corp.example.com"
+
 # Mount a shared credentials directory (read-only via Docker).
 volumes:
   - "/home/user/.ssh:/home/user/.ssh"
@@ -23,7 +28,12 @@ ports:
   - "3000:3000"
   - "8080:8080"
 
-# Allow cross-agent access so claude can invoke gemini and vice versa.
+# Allow cross-agent access. This mounts the listed agents' binaries AND
+# their data directories (e.g. ~/.gemini, ~/.claude) into the container.
 allow_agents:
   - gemini-cli
   - claude-code
+
+# Home directory isolation. Set to false to mount the full profile home
+# instead of only agent-specific data dirs. Default: true.
+# isolated: false

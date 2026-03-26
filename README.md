@@ -54,7 +54,10 @@ Example configuration:
 env:
   ANTHROPIC_API_KEY: "sk-ant-..."
 
+# Image reference; supports tag or @sha256: digest pinning
 image: "ghcr.io/catthehacker/ubuntu:act-24.04"
+# image: "ghcr.io/catthehacker/ubuntu@sha256:abcdef1234567890..."
+
 version: ""
 args:
   - "--no-telemetry"
@@ -63,6 +66,16 @@ dind: false
 gpu: false
 network_scope: isolated     # global, profile, workspace, profile-workspace, isolated
 
+# Git identity for commits made inside the container
+git:
+  name: "Your Name"
+  email: "you@example.com"
+
+# Home directory isolation (default: true).
+# When true, only agent-specific data dirs/files are mounted.
+# When false, the entire profile home directory is mounted.
+# isolated: true
+
 # resources:                # optional container resource limits
 #   memory: "4g"
 #   cpus: "2.0"
@@ -70,6 +83,10 @@ dind_hostname: ai-shim-dind # hostname for the DIND sidecar container
 dind_mirrors:               # registry mirrors (default: mirror.gcr.io)
   - https://mirror.gcr.io
 dind_cache: false            # enable pull-through registry cache
+
+# Cross-agent access: mount other agents' bins AND data directories
+# allow_agents:
+#   - gemini-cli
 
 packages:
   - tmux
@@ -86,6 +103,9 @@ See `configs/examples/` for annotated example files and
 
 - **Docker sandboxing** -- agents run in isolated containers with persistent
   home directories and deterministic workspace mounts
+- **Home directory isolation** -- in isolated mode (default), only
+  agent-specific data directories and files are mounted into the container;
+  set `isolated: false` to mount the full profile home instead
 - **Docker-in-Docker (DIND)** -- opt-in sidecar for agents that need Docker
   access, with Sysbox preferred and privileged fallback
 - **GPU passthrough** -- independent toggles for the agent container and DIND
@@ -96,8 +116,17 @@ See `configs/examples/` for annotated example files and
   (default: `mirror.gcr.io`) for faster and more reliable image pulls
 - **Pull-through cache** -- opt-in registry cache for offline-capable and
   faster container image pulls via `dind_cache`
-- **Cross-agent access** -- selectively mount other agents' home directories
-  via `allow_agents`, or disable isolation entirely
+- **Image digest pinning** -- pin images to a specific `@sha256:` digest for
+  reproducible builds; `ai-shim manage doctor` reports pinning status
+- **Git user config** -- configure `git user.name` and `user.email` for
+  commits made inside the container via the `git:` config block or
+  `AI_SHIM_GIT_NAME`/`AI_SHIM_GIT_EMAIL` env vars
+- **Cross-agent access** -- selectively grant access to other agents' binaries
+  and data directories via `allow_agents`, or disable isolation entirely
+  with `isolated: false`
+- **Agent data registry** -- each built-in agent defines its `DataDirs` and
+  `DataFiles` (e.g. `~/.claude`, `~/.claude.json`), which are persisted
+  per-profile and shared when cross-agent access is granted
 - **Tool provisioning** -- typed installers (tar-extract, binary-download, apt,
   go-install, custom) provision dev tools into the container
 - **Template variables** -- Go `text/template` support in env vars, volumes,
@@ -165,6 +194,8 @@ AI_SHIM_GPU=0/1                 # toggle GPU for agent container
 AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
+AI_SHIM_GIT_NAME=<name>         # git user.name for container commits
+AI_SHIM_GIT_EMAIL=<email>       # git user.email for container commits
 AI_SHIM_VERBOSE=0/1             # enable debug output
 ```
 
@@ -181,9 +212,20 @@ make test-short         # skip integration tests requiring Docker
 make verify             # fmt + vet + lint + test
 ```
 
+## Releases
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please)
+and [GoReleaser](https://goreleaser.com/). Merging conventional commits to `main`
+triggers a release PR; merging the release PR builds and publishes binaries for
+linux/darwin on amd64/arm64.
+
 ## Contributing
 
 - Use [conventional commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 - Run `make setup` to install the commit-msg hook that enforces this
 - Run `make verify` before submitting a pull request
 - Integration tests use real Docker -- ensure the daemon is running
+
+## License
+
+ai-shim is licensed under the [GNU Affero General Public License v3.0](LICENSE).

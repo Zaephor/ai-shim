@@ -16,7 +16,9 @@
 #   LLM_ENDPOINT: "https://{{ .llm_host }}/v1"
 
 # Container image. Default: ghcr.io/catthehacker/ubuntu:act-24.04
+# Supports tag references or @sha256: digest pinning for reproducibility.
 # image: "ghcr.io/catthehacker/ubuntu:act-24.04"
+# image: "ghcr.io/catthehacker/ubuntu@sha256:abcdef1234567890..."
 
 # Container hostname. Default: ai-shim
 # hostname: "ai-shim"
@@ -75,11 +77,20 @@
 #   memory: "2g"
 #   cpus: "1.0"
 
-# Cross-agent access: list of agent names whose home dirs get mounted.
+# Git identity for commits made inside the container.
+# Also settable via AI_SHIM_GIT_NAME / AI_SHIM_GIT_EMAIL env vars.
+# git:
+#   name: "Your Name"
+#   email: "you@example.com"
+
+# Cross-agent access: list of agent names whose bins AND data directories
+# get mounted into the container.
 # allow_agents: []
 
-# Isolation mode. When false, all installed agents are visible.
-# Default: true
+# Home directory isolation mode (default: true).
+# When true, only agent-specific data dirs/files are mounted.
+# When false, the entire profile home directory is mounted and all
+# installed agents' bins are accessible.
 # isolated: true
 
 # Tool provisioning. Install dev tools into the container.
