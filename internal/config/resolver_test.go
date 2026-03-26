@@ -99,3 +99,18 @@ hostname: "default-host"
 	assert.Equal(t, "env-image", cfg.Image, "env var overrides image")
 	assert.Equal(t, "default-host", cfg.Hostname, "non-overridden field preserved")
 }
+
+func TestResolve_EnvVarOverridesAllTiers(t *testing.T) {
+	configDir := setupConfigDir(t)
+
+	// default.yaml has image "ghcr.io/catthehacker/ubuntu:act-24.04"
+	// Set env var to override
+	t.Setenv("AI_SHIM_IMAGE", "override-image:latest")
+	t.Setenv("AI_SHIM_GPU", "1")
+
+	cfg, err := Resolve(configDir, "claude", "work")
+	require.NoError(t, err)
+
+	assert.Equal(t, "override-image:latest", cfg.Image, "env var should override all tiers")
+	assert.True(t, cfg.IsGPUEnabled(), "AI_SHIM_GPU=1 should enable GPU")
+}

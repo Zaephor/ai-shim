@@ -176,10 +176,9 @@ func TestValidateWorkingDirectory_System(t *testing.T) {
 }
 
 func TestValidateVolumePath_EmptyPath(t *testing.T) {
-	// Empty path cleans to "." which should be allowed
 	err := ValidateVolumePath("")
-	// At minimum it shouldn't panic
-	_ = err
+	// Empty path cleans to "." which is safe
+	assert.NoError(t, err, "empty path should not cause error")
 }
 
 func TestValidateVolumePath_RelativePath(t *testing.T) {
