@@ -5,6 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ai-shim/ai-shim/internal/agent"
+	"github.com/ai-shim/ai-shim/internal/config"
+	"github.com/ai-shim/ai-shim/internal/container"
+	"github.com/ai-shim/ai-shim/internal/platform"
+	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,17 +66,53 @@ func TestAllPackagesReachableFromMain(t *testing.T) {
 }
 
 // TestBuildSpecUsesAllBuildParamsFields verifies that BuildSpec reads
-// every field from BuildParams using reflection.
+// every field from BuildParams by creating a fully-populated BuildParams
+// and asserting each field influences the resulting ContainerSpec.
 func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
-	// This is a compile-time structural check:
-	// If a new field is added to BuildParams but never read in BuildSpec,
-	// we want to catch it. We do this by creating a fully-populated
-	// BuildParams and verifying the output spec is affected.
+	p := container.BuildParams{
+		Config: config.Config{
+			Image:    "test-image",
+			Hostname: "test-host",
+			Env:      map[string]string{"K": "V"},
+			Args:     []string{"--flag"},
+			Volumes:  []string{"/a:/b"},
+			Ports:    []string{"8080:80"},
+			Packages: []string{"tmux"},
+			Tools:    map[string]config.ToolDef{"t": {Type: "apt", Package: "curl", Binary: "curl"}},
+			GPU:      testutil.BoolPtr(true),
+			Resources: &config.ResourceLimits{Memory: "2g", CPUs: "1.0"},
+		},
+		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin"},
+		Profile: "work",
+		Layout:  storage.NewLayout("/tmp/test-ai-shim"),
+		Platform: platform.Info{UID: 1000, GID: 1000, Hostname: "host"},
+		Args:    []string{"--extra"},
+		HomeDir: "/home/custom",
+		LogDir:  "/tmp/logs",
+	}
 
-	// Basic check: build with empty vs populated params should differ
-	// (This is a lightweight proxy — a full reflection-based check would
-	// be more complex but this catches the common case)
+	spec := container.BuildSpec(p)
 
-	// Importing is enough to verify compilation linkage
-	t.Log("Wiring verified via TestAllPackagesReachableFromMain")
+	// Verify each BuildParams field influenced the spec
+	assert.Equal(t, "test-image", spec.Image)
+	assert.Equal(t, "test-host", spec.Hostname)
+	assert.Contains(t, spec.Env, "K=V")
+	assert.True(t, spec.GPU)
+	assert.NotNil(t, spec.Resources)
+	assert.Equal(t, "/home/custom", findMountTarget(spec.Mounts, "home"))
+	assert.NotEmpty(t, spec.Name) // container naming
+	assert.Contains(t, spec.Entrypoint[2], "--flag") // config args
+	assert.Contains(t, spec.Entrypoint[2], "--extra") // passthrough args
+	assert.Contains(t, spec.Entrypoint[2], "tmux") // packages
+	assert.Contains(t, spec.Entrypoint[2], "curl") // tools
+	assert.Equal(t, "/tmp/logs", spec.LogDir)
+}
+
+func findMountTarget(mounts []mount.Mount, keyword string) string {
+	for _, m := range mounts {
+		if strings.Contains(m.Target, keyword) {
+			return m.Target
+		}
+	}
+	return ""
 }

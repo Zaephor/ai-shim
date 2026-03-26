@@ -311,6 +311,59 @@ func TestBackupProfile_NonExistent(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
+func TestBackupProfile_Success(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+	profileDir := layout.ProfileHome("test")
+	require.NoError(t, os.MkdirAll(profileDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "data.txt"), []byte("hello"), 0644))
+
+	backupPath := filepath.Join(root, "backup.tar.gz")
+	err := BackupProfile(layout, "test", backupPath)
+	require.NoError(t, err)
+
+	info, err := os.Stat(backupPath)
+	require.NoError(t, err)
+	assert.True(t, info.Size() > 0, "backup should not be empty")
+}
+
+func TestRestoreProfile_InvalidArchive(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	err := RestoreProfile(layout, "test", "/nonexistent/archive.tar.gz")
+	assert.Error(t, err)
+}
+
+func TestBackupAndRestore_RoundTrip(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile with content
+	profileDir := layout.ProfileHome("test")
+	require.NoError(t, os.MkdirAll(profileDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "marker.txt"), []byte("test-data"), 0644))
+
+	// Backup
+	backupPath := filepath.Join(root, "backup.tar.gz")
+	err := BackupProfile(layout, "test", backupPath)
+	require.NoError(t, err)
+
+	// Verify backup file exists
+	_, err = os.Stat(backupPath)
+	require.NoError(t, err)
+
+	// Delete profile
+	os.RemoveAll(profileDir)
+
+	// Restore
+	err = RestoreProfile(layout, "test", backupPath)
+	require.NoError(t, err)
+
+	// Verify content restored
+	data, err := os.ReadFile(filepath.Join(profileDir, "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "test-data", string(data))
+}
+
 func TestDiskUsage(t *testing.T) {
 	root := t.TempDir()
 	layout := storage.NewLayout(root)
