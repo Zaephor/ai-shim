@@ -24,8 +24,16 @@ func NewLayout(root string) Layout {
 }
 
 // DefaultRoot returns the default ai-shim storage root (~/.ai-shim).
+// Falls back to the current working directory if HOME is not set.
 func DefaultRoot() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		// Fallback to current directory
+		if pwd, err := os.Getwd(); err == nil {
+			return filepath.Join(pwd, ".ai-shim")
+		}
+		return ".ai-shim"
+	}
 	return filepath.Join(home, ".ai-shim")
 }
 

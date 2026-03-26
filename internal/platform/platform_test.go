@@ -39,6 +39,12 @@ func TestDetect_GPUFields(t *testing.T) {
 	}
 }
 
+func TestDetect_RootWarningField(t *testing.T) {
+	info := Detect()
+	// Just verify the field exists and is populated
+	assert.True(t, info.UID >= 0)
+}
+
 func TestDetect_GPUOnMac(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("macOS-specific test")

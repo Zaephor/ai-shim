@@ -75,6 +75,19 @@ func EnsureNetwork(ctx context.Context, cli *client.Client, name string, labels 
 		Labels: labels,
 	})
 	if err != nil {
+		// Network might have been created by another process (race condition).
+		// Retry the lookup before giving up.
+		networks, listErr := cli.NetworkList(ctx, dnetwork.ListOptions{
+			Filters: filters.NewArgs(filters.Arg("name", "^"+name+"$")),
+		})
+		if listErr != nil {
+			return nil, fmt.Errorf("creating network %s: %w", name, err)
+		}
+		for _, n := range networks {
+			if n.Name == name {
+				return &Handle{ID: n.ID, Name: name, Created: false, client: cli}, nil
+			}
+		}
 		return nil, fmt.Errorf("creating network %s: %w", name, err)
 	}
 

@@ -58,6 +58,14 @@ func TestDefaultRoot(t *testing.T) {
 	assert.Equal(t, filepath.Join(home, ".ai-shim"), DefaultRoot())
 }
 
+func TestDefaultRoot_NoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	root := DefaultRoot()
+	// Should not be empty or just "/.ai-shim"
+	assert.NotEqual(t, "/.ai-shim", root, "should not use root filesystem when HOME unset")
+	assert.NotEmpty(t, root)
+}
+
 func TestLayout_EnsureDirectories_Idempotent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)

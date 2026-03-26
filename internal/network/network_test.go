@@ -2,10 +2,13 @@ package network
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/client"
+	dnetwork "github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +69,27 @@ func TestEnsureNetwork_CreatesAndReturns(t *testing.T) {
 	// Cleanup
 	err = handle.Remove(ctx)
 	assert.NoError(t, err)
+}
+
+func TestEnsureNetwork_HandlesAlreadyExists(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	name := "ai-shim-test-race-" + fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// Create network directly
+	resp, err := cli.NetworkCreate(ctx, name, dnetwork.CreateOptions{})
+	require.NoError(t, err)
+	defer cli.NetworkRemove(ctx, resp.ID)
+
+	// EnsureNetwork should handle the existing network gracefully
+	handle, err := EnsureNetwork(ctx, cli, name, nil)
+	require.NoError(t, err)
+	assert.Equal(t, resp.ID, handle.ID)
+	assert.False(t, handle.Created, "should detect pre-existing network")
 }
 
 func TestEnsureNetwork_ReusesExisting(t *testing.T) {

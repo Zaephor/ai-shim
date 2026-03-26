@@ -78,8 +78,9 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (stri
 	return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
 }
 
-// MaybeStopCache stops the cache container if no other ai-shim containers with
-// uses-cache=true label are running.
+// MaybeStopCache attempts to stop the cache container if no other ai-shim
+// containers with uses-cache=true label are running. This is best-effort;
+// in race conditions the cache may persist until the next cleanup.
 func MaybeStopCache(ctx context.Context, cli *client.Client) {
 	// Count containers that use the cache (excluding the cache container itself)
 	containers, err := cli.ContainerList(ctx, container.ListOptions{
