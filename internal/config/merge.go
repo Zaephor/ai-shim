@@ -42,6 +42,17 @@ func Merge(base, over Config) Config {
 	if over.DINDResources != nil {
 		result.DINDResources = over.DINDResources
 	}
+	if over.Git != nil {
+		if result.Git == nil {
+			result.Git = &GitConfig{}
+		}
+		if over.Git.Name != "" {
+			result.Git.Name = over.Git.Name
+		}
+		if over.Git.Email != "" {
+			result.Git.Email = over.Git.Email
+		}
+	}
 
 	result.Env = mergeMaps(result.Env, over.Env)
 	result.Variables = mergeMaps(result.Variables, over.Variables)

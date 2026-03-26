@@ -81,6 +81,7 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 			Tools:    map[string]config.ToolDef{"t": {Type: "apt", Package: "curl", Binary: "curl"}},
 			GPU:      testutil.BoolPtr(true),
 			Resources: &config.ResourceLimits{Memory: "2g", CPUs: "1.0"},
+			Git:       &config.GitConfig{Name: "Test User", Email: "test@example.com"},
 		},
 		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin"},
 		Profile: "work",
@@ -105,6 +106,8 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	assert.Contains(t, spec.Entrypoint[2], "--extra") // passthrough args
 	assert.Contains(t, spec.Entrypoint[2], "tmux") // packages
 	assert.Contains(t, spec.Entrypoint[2], "curl") // tools
+	assert.Contains(t, spec.Entrypoint[2], "git config --global user.name") // git config
+	assert.Contains(t, spec.Entrypoint[2], "git config --global user.email") // git config
 	assert.Equal(t, "/tmp/logs", spec.LogDir)
 }
 

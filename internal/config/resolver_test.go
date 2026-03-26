@@ -114,3 +114,20 @@ func TestResolve_EnvVarOverridesAllTiers(t *testing.T) {
 	assert.Equal(t, "override-image:latest", cfg.Image, "env var should override all tiers")
 	assert.True(t, cfg.IsGPUEnabled(), "AI_SHIM_GPU=1 should enable GPU")
 }
+
+func TestResolve_GitEnvVarOverrides(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	t.Setenv("AI_SHIM_GIT_NAME", "Env User")
+	t.Setenv("AI_SHIM_GIT_EMAIL", "env@example.com")
+
+	cfg, err := Resolve(dir, "test", "test")
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Git)
+	assert.Equal(t, "Env User", cfg.Git.Name)
+	assert.Equal(t, "env@example.com", cfg.Git.Email)
+}

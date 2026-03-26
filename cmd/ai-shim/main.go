@@ -84,6 +84,8 @@ Environment Variables:
   AI_SHIM_NETWORK_SCOPE Network isolation scope
   AI_SHIM_DIND_HOSTNAME DIND container hostname
   AI_SHIM_DIND_CACHE    Enable registry cache (0/1)
+  AI_SHIM_GIT_NAME      Git user.name for container commits
+  AI_SHIM_GIT_EMAIL     Git user.email for container commits
   AI_SHIM_VERBOSE       Enable debug output (0/1)
 `)
 }

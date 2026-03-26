@@ -160,6 +160,16 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
+	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {
+		b.WriteString("  git:\n")
+		if cfg.Git.Name != "" {
+			b.WriteString(fmt.Sprintf("    name:  %s\n", cfg.Git.Name))
+		}
+		if cfg.Git.Email != "" {
+			b.WriteString(fmt.Sprintf("    email: %s\n", cfg.Git.Email))
+		}
+	}
+
 	return b.String(), nil
 }
 

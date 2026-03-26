@@ -286,6 +286,9 @@ tools:
     type: binary-download
     url: https://example.com/act
     binary: act
+git:
+  name: "Test User"
+  email: "test@example.com"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(fullConfig), 0644))
 
@@ -315,6 +318,8 @@ tools:
 		"1.0",            // resources cpus
 		"1g",             // dind_resources memory
 		"act",            // tools
+		"Test User",      // git name
+		"test@example.com", // git email
 	}
 
 	for _, sub := range expectedSubstrings {

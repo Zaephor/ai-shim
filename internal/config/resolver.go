@@ -51,6 +51,8 @@ func Resolve(configDir, agent, profile string) (Config, error) {
 //   - AI_SHIM_NETWORK_SCOPE — override network scope
 //   - AI_SHIM_DIND_HOSTNAME — override DIND sidecar hostname
 //   - AI_SHIM_DIND_CACHE    — toggle pull-through registry cache (0/1/true/false)
+//   - AI_SHIM_GIT_NAME      — git user.name for container commits
+//   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
 func loadEnvOverrides() Config {
 	var cfg Config
 
@@ -81,6 +83,12 @@ func loadEnvOverrides() Config {
 	if v := os.Getenv("AI_SHIM_DIND_CACHE"); v != "" {
 		b := v == "1" || v == "true"
 		cfg.DINDCache = &b
+	}
+
+	gitName := os.Getenv("AI_SHIM_GIT_NAME")
+	gitEmail := os.Getenv("AI_SHIM_GIT_EMAIL")
+	if gitName != "" || gitEmail != "" {
+		cfg.Git = &GitConfig{Name: gitName, Email: gitEmail}
 	}
 
 	return cfg

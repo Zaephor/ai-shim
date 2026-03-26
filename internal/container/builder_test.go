@@ -391,3 +391,33 @@ func TestBuildSpec_WithResourceLimits(t *testing.T) {
 	assert.Equal(t, "2.0", spec.Resources.CPUs)
 }
 
+func TestBuildSpec_GitConfigInEntrypoint(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Git = &config.GitConfig{Name: "Test User", Email: "test@example.com"}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, "git config --global user.name", "should set git user.name")
+	assert.Contains(t, entrypoint, "Test User", "should contain the configured name")
+	assert.Contains(t, entrypoint, "git config --global user.email", "should set git user.email")
+	assert.Contains(t, entrypoint, "test@example.com", "should contain the configured email")
+}
+
+func TestBuildSpec_GitConfigPartial(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Git = &config.GitConfig{Name: "Only Name"}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, "git config --global user.name", "should set git user.name")
+	assert.NotContains(t, entrypoint, "git config --global user.email", "should not set email when not configured")
+}
+
+func TestBuildSpec_NoGitConfig(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.NotContains(t, entrypoint, "git config --global", "should not set git config when not configured")
+}
+

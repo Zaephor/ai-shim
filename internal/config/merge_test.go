@@ -155,3 +155,28 @@ func TestMerge_DINDResources(t *testing.T) {
 	require.NotNil(t, result.DINDResources)
 	assert.Equal(t, "1g", result.DINDResources.Memory)
 }
+
+func TestMerge_GitConfig(t *testing.T) {
+	base := Config{Git: &GitConfig{Name: "Base User", Email: "base@example.com"}}
+	over := Config{Git: &GitConfig{Name: "Override User"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.Git)
+	assert.Equal(t, "Override User", result.Git.Name, "name should be overridden")
+	assert.Equal(t, "base@example.com", result.Git.Email, "email should be preserved from base")
+}
+
+func TestMerge_GitConfigNilPreserved(t *testing.T) {
+	base := Config{Git: &GitConfig{Name: "User"}}
+	over := Config{}
+	result := Merge(base, over)
+	require.NotNil(t, result.Git)
+	assert.Equal(t, "User", result.Git.Name)
+}
+
+func TestMerge_GitConfigFromNil(t *testing.T) {
+	base := Config{}
+	over := Config{Git: &GitConfig{Email: "test@example.com"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.Git)
+	assert.Equal(t, "test@example.com", result.Git.Email)
+}

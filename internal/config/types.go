@@ -34,6 +34,13 @@ type Config struct {
 	Tools         map[string]ToolDef `yaml:"tools,omitempty"`
 	Resources     *ResourceLimits    `yaml:"resources,omitempty"`      // agent container limits
 	DINDResources *ResourceLimits    `yaml:"dind_resources,omitempty"` // DIND container limits
+	Git           *GitConfig         `yaml:"git,omitempty"`            // git user config for container
+}
+
+// GitConfig defines git user identity for commits inside the container.
+type GitConfig struct {
+	Name  string `yaml:"name,omitempty"`
+	Email string `yaml:"email,omitempty"`
 }
 
 // IsDINDEnabled returns true if DIND is explicitly enabled.

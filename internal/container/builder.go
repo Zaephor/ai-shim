@@ -101,8 +101,19 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		AgentArgs:   allArgs,
 	})
 
-	// Prepend tool and package scripts to entrypoint
-	fullScript := toolScript + packageScript + entrypoint
+	// Git config setup (global, so it doesn't leak into bind-mounted repos)
+	var gitScript string
+	if p.Config.Git != nil {
+		if p.Config.Git.Name != "" {
+			gitScript += fmt.Sprintf("git config --global user.name %s\n", shellQuote(p.Config.Git.Name))
+		}
+		if p.Config.Git.Email != "" {
+			gitScript += fmt.Sprintf("git config --global user.email %s\n", shellQuote(p.Config.Git.Email))
+		}
+	}
+
+	// Prepend tool, package, and git scripts to entrypoint
+	fullScript := toolScript + packageScript + gitScript + entrypoint
 
 	env := buildEnv(p.Config.Env)
 
@@ -247,6 +258,16 @@ func randomSuffix(n int) string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())[:n]
 	}
 	return fmt.Sprintf("%x", b)[:n]
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(s, " \t\n\"'\\$`!#&|;(){}[]<>?*~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 // ValidateConfigVolumes checks all volume mount paths for security issues.
