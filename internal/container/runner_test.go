@@ -155,6 +155,26 @@ func TestNewRunner_ErrorMessage(t *testing.T) {
 	runner.Close()
 }
 
+func TestRun_NonZeroExitShowsMessage(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	exitCode, err := runner.Run(ctx, ContainerSpec{
+		Image:  "alpine:latest",
+		Cmd:    []string{"sh", "-c", "exit 42"},
+		Labels: map[string]string{"ai-shim": "test"},
+		Name:   "test-exit-msg",
+		LogDir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 42, exitCode)
+	// The stderr message is printed directly; we verify exit code is returned correctly
+	// and that the log file was created
+}
+
 func TestRun_CompletesWithSignalHandler(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()

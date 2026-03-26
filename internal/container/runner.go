@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ai-shim/ai-shim/internal/docker"
 	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"
@@ -57,13 +58,9 @@ type Runner struct {
 
 // NewRunner creates a Runner connected to the Docker daemon.
 func NewRunner(ctx context.Context) (*Runner, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := docker.NewClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("creating docker client: %w\n\nIs Docker installed? Check: https://docs.docker.com/get-docker/", err)
-	}
-	if _, err := cli.Ping(ctx); err != nil {
-		cli.Close()
-		return nil, fmt.Errorf("cannot connect to docker daemon: %w\n\nIs Docker running? Try:\n  Linux: sudo systemctl start docker\n  macOS: open -a Docker\n  Check: docker info", err)
+		return nil, err
 	}
 	return &Runner{client: cli}, nil
 }
@@ -205,7 +202,10 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		exitCode := int(status.StatusCode)
 		if exitCode != 0 {
 			r.saveExitLog(spec.LogDir, spec.Name, exitCode)
-			fmt.Fprintf(os.Stderr, "ai-shim: container exited with code %d\n", exitCode)
+			fmt.Fprintf(os.Stderr, "\nai-shim: container %s exited with code %d\n", spec.Name, exitCode)
+			if spec.LogDir != "" {
+				fmt.Fprintf(os.Stderr, "ai-shim: exit log: %s/%s.log\n", spec.LogDir, spec.Name)
+			}
 		}
 		return exitCode, nil
 	}

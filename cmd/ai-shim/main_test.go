@@ -88,6 +88,30 @@ func TestRunManage_CompletionUnsupportedShell(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported shell")
 }
 
+func TestRunManage_Run(t *testing.T) {
+	// Can't actually run (needs Docker), but verify parsing works
+	err := runManage([]string{"run"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_RunMissingAgent(t *testing.T) {
+	// "run" with no agent should return usage error
+	err := runManage([]string{"run"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_SubcommandHelp(t *testing.T) {
+	err := runManage([]string{"manage", "symlinks", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageHelp(t *testing.T) {
+	err := runManage([]string{"manage", "--help"})
+	assert.NoError(t, err)
+}
+
 func TestHelpText_ListsAllEnvVarOverrides(t *testing.T) {
 	// Read resolver.go to find all AI_SHIM_ env var names
 	data, err := os.ReadFile("../../internal/config/resolver.go")

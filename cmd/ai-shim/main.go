@@ -57,6 +57,7 @@ Usage:
   ai-shim <command> [args...]    Management commands
 
 Commands:
+  run <agent> [profile] [-- args]  Launch agent without creating a symlink
   version                        Print version
   update                         Check for and install updates
   init                           Initialize ai-shim configuration
@@ -178,9 +179,56 @@ func runManage(args []string) error {
 		}
 		return nil
 
-	case "manage":
+	case "run":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: ai-shim manage <subcommand>")
+			return fmt.Errorf("usage: ai-shim run <agent> [profile] [-- args...]")
+		}
+		agentName := args[1]
+		profile := "default"
+		var passthroughArgs []string
+
+		// Parse: ai-shim run <agent> [profile] [-- args...]
+		remaining := args[2:]
+		for i, arg := range remaining {
+			if arg == "--" {
+				passthroughArgs = remaining[i+1:]
+				break
+			}
+			if i == 0 {
+				profile = arg
+			}
+		}
+
+		// Construct the invocation name and delegate to runAgent
+		invocationName := agentName
+		if profile != "default" {
+			invocationName = agentName + "_" + profile
+		}
+		exitCode, err := runAgent(invocationName, passthroughArgs)
+		if err != nil {
+			return err
+		}
+		os.Exit(exitCode)
+		return nil
+
+	case "manage":
+		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" {
+			fmt.Print(`Usage: ai-shim manage <subcommand>
+
+Subcommands:
+  agents       List available agents
+  profiles     List profiles
+  config       Show resolved config for agent+profile
+  doctor       Run diagnostic checks
+  symlinks     Manage symlinks (create/list/remove)
+  dry-run      Preview container config
+  status       Show running containers
+  backup       Backup a profile
+  restore      Restore a profile from backup
+  disk-usage   Show storage usage breakdown
+  cleanup      Remove orphaned containers, networks, volumes
+`)
+			return nil
 		}
 		return runManageSubcommand(args[1:])
 
@@ -189,7 +237,32 @@ func runManage(args []string) error {
 	}
 }
 
+func printSubcommandHelp(cmd string) error {
+	helps := map[string]string{
+		"agents":     "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.",
+		"profiles":   "Usage: ai-shim manage profiles\n\n  List all profiles in ~/.ai-shim/profiles/.",
+		"config":     "Usage: ai-shim manage config <agent> <profile>\n\n  Show the fully resolved config for an agent+profile combination.",
+		"doctor":     "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
+		"symlinks":   "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink",
+		"dry-run":    "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
+		"cleanup":    "Usage: ai-shim manage cleanup\n\n  Remove orphaned ai-shim containers, networks, and volumes.",
+		"status":     "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
+		"backup":     "Usage: ai-shim manage backup <profile> [output-path]\n\n  Create a tar.gz backup of a profile's home directory.",
+		"restore":    "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
+		"disk-usage": "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
+	}
+	if help, ok := helps[cmd]; ok {
+		fmt.Println(help)
+		return nil
+	}
+	return fmt.Errorf("unknown subcommand: %s", cmd)
+}
+
 func runManageSubcommand(args []string) error {
+	if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+		return printSubcommandHelp(args[0])
+	}
+
 	layout := storage.NewLayout(storage.DefaultRoot())
 
 	switch args[0] {
@@ -383,6 +456,10 @@ func runAgent(name string, args []string) (int, error) {
 	// 3. Detect platform
 	platInfo := platform.Detect()
 
+	if platInfo.UID == 0 {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: running as root (UID 0). Container will run as root.\n")
+	}
+
 	// 4. Setup storage layout, ensure directories
 	layout := storage.NewLayout(storage.DefaultRoot())
 
@@ -431,10 +508,7 @@ func runAgent(name string, args []string) (int, error) {
 	defer runner.Close()
 
 	// 6.5 Ensure container image is available
-	image := cfg.Image
-	if image == "" {
-		image = container.DefaultImage
-	}
+	image := cfg.GetImage()
 	if err := runner.EnsureImage(ctx, image); err != nil {
 		return 1, fmt.Errorf("preparing image: %w", err)
 	}
@@ -455,7 +529,7 @@ func runAgent(name string, args []string) (int, error) {
 	if cfg.Resources != nil {
 		logging.Debug("resources: memory=%s cpus=%s", cfg.Resources.Memory, cfg.Resources.CPUs)
 	}
-	if cfg.DIND != nil && *cfg.DIND {
+	if cfg.IsDINDEnabled() {
 		logging.Debug("dind: enabled, hostname=%s, network_scope=%s", cfg.DINDHostname, cfg.NetworkScope)
 		if cfg.DINDResources != nil {
 			logging.Debug("dind resources: memory=%s cpus=%s", cfg.DINDResources.Memory, cfg.DINDResources.CPUs)
@@ -481,16 +555,8 @@ func runAgent(name string, args []string) (int, error) {
 	logging.Debug("container name=%s", spec.Name)
 
 	// 7.5 Create shared network and start DIND sidecar if enabled
-	dindEnabled := false
-	if cfg.DIND != nil && *cfg.DIND {
-		dindEnabled = true
-	}
-
-	if dindEnabled {
-		dindGPU := false
-		if cfg.DINDGpu != nil {
-			dindGPU = *cfg.DINDGpu
-		}
+	if cfg.IsDINDEnabled() {
+		dindGPU := cfg.IsDINDGPUEnabled()
 
 		useSysbox := dind.DetectSysbox(ctx, runner.Client())
 
@@ -519,12 +585,7 @@ func runAgent(name string, args []string) (int, error) {
 
 		// Pull-through cache
 		var cacheAddr string
-		cacheEnabled := false
-		if cfg.DINDCache != nil && *cfg.DINDCache {
-			cacheEnabled = true
-		}
-
-		if cacheEnabled {
+		if cfg.IsCacheEnabled() {
 			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
 			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir)
 			if err != nil {
@@ -565,7 +626,7 @@ func runAgent(name string, args []string) (int, error) {
 		}
 		defer func() {
 			sidecar.Stop(ctx)
-			if cacheEnabled {
+			if cfg.IsCacheEnabled() {
 				dind.MaybeStopCache(ctx, runner.Client())
 			}
 		}()
