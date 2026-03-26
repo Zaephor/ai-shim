@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -337,31 +338,24 @@ func Cleanup() (CleanupResult, error) {
 	// Clean orphaned containers
 	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
 	if err != nil {
 		return CleanupResult{}, fmt.Errorf("listing containers: %w", err)
 	}
 
 	for _, c := range containers {
+		name := containerDisplayName(c)
 		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
-			name := c.ID[:12]
-			if len(c.Names) > 0 {
-				name = c.Names[0]
-			}
 			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", name, err))
 			continue
-		}
-		name := c.ID[:12]
-		if len(c.Names) > 0 {
-			name = c.Names[0]
 		}
 		result.RemovedContainers = append(result.RemovedContainers, name)
 	}
 
 	// Clean orphaned networks
 	networks, err := cli.NetworkList(ctx, network_types.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
 	if err == nil {
 		for _, n := range networks {
@@ -373,7 +367,7 @@ func Cleanup() (CleanupResult, error) {
 
 	// Clean orphaned volumes
 	volumes, err := cli.VolumeList(ctx, volume_types.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
 	if err == nil {
 		for _, v := range volumes.Volumes {
@@ -396,7 +390,7 @@ func Status() (string, error) {
 	defer cli.Close()
 
 	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("label", "ai-shim=true")),
+		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
 	if err != nil {
 		return "", fmt.Errorf("listing containers: %w", err)
@@ -412,15 +406,12 @@ func Status() (string, error) {
 	b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", "----", "-----", "-------", "-----", "------"))
 
 	for _, c := range containers {
-		name := c.ID[:12]
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
-		}
-		agent := c.Labels["ai-shim.agent"]
-		profile := c.Labels["ai-shim.profile"]
+		name := containerDisplayName(c)
+		agent := c.Labels[container.LabelAgent]
+		profile := c.Labels[container.LabelProfile]
 
 		// Mark cache and DIND containers
-		if c.Labels["ai-shim.cache"] == "true" {
+		if c.Labels[container.LabelCache] == "true" {
 			agent = "(cache)"
 			profile = ""
 		} else if strings.HasSuffix(name, "-dind") {
@@ -517,11 +508,15 @@ func DiskUsage(layout storage.Layout) (string, error) {
 
 func dirSize(path string) (int64, error) {
 	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
 			size += info.Size()
 		}
 		return nil
@@ -563,6 +558,13 @@ func formatEnabledField(name string, val *bool) string {
 		enabled = "enabled"
 	}
 	return fmt.Sprintf("  %-12s %s\n", name+":", enabled)
+}
+
+func containerDisplayName(c container_types.Summary) string {
+	if len(c.Names) > 0 {
+		return strings.TrimPrefix(c.Names[0], "/")
+	}
+	return c.ID[:12]
 }
 
 func readDirNames(root, subdir string) ([]string, error) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	ai_container "github.com/ai-shim/ai-shim/internal/container"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -46,8 +47,8 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (stri
 			"REGISTRY_STORAGE_DELETE_ENABLED=true",
 		},
 		Labels: map[string]string{
-			"ai-shim":       "true",
-			"ai-shim.cache": "true",
+			ai_container.LabelBase:  "true",
+			ai_container.LabelCache: "true",
 		},
 	}
 
@@ -85,7 +86,7 @@ func MaybeStopCache(ctx context.Context, cli *client.Client) {
 	// Count containers that use the cache (excluding the cache container itself)
 	containers, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(
-			filters.Arg("label", "ai-shim.uses-cache=true"),
+			filters.Arg("label", ai_container.LabelUsesCache+"=true"),
 			filters.Arg("status", "running"),
 		),
 	})

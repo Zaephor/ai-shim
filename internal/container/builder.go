@@ -39,22 +39,15 @@ type BuildParams struct {
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
 func BuildSpec(p BuildParams) ContainerSpec {
-	image := p.Config.Image
-	if image == "" {
-		image = DefaultImage
-	}
-
-	hostname := p.Config.Hostname
-	if hostname == "" {
-		hostname = DefaultHostname
-	}
+	image := p.Config.GetImage()
+	hostname := p.Config.GetHostname()
 
 	user := fmt.Sprintf("%d:%d", p.Platform.UID, p.Platform.GID)
 
 	labels := map[string]string{
-		"ai-shim":         "true",
-		"ai-shim.agent":   p.Agent.Name,
-		"ai-shim.profile": p.Profile,
+		LabelBase:    "true",
+		LabelAgent:   p.Agent.Name,
+		LabelProfile: p.Profile,
 	}
 
 	homeDir := p.HomeDir
@@ -75,11 +68,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	mounts := buildMounts(p, pwd, workdir, homeDir)
 
 	// Cross-agent access mounts
-	isolated := true
-	if p.Config.Isolated != nil {
-		isolated = *p.Config.Isolated
-	}
-	crossMounts := CrossAgentMounts(p.Layout, p.Agent.Name, p.Config.AllowAgents, isolated)
+	crossMounts := CrossAgentMounts(p.Layout, p.Agent.Name, p.Config.AllowAgents, p.Config.IsIsolated())
 	mounts = append(mounts, crossMounts...)
 
 	// Tool provisioning script
@@ -130,10 +119,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
 
-	gpu := false
-	if p.Config.GPU != nil {
-		gpu = *p.Config.GPU
-	}
+	gpu := p.Config.IsGPUEnabled()
 
 	// Resource limits (optional)
 	var resources *ResourceLimits

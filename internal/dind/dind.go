@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	ai_container "github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -88,7 +89,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		labels = map[string]string{}
 	}
 	if cfg.CacheAddr != "" {
-		labels["ai-shim.uses-cache"] = "true"
+		labels[ai_container.LabelUsesCache] = "true"
 	}
 
 	containerCfg := &container.Config{
