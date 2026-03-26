@@ -1,4 +1,4 @@
-.PHONY: build test lint clean setup fmt vet e2e verify check-silent-failures
+.PHONY: build test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures
 
 BINARY := ai-shim
 MODULE := github.com/ai-shim/ai-shim
@@ -27,6 +27,9 @@ vet:
 
 e2e:
 	go test ./test/e2e/ -v -count=1
+
+e2e-ci:
+	AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s
 
 check-silent-failures:
 	@echo "Checking for silent failure patterns in production code..."
