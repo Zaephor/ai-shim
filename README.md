@@ -125,8 +125,12 @@ underscore, the `default` profile is used.
 ### Management Commands
 
 ```bash
+ai-shim init                    # initialize ai-shim configuration
+ai-shim run <agent> [profile] [-- args...]
+                                # launch agent without creating a symlink
 ai-shim version                 # print version
 ai-shim update                  # check for updates
+ai-shim completion <bash|zsh>   # generate shell completion script
 
 ai-shim manage agents           # list all built-in agents
 ai-shim manage profiles         # list configured profiles
@@ -142,6 +146,12 @@ ai-shim manage symlinks create <agent> [profile] [dir]
 ai-shim manage symlinks remove <path>
                                 # remove a symlink
 ai-shim manage cleanup          # remove orphaned ai-shim containers
+ai-shim manage status           # show running ai-shim containers
+ai-shim manage backup <profile> [path]
+                                # backup profile to tar.gz
+ai-shim manage restore <profile> <archive>
+                                # restore profile from tar.gz backup
+ai-shim manage disk-usage       # show storage usage breakdown
 ```
 
 ### Environment Variable Overrides
@@ -155,6 +165,7 @@ AI_SHIM_GPU=0/1                 # toggle GPU for agent container
 AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
+AI_SHIM_VERBOSE=0/1             # enable debug output
 ```
 
 ## Building from Source

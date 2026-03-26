@@ -282,6 +282,13 @@ pi_work                        # launch pi with work profile
 ### Direct Invocation (management only)
 
 ```
+ai-shim init                   # initialize ai-shim configuration
+ai-shim run <agent> [profile] [-- args...]
+                               # one-off agent launch without creating a symlink
+ai-shim version                # print version info
+ai-shim update                 # self-update from GitHub releases
+ai-shim completion <bash|zsh>  # generate shell completion script
+
 ai-shim manage
   agents          # list built-in and configured agents
   profiles        # list profiles
@@ -290,9 +297,10 @@ ai-shim manage
   config          # show resolved config for an agent_profile pair
   dry-run         # show full Docker container spec without launching
   doctor          # check Docker, socket, permissions, images, config
-
-ai-shim update                 # self-update from GitHub releases
-ai-shim version                # print version info
+  status          # show running ai-shim containers
+  backup          # backup a profile to tar.gz
+  restore         # restore a profile from tar.gz backup
+  disk-usage      # show storage usage breakdown by category and profile
 ```
 
 ### Environment Variable Overrides
@@ -306,6 +314,7 @@ AI_SHIM_GPU=0/1                # toggle GPU for agent container
 AI_SHIM_NETWORK_SCOPE=<scope>  # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>   # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1         # toggle pull-through registry cache
+AI_SHIM_VERBOSE=0/1            # enable debug output (handled in logging package)
 ```
 
 ai-shim produces no output by default (transparent sandbox). Errors print to stderr.
@@ -373,6 +382,9 @@ ai-shim/
     selfupdate/            # self-update from GitHub releases
     platform/              # platform abstraction (socket, uid, gpu detection)
     security/              # path validation, secret masking, safe dir checks
+    docker/                # Docker client wrapper
+    parse/                 # value parsing (memory strings, etc.)
+    logging/               # debug logging with AI_SHIM_VERBOSE and secret masking
   configs/                 # example/default config files
 ```
 
@@ -415,3 +427,9 @@ ai-shim/
 | Doctor | `ai-shim manage doctor` checks prerequisites |
 | Tool caching | Skip downloads when cache is warm (offline-friendly) |
 | Resource limits | Optional memory/CPU limits for agent and DIND containers independently |
+| Profile backup/restore | `ai-shim manage backup/restore` creates and restores tar.gz archives of profile home directories |
+| Disk usage reporting | `ai-shim manage disk-usage` shows storage breakdown by category and profile |
+| Container status display | `ai-shim manage status` lists running ai-shim containers |
+| One-off launch | `ai-shim run <agent> [profile] [-- args...]` launches without creating a symlink |
+| Shell completion | `ai-shim completion <bash\|zsh>` generates shell completion scripts |
+| Debug logging | `AI_SHIM_VERBOSE=1` enables debug output via the `internal/logging` package with secret masking |
