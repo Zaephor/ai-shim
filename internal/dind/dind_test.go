@@ -208,6 +208,48 @@ func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
 	assert.Contains(t, entrypoint, "--registry-mirror=https://custom.mirror.io")
 }
 
+func TestWaitForReady_Timeout(t *testing.T) {
+	// Unit test: verify that WaitForReady returns an error when context is cancelled.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	sidecar := &Sidecar{
+		containerID: "nonexistent-container-id",
+	}
+
+	err := sidecar.WaitForReady(ctx)
+	assert.Error(t, err, "should error on cancelled context")
+	assert.Contains(t, err.Error(), "context")
+}
+
+func TestStart_WaitsForReady(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-ready", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-ready",
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	// After Start returns, the daemon should be ready.
+	// Verify by exec-ing docker info inside the container.
+	execCfg := container.ExecOptions{
+		Cmd: []string{"docker", "info"},
+	}
+	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), execCfg)
+	require.NoError(t, err)
+	err = cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{})
+	assert.NoError(t, err, "docker info should succeed after Start returns")
+}
+
 func TestDetectSysbox(t *testing.T) {
 	cli := getClient(t)
 	defer cli.Close()

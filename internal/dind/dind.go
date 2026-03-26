@@ -167,7 +167,54 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		socketVolume:  socketVolName,
 	}
 
+	// Wait for the Docker daemon inside DIND to be ready
+	healthCtx, cancel := context.WithTimeout(ctx, HealthTimeout)
+	defer cancel()
+	if err := sidecar.WaitForReady(healthCtx); err != nil {
+		sidecar.Stop(ctx)
+		return nil, fmt.Errorf("waiting for DIND daemon: %w", err)
+	}
+
 	return sidecar, nil
+}
+
+// WaitForReady polls the DIND container until the Docker daemon is responsive.
+// It execs "docker info" inside the container repeatedly until it succeeds
+// or the context is cancelled/times out.
+func (s *Sidecar) WaitForReady(ctx context.Context) error {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("DIND health check timed out: %w", ctx.Err())
+		case <-ticker.C:
+			if s.isDaemonReady(ctx) {
+				return nil
+			}
+		}
+	}
+}
+
+// isDaemonReady checks if the Docker daemon inside the DIND container is responding.
+func (s *Sidecar) isDaemonReady(ctx context.Context) bool {
+	execCfg := container.ExecOptions{
+		Cmd: []string{"docker", "info"},
+	}
+	resp, err := s.client.ContainerExecCreate(ctx, s.containerID, execCfg)
+	if err != nil {
+		return false
+	}
+	if err := s.client.ContainerExecStart(ctx, resp.ID, container.ExecStartOptions{}); err != nil {
+		return false
+	}
+	// Check exit code
+	inspect, err := s.client.ContainerExecInspect(ctx, resp.ID)
+	if err != nil {
+		return false
+	}
+	return inspect.ExitCode == 0
 }
 
 // ContainerID returns the DIND container ID.
