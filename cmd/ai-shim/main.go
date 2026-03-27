@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/cli"
@@ -75,6 +76,7 @@ Commands:
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
   manage exec <name> <cmd...>   Execute command in running container
+  manage watch <agent> [profile] Restart agent on crash with retries
   completion <bash|zsh>          Generate shell completion script
   help                           Show this help
 
@@ -94,6 +96,7 @@ Environment Variables:
   AI_SHIM_VERBOSE       Enable debug output (0/1)
   AI_SHIM_JSON          Enable JSON output for management commands (0/1)
   AI_SHIM_NO_COLOR      Disable colored output (0/1)
+  AI_SHIM_WATCH_RETRIES Max restart count for watch mode (default 3)
 `)
 }
 
@@ -233,6 +236,7 @@ Subcommands:
   dry-run      Preview container config
   status       Show running containers
   exec         Execute command in a running container
+  watch        Restart agent on crash with retries
   backup       Backup a profile
   restore      Restore a profile from backup
   disk-usage      Show storage usage breakdown
@@ -265,6 +269,7 @@ func printSubcommandHelp(cmd string) error {
 		"agent-versions":  "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
 		"reinstall":       "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":            "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
+		"watch":           "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
 	}
 	if help, ok := helps[cmd]; ok {
 		fmt.Println(help)
@@ -527,8 +532,35 @@ func runManageSubcommand(args []string) error {
 		os.Exit(exitCode)
 		return nil
 
+	case "watch":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage watch <agent> [profile]")
+		}
+		agentName := args[1]
+		profile := "default"
+		if len(args) > 2 {
+			profile = args[2]
+		}
+
+		invocationName := agentName
+		if profile != "default" {
+			invocationName = agentName + "_" + profile
+		}
+
+		maxRetries := cli.WatchRetries()
+		exitCode, err := cli.WatchLoop(maxRetries, func() (int, error) {
+			return runAgent(invocationName, nil)
+		}, func(d time.Duration) {
+			time.Sleep(d)
+		})
+		if err != nil {
+			return err
+		}
+		os.Exit(exitCode)
+		return nil
+
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, watch", args[0])
 	}
 }
 
