@@ -473,21 +473,26 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("parsing invocation name: %w", err)
 	}
 
-	// 2. Lookup agent definition
+	// 2. Setup storage layout
+	layout := storage.NewLayout(storage.DefaultRoot())
+
+	// 2.5 Load custom agent definitions from config
+	if customDefs := agent.LoadCustomAgents(layout.ConfigDir); customDefs != nil {
+		agent.SetCustomAgents(customDefs)
+	}
+
+	// 3. Lookup agent definition
 	agentDef, ok := agent.Lookup(agentName)
 	if !ok {
 		return 1, fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s\nUse 'ai-shim manage agents' for details", agentName, formatAgentList())
 	}
 
-	// 3. Detect platform
+	// 4. Detect platform
 	platInfo := platform.Detect()
 
 	if platInfo.UID == 0 {
 		fmt.Fprintf(os.Stderr, "ai-shim: warning: running as root (UID 0). Container will run as root.\n")
 	}
-
-	// 4. Setup storage layout, ensure directories
-	layout := storage.NewLayout(storage.DefaultRoot())
 
 	// Check for first run
 	if cli.IsFirstRun(layout) {

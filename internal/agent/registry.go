@@ -24,25 +24,48 @@ var builtins = map[string]Definition{
 	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", DataDirs: []string{".config/opencode"}},
 }
 
-// Lookup returns the built-in agent definition for the given name.
+// customs holds user-defined agent definitions loaded from config.
+// Custom agents override built-ins if they share the same name.
+var customs = map[string]Definition{}
+
+// SetCustomAgents registers user-defined agents. Custom agents override
+// built-in agents when looked up by name.
+func SetCustomAgents(defs map[string]Definition) {
+	if defs == nil {
+		customs = map[string]Definition{}
+		return
+	}
+	customs = defs
+}
+
+// Lookup returns the agent definition for the given name. Custom agents
+// are checked first, then built-ins.
 func Lookup(name string) (Definition, bool) {
+	if def, ok := customs[name]; ok {
+		return def, true
+	}
 	def, ok := builtins[name]
 	return def, ok
 }
 
-// All returns a copy of all built-in agent definitions.
+// All returns a copy of all agent definitions (built-in + custom).
+// Custom agents override built-ins with the same name.
 func All() map[string]Definition {
-	result := make(map[string]Definition, len(builtins))
+	result := make(map[string]Definition, len(builtins)+len(customs))
 	for k, v := range builtins {
+		result[k] = v
+	}
+	for k, v := range customs {
 		result[k] = v
 	}
 	return result
 }
 
-// Names returns a sorted list of all built-in agent names.
+// Names returns a sorted list of all agent names (built-in + custom).
 func Names() []string {
-	names := make([]string, 0, len(builtins))
-	for k := range builtins {
+	all := All()
+	names := make([]string, 0, len(all))
+	for k := range all {
 		names = append(names, k)
 	}
 	sort.Strings(names)
