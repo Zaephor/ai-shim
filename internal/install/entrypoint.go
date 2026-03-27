@@ -38,19 +38,20 @@ func GenerateEntrypoint(p EntrypointParams) string {
 }
 
 func generateNPMInstall(p EntrypointParams) string {
-	pkg := p.Package
+	pkg := shell.Quote(p.Package)
 	if p.Version != "" {
-		pkg = fmt.Sprintf("%s@%s", p.Package, p.Version)
+		pkg = shell.Quote(fmt.Sprintf("%s@%s", p.Package, p.Version))
 	}
 	return fmt.Sprintf("echo \"Installing %s via npm...\"\nnpm install -g %s || { echo \"ERROR: npm install failed for %s\"; exit 1; }\n", pkg, pkg, pkg)
 }
 
 func generateUVInstall(p EntrypointParams) string {
-	pkg := p.Package
+	pkg := shell.Quote(p.Package)
 	if p.Version != "" {
-		pkg = fmt.Sprintf("%s==%s", p.Package, p.Version)
+		pkg = shell.Quote(fmt.Sprintf("%s==%s", p.Package, p.Version))
 	}
-	return fmt.Sprintf("echo \"Installing %s via uv...\"\nuv tool install %s || uv tool upgrade %s || { echo \"ERROR: uv install failed for %s\"; exit 1; }\n", pkg, pkg, p.Package, p.Package)
+	basePkg := shell.Quote(p.Package)
+	return fmt.Sprintf("echo \"Installing %s via uv...\"\nuv tool install %s || uv tool upgrade %s || { echo \"ERROR: uv install failed for %s\"; exit 1; }\n", pkg, pkg, basePkg, basePkg)
 }
 
 func generateCustomInstall(p EntrypointParams) string {

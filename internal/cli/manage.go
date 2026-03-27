@@ -312,6 +312,13 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 		b.WriteString(fmt.Sprintf("  Version:   %s\n", cfg.Version))
 	}
 
+	if len(cfg.Variables) > 0 {
+		b.WriteString("  Variables:\n")
+		for k, v := range cfg.Variables {
+			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+		}
+	}
+
 	if len(cfg.Env) > 0 {
 		b.WriteString("  Env:\n")
 		for k, v := range cfg.Env {

@@ -3,10 +3,18 @@ package provision
 import (
 	"crypto/sha256"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ai-shim/ai-shim/internal/shell"
 )
+
+var hexPattern = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
+// isValidChecksum validates that a checksum string is exactly 64 hex characters (SHA256).
+func isValidChecksum(s string) bool {
+	return hexPattern.MatchString(s)
+}
 
 // ToolDef mirrors config.ToolDef — the tool definition from config.
 type ToolDef struct {
@@ -50,8 +58,8 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
 		b.WriteString(fmt.Sprintf("  curl -fsSL -o \"%s\"/%s %s\n", targetDir, bin, url))
 		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
-		if tool.Checksum != "" {
-			b.WriteString(fmt.Sprintf("  echo \"%s  %s\"/%s | sha256sum -c -\n", tool.Checksum, targetDir, bin))
+		if tool.Checksum != "" && isValidChecksum(tool.Checksum) {
+			b.WriteString(fmt.Sprintf("  echo '%s  %s/%s' | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; exit 1; }\n", tool.Checksum, targetDir, bin, bin))
 		}
 		b.WriteString("fi\n")
 

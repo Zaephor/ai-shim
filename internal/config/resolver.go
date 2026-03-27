@@ -75,6 +75,7 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 //   - AI_SHIM_DIND_TLS      — toggle TLS for DIND socket (0/1/true/false)
 //   - AI_SHIM_GIT_NAME      — git user.name for container commits
 //   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
+//   - AI_SHIM_SECURITY_PROFILE — container security profile (default/strict/none)
 //   - AI_SHIM_JSON          — enable JSON output for management commands (0/1)
 //   - AI_SHIM_NO_COLOR      — disable colored output (0/1)
 func loadEnvOverrides() Config {
