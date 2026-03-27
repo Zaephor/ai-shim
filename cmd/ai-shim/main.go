@@ -637,10 +637,11 @@ func runAgent(name string, args []string) (int, error) {
 	}
 
 	// 5.1 Validate config
-	if warnings := cfg.Validate(); len(warnings) > 0 {
-		for _, w := range warnings {
-			fmt.Fprintf(os.Stderr, "ai-shim: config warning: %s\n", w)
+	if errs := cfg.Validate(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "ai-shim: config error: %s\n", e)
 		}
+		return 1, fmt.Errorf("invalid config: %d error(s)", len(errs))
 	}
 
 	// 5.5 Validate working directory
@@ -654,7 +655,10 @@ func runAgent(name string, args []string) (int, error) {
 
 	// 5.6 Validate config volumes
 	if errs := container.ValidateConfigVolumes(cfg.Volumes); len(errs) > 0 {
-		return 1, fmt.Errorf("invalid volume config: %v", errs[0])
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "ai-shim: invalid volume: %v\n", e)
+		}
+		return 1, fmt.Errorf("invalid volume config: %d error(s)", len(errs))
 	}
 
 	// 5.7 Pre-create agent data dirs/files for correct ownership
@@ -743,7 +747,11 @@ func runAgent(name string, args []string) (int, error) {
 		if err != nil {
 			return 1, fmt.Errorf("creating network: %w", err)
 		}
-		defer netHandle.Remove(ctx)
+		defer func() {
+			if err := netHandle.Remove(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove network: %v\n", err)
+			}
+		}()
 
 		// Attach agent container to network
 		spec.NetworkID = netHandle.ID

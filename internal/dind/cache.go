@@ -6,6 +6,7 @@ import (
 	"os"
 
 	ai_container "github.com/ai-shim/ai-shim/internal/container"
+	"github.com/ai-shim/ai-shim/internal/logging"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -91,10 +92,12 @@ func MaybeStopCache(ctx context.Context, cli *client.Client) {
 		),
 	})
 	if err != nil {
+		logging.Debug("cache: failed to list cache consumers: %v", err)
 		return
 	}
 
 	if len(containers) > 0 {
+		logging.Debug("cache: %d consumer(s) still running, keeping cache", len(containers))
 		return // other consumers still running
 	}
 
@@ -102,9 +105,18 @@ func MaybeStopCache(ctx context.Context, cli *client.Client) {
 	cacheContainers, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
 	})
-	if err != nil || len(cacheContainers) == 0 {
+	if err != nil {
+		logging.Debug("cache: failed to find cache container: %v", err)
+		return
+	}
+	if len(cacheContainers) == 0 {
+		logging.Debug("cache: no cache container found to stop")
 		return
 	}
 
-	_ = cli.ContainerRemove(ctx, cacheContainers[0].ID, container.RemoveOptions{Force: true})
+	if err := cli.ContainerRemove(ctx, cacheContainers[0].ID, container.RemoveOptions{Force: true}); err != nil {
+		logging.Debug("cache: failed to remove cache container: %v", err)
+	} else {
+		logging.Debug("cache: removed cache container %s", cacheContainers[0].ID[:12])
+	}
 }

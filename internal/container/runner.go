@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ai-shim/ai-shim/internal/docker"
+	"github.com/ai-shim/ai-shim/internal/logging"
 	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"
@@ -83,7 +84,9 @@ func (r *Runner) EnsureImage(ctx context.Context, image string) error {
 	}
 	defer reader.Close()
 	// Consume the reader to complete the pull
-	io.Copy(io.Discard, reader)
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		logging.Debug("image pull stream: %v", err)
+	}
 	fmt.Fprintf(os.Stderr, "ai-shim: image %s ready\n", image)
 	return nil
 }
@@ -184,13 +187,17 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 
 	if spec.Stdin {
 		go func() {
-			io.Copy(attachResp.Conn, os.Stdin)
+			if _, err := io.Copy(attachResp.Conn, os.Stdin); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: stdin copy error: %v\n", err)
+			}
 			attachResp.CloseWrite()
 		}()
 	}
 
 	if spec.TTY {
-		io.Copy(os.Stdout, attachResp.Reader)
+		if _, err := io.Copy(os.Stdout, attachResp.Reader); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: stdout copy error: %v\n", err)
+		}
 	} else {
 		stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
 	}

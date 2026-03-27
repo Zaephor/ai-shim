@@ -79,6 +79,13 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		b.WriteString(fmt.Sprintf("  version:  %s%s\n", cfg.Version, src("version")))
 	}
 
+	if len(cfg.Variables) > 0 {
+		b.WriteString("  variables:\n")
+		for k, v := range cfg.Variables {
+			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+		}
+	}
+
 	if len(cfg.Env) > 0 {
 		b.WriteString(fmt.Sprintf("  env:%s\n", src("env")))
 		for k, v := range cfg.Env {
@@ -333,9 +340,23 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 		b.WriteString(fmt.Sprintf("  Passthrough:  %s\n", strings.Join(args, " ")))
 	}
 
+	if len(cfg.Packages) > 0 {
+		b.WriteString("  Packages:\n")
+		for _, p := range cfg.Packages {
+			b.WriteString(fmt.Sprintf("    - %s\n", p))
+		}
+	}
+
 	b.WriteString(formatEnabledField("DIND", cfg.DIND))
 	b.WriteString(formatEnabledField("GPU", cfg.GPU))
 	b.WriteString(formatEnabledField("DIND GPU", cfg.DINDGpu))
+
+	if cfg.NetworkScope != "" {
+		b.WriteString(fmt.Sprintf("  Network:   %s\n", cfg.NetworkScope))
+	}
+	if cfg.DINDHostname != "" {
+		b.WriteString(fmt.Sprintf("  DIND Host: %s\n", cfg.DINDHostname))
+	}
 
 	if cfg.Resources != nil {
 		b.WriteString("  Resources:\n")
@@ -354,6 +375,52 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 		if cfg.DINDResources.CPUs != "" {
 			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.DINDResources.CPUs))
 		}
+	}
+
+	if len(cfg.DINDMirrors) > 0 {
+		b.WriteString("  DIND Mirrors:\n")
+		for _, m := range cfg.DINDMirrors {
+			b.WriteString(fmt.Sprintf("    - %s\n", m))
+		}
+	}
+
+	b.WriteString(formatEnabledField("DIND Cache", cfg.DINDCache))
+	b.WriteString(formatEnabledField("DIND TLS", cfg.DINDTLS))
+	b.WriteString(formatEnabledField("Isolated", cfg.Isolated))
+
+	if len(cfg.AllowAgents) > 0 {
+		b.WriteString("  Allow Agents:\n")
+		for _, a := range cfg.AllowAgents {
+			b.WriteString(fmt.Sprintf("    - %s\n", a))
+		}
+	}
+
+	if len(cfg.MCPServers) > 0 {
+		b.WriteString("  MCP Servers:\n")
+		for name, srv := range cfg.MCPServers {
+			b.WriteString(fmt.Sprintf("    %s: %s\n", name, srv.Command))
+		}
+	}
+
+	if len(cfg.Tools) > 0 {
+		b.WriteString("  Tools:\n")
+		for name, tool := range cfg.Tools {
+			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
+		}
+	}
+
+	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {
+		b.WriteString("  Git:\n")
+		if cfg.Git.Name != "" {
+			b.WriteString(fmt.Sprintf("    name:  %s\n", cfg.Git.Name))
+		}
+		if cfg.Git.Email != "" {
+			b.WriteString(fmt.Sprintf("    email: %s\n", cfg.Git.Email))
+		}
+	}
+
+	if cfg.SecurityProfile != "" {
+		b.WriteString(fmt.Sprintf("  Security:  %s\n", cfg.SecurityProfile))
 	}
 
 	return b.String(), nil
@@ -402,7 +469,9 @@ func Cleanup() (CleanupResult, error) {
 	})
 	if err == nil {
 		for _, n := range networks {
-			if err := cli.NetworkRemove(ctx, n.ID); err == nil {
+			if err := cli.NetworkRemove(ctx, n.ID); err != nil {
+				result.Failed = append(result.Failed, fmt.Sprintf("network %s: %v", n.Name, err))
+			} else {
 				result.RemovedNetworks = append(result.RemovedNetworks, n.Name)
 			}
 		}
@@ -414,7 +483,9 @@ func Cleanup() (CleanupResult, error) {
 	})
 	if err == nil {
 		for _, v := range volumes.Volumes {
-			if err := cli.VolumeRemove(ctx, v.Name, true); err == nil {
+			if err := cli.VolumeRemove(ctx, v.Name, true); err != nil {
+				result.Failed = append(result.Failed, fmt.Sprintf("volume %s: %v", v.Name, err))
+			} else {
 				result.RemovedVolumes = append(result.RemovedVolumes, v.Name)
 			}
 		}
