@@ -27,7 +27,15 @@ jobs:
         with:
           go-version: '1.25.6'
       - name: Check formatting
-        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+        run: |
+          bad=$(gofmt -l .)
+          if [ -n "$bad" ]; then
+            echo "::error::The following files have formatting issues:"
+            echo "$bad"
+            echo ""
+            echo "Tip: Run 'make setup' to install lefthook pre-commit hooks that auto-fix formatting."
+            exit 1
+          fi
       - name: Vet
         run: go vet ./...
       - name: Tidy check
