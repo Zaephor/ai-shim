@@ -9,7 +9,7 @@ func BashCompletion() string {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     commands="version update init manage completion help"
-    manage_commands="agents profiles config doctor symlinks dry-run cleanup status exec watch"
+    manage_commands="agents profiles config doctor symlinks dry-run cleanup status exec watch switch-profile"
 
     case "${prev}" in
         ai-shim)
@@ -57,6 +57,7 @@ _ai_shim() {
         'status:Show running containers'
         'exec:Execute command in running container'
         'watch:Restart agent on crash with retries'
+        'switch-profile:Set the default profile'
     )
 
     case "${words[2]}" in

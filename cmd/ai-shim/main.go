@@ -77,6 +77,7 @@ Commands:
   manage reinstall <agent>       Force reinstall an agent
   manage exec <name> <cmd...>   Execute command in running container
   manage watch <agent> [profile] Restart agent on crash with retries
+  manage switch-profile <profile> Set the default profile
   completion <bash|zsh>          Generate shell completion script
   help                           Show this help
 
@@ -228,17 +229,18 @@ func runManage(args []string) error {
 			fmt.Print(`Usage: ai-shim manage <subcommand>
 
 Subcommands:
-  agents       List available agents
-  profiles     List profiles
-  config       Show resolved config for agent+profile
-  doctor       Run diagnostic checks
-  symlinks     Manage symlinks (create/list/remove)
-  dry-run      Preview container config
-  status       Show running containers
-  exec         Execute command in a running container
-  watch        Restart agent on crash with retries
-  backup       Backup a profile
-  restore      Restore a profile from backup
+  agents          List available agents
+  profiles        List profiles
+  config          Show resolved config for agent+profile
+  doctor          Run diagnostic checks
+  symlinks        Manage symlinks (create/list/remove)
+  dry-run         Preview container config
+  status          Show running containers
+  exec            Execute command in a running container
+  watch           Restart agent on crash with retries
+  switch-profile  Set the default profile
+  backup          Backup a profile
+  restore         Restore a profile from backup
   disk-usage      Show storage usage breakdown
   cleanup         Remove orphaned containers, networks, volumes
   agent-versions  Show installed agent versions
@@ -270,6 +272,7 @@ func printSubcommandHelp(cmd string) error {
 		"reinstall":       "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":            "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
 		"watch":           "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
+		"switch-profile":  "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
 	}
 	if help, ok := helps[cmd]; ok {
 		fmt.Println(help)
@@ -542,6 +545,13 @@ func runManageSubcommand(args []string) error {
 			profile = args[2]
 		}
 
+		// Use current profile as fallback if profile not specified
+		if profile == "default" {
+			if current := cli.CurrentProfile(layout); current != "default" {
+				profile = current
+			}
+		}
+
 		invocationName := agentName
 		if profile != "default" {
 			invocationName = agentName + "_" + profile
@@ -559,8 +569,18 @@ func runManageSubcommand(args []string) error {
 		os.Exit(exitCode)
 		return nil
 
+	case "switch-profile":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage switch-profile <profile>")
+		}
+		if err := cli.SwitchProfile(layout, args[1]); err != nil {
+			return err
+		}
+		fmt.Printf("Default profile set to: %s\n", args[1])
+		return nil
+
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, watch", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, watch, switch-profile", args[0])
 	}
 }
 
@@ -569,6 +589,15 @@ func runAgent(name string, args []string) (int, error) {
 	agentName, profileName, err := invocation.ParseName(name)
 	if err != nil {
 		return 1, fmt.Errorf("parsing invocation name: %w", err)
+	}
+
+	// 1.5. If profile is "default" (no profile in symlink name), check for
+	// a current-profile marker file as a fallback.
+	if profileName == "default" {
+		fallbackLayout := storage.NewLayout(storage.DefaultRoot())
+		if current := cli.CurrentProfile(fallbackLayout); current != "default" {
+			profileName = current
+		}
 	}
 
 	// 2. Setup storage layout
