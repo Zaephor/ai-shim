@@ -28,7 +28,7 @@ func GenerateEntrypoint(p EntrypointParams) string {
 		b.WriteString(generateCustomInstall(p))
 	}
 
-	b.WriteString(fmt.Sprintf("\nexec %s", p.Binary))
+	b.WriteString(fmt.Sprintf("\nexec %s", shell.Quote(p.Binary)))
 	for _, arg := range p.AgentArgs {
 		b.WriteString(fmt.Sprintf(" %s", shell.Quote(arg)))
 	}
