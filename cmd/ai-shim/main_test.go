@@ -142,3 +142,20 @@ func TestHelpText_ListsAllEnvVarOverrides(t *testing.T) {
 			"help text in main.go should mention %s (defined in resolver.go)", envVar)
 	}
 }
+
+func TestRunManage_ManageAgentVersions(t *testing.T) {
+	err := runManage([]string{"manage", "agent-versions"})
+	assert.NoError(t, err, "manage agent-versions should be a valid command")
+}
+
+func TestRunManage_ManageReinstallMissingAgent(t *testing.T) {
+	err := runManage([]string{"manage", "reinstall"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageReinstallUnknownAgent(t *testing.T) {
+	err := runManage([]string{"manage", "reinstall", "nonexistent"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown agent")
+}
