@@ -45,21 +45,8 @@ func (c Config) Validate() []string {
 	warnings = append(warnings, validateImageDigest(c.Image)...)
 	warnings = append(warnings, validateResourceLimits("resources", c.Resources)...)
 	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
-	warnings = append(warnings, validateNetworkRules(c.NetworkRules)...)
 	warnings = append(warnings, validateSecurityProfile(c.SecurityProfile)...)
 
-	return warnings
-}
-
-// validateNetworkRules checks that network rules are consistent.
-func validateNetworkRules(rules *NetworkRules) []string {
-	if rules == nil {
-		return nil
-	}
-	var warnings []string
-	if len(rules.AllowedHosts) > 0 && len(rules.BlockedHosts) > 0 {
-		warnings = append(warnings, "network_rules: cannot set both allowed_hosts and blocked_hosts")
-	}
 	return warnings
 }
 

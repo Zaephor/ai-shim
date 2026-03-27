@@ -37,15 +37,7 @@ type Config struct {
 	Resources       *ResourceLimits          `yaml:"resources,omitempty" json:"resources,omitempty"`
 	DINDResources   *ResourceLimits          `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
 	Git             *GitConfig               `yaml:"git,omitempty" json:"git,omitempty"`
-	NetworkRules    *NetworkRules            `yaml:"network_rules,omitempty" json:"network_rules,omitempty"`
 	SecurityProfile string                   `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
-}
-
-// NetworkRules defines egress firewall rules for the container.
-type NetworkRules struct {
-	AllowedHosts []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
-	BlockedHosts []string `yaml:"blocked_hosts,omitempty" json:"blocked_hosts,omitempty"`
-	AllowedPorts []string `yaml:"allowed_ports,omitempty" json:"allowed_ports,omitempty"`
 }
 
 // GitConfig defines git user identity for commits inside the container.

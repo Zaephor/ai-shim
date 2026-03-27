@@ -173,28 +173,6 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
-	if cfg.NetworkRules != nil {
-		b.WriteString(fmt.Sprintf("  network_rules:%s\n", src("network_rules")))
-		if len(cfg.NetworkRules.AllowedHosts) > 0 {
-			b.WriteString("    allowed_hosts:\n")
-			for _, h := range cfg.NetworkRules.AllowedHosts {
-				b.WriteString(fmt.Sprintf("      - %s\n", h))
-			}
-		}
-		if len(cfg.NetworkRules.BlockedHosts) > 0 {
-			b.WriteString("    blocked_hosts:\n")
-			for _, h := range cfg.NetworkRules.BlockedHosts {
-				b.WriteString(fmt.Sprintf("      - %s\n", h))
-			}
-		}
-		if len(cfg.NetworkRules.AllowedPorts) > 0 {
-			b.WriteString("    allowed_ports:\n")
-			for _, p := range cfg.NetworkRules.AllowedPorts {
-				b.WriteString(fmt.Sprintf("      - %s\n", p))
-			}
-		}
-	}
-
 	if cfg.SecurityProfile != "" {
 		b.WriteString(fmt.Sprintf("  security_profile: %s%s\n", cfg.SecurityProfile, src("security_profile")))
 	}

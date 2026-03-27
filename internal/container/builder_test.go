@@ -521,26 +521,6 @@ func TestMCPServersJSON(t *testing.T) {
 	assert.Contains(t, result, `"K":"V"`)
 }
 
-func TestBuildSpec_FirewallRulesInEntrypoint(t *testing.T) {
-	p := defaultBuildParams()
-	p.Config.NetworkRules = &config.NetworkRules{
-		AllowedHosts: []string{"api.example.com"},
-	}
-	spec := BuildSpec(p)
-
-	entrypoint := spec.Entrypoint[2]
-	assert.Contains(t, entrypoint, "iptables", "firewall rules should be in entrypoint")
-	assert.Contains(t, entrypoint, "api.example.com", "allowed host should be in entrypoint")
-}
-
-func TestBuildSpec_NoFirewallRulesWhenNil(t *testing.T) {
-	p := defaultBuildParams()
-	spec := BuildSpec(p)
-
-	entrypoint := spec.Entrypoint[2]
-	assert.NotContains(t, entrypoint, "iptables", "no iptables rules when NetworkRules is nil")
-}
-
 func TestBuildSpec_SecurityProfileDefault(t *testing.T) {
 	p := defaultBuildParams()
 	spec := BuildSpec(p)

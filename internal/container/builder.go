@@ -12,7 +12,6 @@ import (
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/install"
-	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/provision"
 	"github.com/ai-shim/ai-shim/internal/security"
@@ -111,11 +110,8 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		}
 	}
 
-	// Network firewall rules (iptables, runs before agent launch)
-	firewallScript := network.GenerateFirewallScript(p.Config.NetworkRules)
-
-	// Prepend tool, package, git, and firewall scripts to entrypoint
-	fullScript := toolScript + packageScript + gitScript + firewallScript + entrypoint
+	// Prepend tool, package, and git scripts to entrypoint
+	fullScript := toolScript + packageScript + gitScript + entrypoint
 
 	env := buildEnv(p.Config.Env)
 

@@ -84,10 +84,6 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.Git != nil {
 			sources.Fields["git"] = name
 		}
-		if cfg.NetworkRules != nil {
-			sources.Fields["network_rules"] = name
-		}
-
 		if len(cfg.Env) > 0 {
 			sources.Fields["env"] = name
 		}

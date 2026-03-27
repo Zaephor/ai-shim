@@ -45,9 +45,6 @@ func Merge(base, over Config) Config {
 	if over.DINDResources != nil {
 		result.DINDResources = over.DINDResources
 	}
-	if over.NetworkRules != nil {
-		result.NetworkRules = over.NetworkRules
-	}
 	if over.SecurityProfile != "" {
 		result.SecurityProfile = over.SecurityProfile
 	}

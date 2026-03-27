@@ -568,7 +568,7 @@ func TestReinstall_NotInstalled(t *testing.T) {
 	assert.Contains(t, err.Error(), "not installed")
 }
 
-func TestShowConfig_NetworkRulesAndSecurityProfile(t *testing.T) {
+func TestShowConfig_SecurityProfile(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")
 	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
@@ -578,19 +578,11 @@ func TestShowConfig_NetworkRulesAndSecurityProfile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
 image: "test:latest"
 hostname: "test"
-network_rules:
-  allowed_hosts:
-    - api.example.com
-  allowed_ports:
-    - "443"
 security_profile: strict
 `), 0644))
 
 	layout := storage.NewLayout(root)
 	output, err := ShowConfig(layout, "claude-code", "work")
 	require.NoError(t, err)
-	assert.Contains(t, output, "network_rules:")
-	assert.Contains(t, output, "api.example.com")
-	assert.Contains(t, output, "443")
 	assert.Contains(t, output, "security_profile: strict")
 }
