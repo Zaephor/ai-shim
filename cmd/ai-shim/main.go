@@ -72,6 +72,8 @@ Commands:
   manage disk-usage              Show storage usage breakdown
   manage cleanup                 Remove orphaned containers
   manage status                  Show running containers
+  manage agent-versions          Show installed agent versions
+  manage reinstall <agent>       Force reinstall an agent
   completion <bash|zsh>          Generate shell completion script
   help                           Show this help
 
@@ -229,8 +231,10 @@ Subcommands:
   status       Show running containers
   backup       Backup a profile
   restore      Restore a profile from backup
-  disk-usage   Show storage usage breakdown
-  cleanup      Remove orphaned containers, networks, volumes
+  disk-usage      Show storage usage breakdown
+  cleanup         Remove orphaned containers, networks, volumes
+  agent-versions  Show installed agent versions
+  reinstall       Force reinstall an agent
 `)
 			return nil
 		}
@@ -253,7 +257,9 @@ func printSubcommandHelp(cmd string) error {
 		"status":     "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
 		"backup":     "Usage: ai-shim manage backup <profile> [output-path]\n\n  Create a tar.gz backup of a profile's home directory.",
 		"restore":    "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
-		"disk-usage": "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
+		"disk-usage":      "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
+		"agent-versions":  "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
+		"reinstall":       "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
 	}
 	if help, ok := helps[cmd]; ok {
 		fmt.Println(help)
@@ -439,8 +445,24 @@ func runManageSubcommand(args []string) error {
 		}
 		return nil
 
+	case "agent-versions":
+		output := cli.AgentVersions(layout)
+		fmt.Print(output)
+		return nil
+
+	case "reinstall":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage reinstall <agent> [profile]")
+		}
+		agentName := args[1]
+		if err := cli.Reinstall(layout, agentName); err != nil {
+			return err
+		}
+		fmt.Printf("Agent %s bin cache cleared. It will be reinstalled on next launch.\n", agentName)
+		return nil
+
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall", args[0])
 	}
 }
 

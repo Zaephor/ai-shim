@@ -27,6 +27,7 @@ type Sidecar struct {
 	containerName string
 	hostname      string
 	socketVolume  string // Docker volume name for the DIND socket
+	certsVolume   string // Docker volume name for TLS certs (empty if TLS disabled)
 }
 
 // ResourceLimits defines container resource constraints for DIND.
@@ -47,6 +48,7 @@ type Config struct {
 	Mirrors       []string         // registry mirror URLs
 	CacheAddr     string           // pull-through cache address (added as mirror)
 	Resources     *ResourceLimits  // optional resource constraints
+	TLS           bool             // enable TLS for DIND socket communication
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -92,24 +94,51 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		labels[ai_container.LabelUsesCache] = "true"
 	}
 
+	// TLS configuration
+	var tlsEnv string
+	var certsVolName string
+	if cfg.TLS {
+		tlsEnv = "DOCKER_TLS_CERTDIR=/certs"
+		certsVolName = baseName + "-certs"
+		_, err := cli.VolumeCreate(ctx, volume.CreateOptions{
+			Name:   certsVolName,
+			Labels: cfg.Labels,
+		})
+		if err != nil {
+			_ = cli.VolumeRemove(ctx, socketVolName, true)
+			return nil, fmt.Errorf("creating DIND certs volume: %w", err)
+		}
+	} else {
+		tlsEnv = "DOCKER_TLS_CERTDIR="
+	}
+
 	containerCfg := &container.Config{
 		Image:      image,
 		Hostname:   cfg.Hostname,
 		Labels:     labels,
-		Env:        []string{"DOCKER_TLS_CERTDIR="}, // disable TLS for simplicity
+		Env:        []string{tlsEnv},
 		Entrypoint: entrypoint,
+	}
+
+	mounts := []mount.Mount{
+		{
+			Type:   mount.TypeVolume,
+			Source: socketVolName,
+			Target: "/var/run",
+		},
+	}
+	if cfg.TLS {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: certsVolName,
+			Target: "/certs",
+		})
 	}
 
 	hostCfg := &container.HostConfig{
 		Privileged:  true,
 		NetworkMode: container.NetworkMode(cfg.NetworkID),
-		Mounts: []mount.Mount{
-			{
-				Type:   mount.TypeVolume,
-				Source: socketVolName,
-				Target: "/var/run",
-			},
-		},
+		Mounts:      mounts,
 	}
 
 	// Use Sysbox if requested
@@ -147,8 +176,11 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
-		// Clean up the volume on failure
+		// Clean up volumes on failure
 		_ = cli.VolumeRemove(ctx, socketVolName, true)
+		if certsVolName != "" {
+			_ = cli.VolumeRemove(ctx, certsVolName, true)
+		}
 		return nil, fmt.Errorf("creating DIND container: %w", err)
 	}
 
@@ -165,6 +197,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		containerName: cfg.ContainerName,
 		hostname:      cfg.Hostname,
 		socketVolume:  socketVolName,
+		certsVolume:   certsVolName,
 	}
 
 	// Wait for the Docker daemon inside DIND to be ready
@@ -237,6 +270,12 @@ func (s *Sidecar) SocketVolume() string {
 	return s.socketVolume
 }
 
+// CertsVolume returns the Docker volume name containing TLS certs,
+// or empty string if TLS is not enabled.
+func (s *Sidecar) CertsVolume() string {
+	return s.certsVolume
+}
+
 // Stop removes the DIND sidecar container and its socket volume.
 func (s *Sidecar) Stop(ctx context.Context) error {
 	var firstErr error
@@ -247,6 +286,12 @@ func (s *Sidecar) Stop(ctx context.Context) error {
 	if s.socketVolume != "" {
 		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("removing DIND socket volume: %w", err)
+		}
+	}
+	// Remove the certs volume if TLS was enabled
+	if s.certsVolume != "" {
+		if err := s.client.VolumeRemove(ctx, s.certsVolume, true); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("removing DIND certs volume: %w", err)
 		}
 	}
 	return firstErr

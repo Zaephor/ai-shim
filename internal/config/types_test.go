@@ -46,3 +46,9 @@ func TestGetHostname(t *testing.T) {
 	assert.Equal(t, "ai-shim", Config{}.GetHostname())
 	assert.Equal(t, "custom", Config{Hostname: "custom"}.GetHostname())
 }
+
+func TestIsDINDTLSEnabled(t *testing.T) {
+	assert.False(t, Config{}.IsDINDTLSEnabled(), "nil should be false")
+	assert.True(t, Config{DINDTLS: testutil.BoolPtr(true)}.IsDINDTLSEnabled())
+	assert.False(t, Config{DINDTLS: testutil.BoolPtr(false)}.IsDINDTLSEnabled())
+}

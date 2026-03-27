@@ -250,6 +250,82 @@ func TestStart_WaitsForReady(t *testing.T) {
 	assert.NoError(t, err, "docker info should succeed after Start returns")
 }
 
+func TestStart_TLS(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-tls", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-tls",
+		TLS:       true,
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	assert.NotEmpty(t, sidecar.ContainerID())
+	assert.NotEmpty(t, sidecar.CertsVolume(), "TLS sidecar should have a certs volume")
+
+	// Verify TLS env var was set on the container
+	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	require.NoError(t, err)
+
+	var foundTLSEnv bool
+	for _, env := range inspect.Config.Env {
+		if env == "DOCKER_TLS_CERTDIR=/certs" {
+			foundTLSEnv = true
+		}
+	}
+	assert.True(t, foundTLSEnv, "DOCKER_TLS_CERTDIR should be set to /certs")
+
+	// Verify certs volume mount exists
+	var foundCertsMount bool
+	for _, m := range inspect.Mounts {
+		if m.Destination == "/certs" {
+			foundCertsMount = true
+		}
+	}
+	assert.True(t, foundCertsMount, "should have /certs volume mount")
+}
+
+func TestStart_NoTLS(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-notls", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-notls",
+		TLS:       false,
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	assert.Empty(t, sidecar.CertsVolume(), "non-TLS sidecar should not have a certs volume")
+
+	// Verify TLS is disabled
+	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	require.NoError(t, err)
+
+	var foundEmptyTLS bool
+	for _, env := range inspect.Config.Env {
+		if env == "DOCKER_TLS_CERTDIR=" {
+			foundEmptyTLS = true
+		}
+	}
+	assert.True(t, foundEmptyTLS, "DOCKER_TLS_CERTDIR should be empty when TLS disabled")
+}
+
 func TestDetectSysbox(t *testing.T) {
 	cli := getClient(t)
 	defer cli.Close()
