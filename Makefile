@@ -42,4 +42,5 @@ check-silent-failures:
 verify: fmt vet lint test check-silent-failures
 
 setup:
-	git config core.hooksPath .githooks
+	@command -v lefthook >/dev/null || (echo "Installing lefthook..." && go install github.com/evilmartians/lefthook@latest)
+	lefthook install

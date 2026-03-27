@@ -1,0 +1,45 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.go"
+      run: gofmt -l -w {staged_files} && git add {staged_files}
+      stage_fixed: true
+
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+
+    tidy:
+      glob: "*.go"
+      run: go mod tidy && git diff --exit-code go.mod go.sum
+
+    lint:
+      glob: "*.go"
+      run: golangci-lint run ./...
+
+    test:
+      glob: "*.go"
+      run: >
+        echo {staged_files} | tr ' ' '\n' |
+        sed 's|/[^/]*$||' | sort -u | sed 's|^|./|' |
+        xargs go test -short -count=1
+
+    silent-failures:
+      glob: "*.go"
+      exclude: "_test\\.go$"
+      run: "! grep -n '2>/dev/null' {staged_files} | grep -v 'command -v' | grep -v '_test.go'"
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: |
+        msg=$(head -1 {1})
+        if echo "$msg" | grep -qE '^(Merge|Revert) '; then exit 0; fi
+        if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'; then
+          echo "ERROR: Commit message does not follow Conventional Commits format."
+          echo "Expected: <type>(<optional scope>): <description>"
+          echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+          echo "Got: $msg"
+          exit 1
+        fi
