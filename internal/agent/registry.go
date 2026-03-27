@@ -1,6 +1,11 @@
 package agent
 
-import "sort"
+import (
+	"fmt"
+	"os"
+	"sort"
+	"sync"
+)
 
 // Definition describes a built-in coding agent and how to install it.
 type Definition struct {
@@ -24,13 +29,34 @@ var builtins = map[string]Definition{
 	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", DataDirs: []string{".config/opencode"}},
 }
 
+func init() {
+	// Validate built-in agent data paths at startup (belt and suspenders).
+	for name, def := range builtins {
+		for _, dir := range def.DataDirs {
+			if err := ValidateDataPath(dir); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: BUG: built-in agent %q has invalid data_dir: %v\n", name, err)
+			}
+		}
+		for _, file := range def.DataFiles {
+			if err := ValidateDataPath(file); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: BUG: built-in agent %q has invalid data_file: %v\n", name, err)
+			}
+		}
+	}
+}
+
 // customs holds user-defined agent definitions loaded from config.
 // Custom agents override built-ins if they share the same name.
-var customs = map[string]Definition{}
+var (
+	customs   = map[string]Definition{}
+	customsMu sync.RWMutex
+)
 
 // SetCustomAgents registers user-defined agents. Custom agents override
 // built-in agents when looked up by name.
 func SetCustomAgents(defs map[string]Definition) {
+	customsMu.Lock()
+	defer customsMu.Unlock()
 	if defs == nil {
 		customs = map[string]Definition{}
 		return
@@ -41,6 +67,8 @@ func SetCustomAgents(defs map[string]Definition) {
 // Lookup returns the agent definition for the given name. Custom agents
 // are checked first, then built-ins.
 func Lookup(name string) (Definition, bool) {
+	customsMu.RLock()
+	defer customsMu.RUnlock()
 	if def, ok := customs[name]; ok {
 		return def, true
 	}
@@ -51,6 +79,8 @@ func Lookup(name string) (Definition, bool) {
 // All returns a copy of all agent definitions (built-in + custom).
 // Custom agents override built-ins with the same name.
 func All() map[string]Definition {
+	customsMu.RLock()
+	defer customsMu.RUnlock()
 	result := make(map[string]Definition, len(builtins)+len(customs))
 	for k, v := range builtins {
 		result[k] = v

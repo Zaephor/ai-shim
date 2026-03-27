@@ -3,6 +3,8 @@ package install
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ai-shim/ai-shim/internal/shell"
 )
 
 type EntrypointParams struct {
@@ -28,7 +30,7 @@ func GenerateEntrypoint(p EntrypointParams) string {
 
 	b.WriteString(fmt.Sprintf("\nexec %s", p.Binary))
 	for _, arg := range p.AgentArgs {
-		b.WriteString(fmt.Sprintf(" %s", shellQuote(arg)))
+		b.WriteString(fmt.Sprintf(" %s", shell.Quote(arg)))
 	}
 	b.WriteString("\n")
 
@@ -55,12 +57,3 @@ func generateCustomInstall(p EntrypointParams) string {
 	return p.Package + "\n"
 }
 
-func shellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	if !strings.ContainsAny(s, " \t\n\"'\\$`!#&|;(){}[]<>?*~") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
-}

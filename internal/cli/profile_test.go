@@ -142,6 +142,37 @@ func TestCurrentProfile_TrimsWhitespace(t *testing.T) {
 	assert.Equal(t, "work", profile)
 }
 
+func TestIsValidProfileName(t *testing.T) {
+	valid := []string{"work", "default", "my-profile", "my_profile", "Work123", "a", "A"}
+	for _, name := range valid {
+		assert.True(t, isValidProfileName(name), "should accept %q", name)
+	}
+}
+
+func TestIsValidProfileName_Rejects(t *testing.T) {
+	invalid := []string{
+		".", "..", "../etc", "a/b", "a\\b",
+		"hello world", "a;b", "a$b", "a`b",
+		"a(b", "a{b", "a<b", "a|b",
+		"name.ext", "a@b", "a+b", "a=b",
+	}
+	for _, name := range invalid {
+		assert.False(t, isValidProfileName(name), "should reject %q", name)
+	}
+}
+
+func TestSwitchProfile_RejectsSpecialChars(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	invalid := []string{"pro.file", "a b", "a;b", "$(evil)"}
+	for _, name := range invalid {
+		err := SwitchProfile(layout, name)
+		assert.Error(t, err, "should reject profile name %q", name)
+		assert.Contains(t, err.Error(), "invalid profile name")
+	}
+}
+
 func TestSwitchAndCurrentProfile_RoundTrip(t *testing.T) {
 	root := t.TempDir()
 	layout := storage.NewLayout(root)

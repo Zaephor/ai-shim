@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
+
+	"github.com/ai-shim/ai-shim/internal/shell"
 )
 
 // ToolDef mirrors config.ToolDef — the tool definition from config.
@@ -38,45 +40,49 @@ func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
 func generateToolInstall(tool ToolDef, targetDir string) string {
 	var b strings.Builder
 
+	bin := shell.Quote(tool.Binary)
+	url := shell.Quote(tool.URL)
+	pkg := shell.Quote(tool.Package)
+
 	switch tool.Type {
 	case "binary-download":
 		// Check if binary already exists
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s/%s\" ]; then\n", targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  curl -fsSL -o \"%s/%s\" \"%s\"\n", targetDir, tool.Binary, tool.URL))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s/%s\"\n", targetDir, tool.Binary))
+		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
+		b.WriteString(fmt.Sprintf("  curl -fsSL -o \"%s\"/%s %s\n", targetDir, bin, url))
+		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
 		if tool.Checksum != "" {
-			b.WriteString(fmt.Sprintf("  echo \"%s  %s/%s\" | sha256sum -c -\n", tool.Checksum, targetDir, tool.Binary))
+			b.WriteString(fmt.Sprintf("  echo \"%s  %s\"/%s | sha256sum -c -\n", tool.Checksum, targetDir, bin))
 		}
 		b.WriteString("fi\n")
 
 	case "tar-extract":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s/%s\" ]; then\n", targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards '*/%s' || \\\n", tool.URL, targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  { echo \"Fallback: extracting %s via find...\"; curl -fsSL \"%s\" | tar xz -C /tmp && find /tmp -name \"%s\" -exec mv {} \"%s/\" \\; ; } || \\\n", tool.Binary, tool.URL, tool.Binary, targetDir))
-		b.WriteString(fmt.Sprintf("  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", tool.Binary))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s/%s\"\n", targetDir, tool.Binary))
+		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
+		b.WriteString(fmt.Sprintf("  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin))
+		b.WriteString(fmt.Sprintf("  { echo \"Fallback: extracting %s via find...\"; curl -fsSL %s | tar xz -C /tmp && find /tmp -name %s -exec mv {} \"%s/\" \\; ; } || \\\n", bin, url, bin, targetDir))
+		b.WriteString(fmt.Sprintf("  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin))
+		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
 		b.WriteString("fi\n")
 
 	case "tar-extract-selective":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s/%s\" ]; then\n", targetDir, tool.Binary))
+		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
 		files := append([]string{tool.Binary}, tool.Files...)
 		wildcards := make([]string, len(files))
 		for i, f := range files {
-			wildcards[i] = fmt.Sprintf("'*/%s'", f)
+			wildcards[i] = fmt.Sprintf("'*/'%s", shell.Quote(f))
 		}
-		b.WriteString(fmt.Sprintf("  curl -fsSL \"%s\" | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
-			tool.URL, targetDir, strings.Join(wildcards, " "), tool.Binary))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s/%s\"\n", targetDir, tool.Binary))
+		b.WriteString(fmt.Sprintf("  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
+			url, targetDir, strings.Join(wildcards, " "), bin))
+		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
 		b.WriteString("fi\n")
 
 	case "apt":
-		b.WriteString(fmt.Sprintf("if ! command -v %s >/dev/null 2>&1; then\n", tool.Binary))
-		b.WriteString(fmt.Sprintf("  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: apt install failed for %s\"; exit 1; }\n", tool.Package, tool.Package))
+		b.WriteString(fmt.Sprintf("if ! command -v %s >/dev/null 2>&1; then\n", bin))
+		b.WriteString(fmt.Sprintf("  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: apt install failed for %s\"; exit 1; }\n", pkg, pkg))
 		b.WriteString("fi\n")
 
 	case "go-install":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s/%s\" ]; then\n", targetDir, tool.Binary))
-		b.WriteString(fmt.Sprintf("  GOBIN=\"%s\" go install %s@latest\n", targetDir, tool.Package))
+		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
+		b.WriteString(fmt.Sprintf("  GOBIN=\"%s\" go install %s@latest\n", targetDir, pkg))
 		b.WriteString("fi\n")
 
 	case "custom":

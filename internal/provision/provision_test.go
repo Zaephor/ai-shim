@@ -17,7 +17,7 @@ func TestGenerateInstallScript_BinaryDownload(t *testing.T) {
 	}
 	script := GenerateInstallScript(tools, "/opt/bin")
 	assert.Contains(t, script, "curl -fsSL")
-	assert.Contains(t, script, "/opt/bin/mybin")
+	assert.Contains(t, script, "/opt/bin\"/mybin")
 	assert.Contains(t, script, "chmod +x")
 	assert.Contains(t, script, "if [ ! -f")
 }
@@ -78,6 +78,28 @@ func TestGenerateInstallScript_Custom(t *testing.T) {
 	}
 	script := GenerateInstallScript(tools, "/opt/bin")
 	assert.Contains(t, script, "curl -fsSL https://example.com/install.sh | bash")
+}
+
+func TestGenerateInstallScript_BinaryDownload_ShellInjection(t *testing.T) {
+	tools := map[string]ToolDef{
+		"evil": {Type: "binary-download", URL: "https://example.com/$(evil)", Binary: "my binary"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// Binary name with space should be quoted
+	assert.Contains(t, script, "'my binary'")
+	// URL with $() should be quoted
+	assert.Contains(t, script, "'https://example.com/$(evil)'")
+}
+
+func TestGenerateInstallScript_Apt_ShellInjection(t *testing.T) {
+	tools := map[string]ToolDef{
+		"evil": {Type: "apt", Package: "pkg; rm -rf /", Binary: "evil bin"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// Package should be quoted to prevent injection
+	assert.Contains(t, script, "'pkg; rm -rf /'")
+	// Binary should be quoted
+	assert.Contains(t, script, "'evil bin'")
 }
 
 func TestVerifyChecksum_Match(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/provision"
 	"github.com/ai-shim/ai-shim/internal/security"
+	"github.com/ai-shim/ai-shim/internal/shell"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/workspace"
 	"github.com/docker/docker/api/types/mount"
@@ -85,7 +86,11 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	// Package installation script
 	var packageScript string
 	if len(p.Config.Packages) > 0 {
-		packageScript = "echo \"Installing packages: " + strings.Join(p.Config.Packages, " ") + "\"\napt-get update -qq && apt-get install -y -qq " + strings.Join(p.Config.Packages, " ") + " || { echo \"ERROR: package installation failed\"; exit 1; }\n"
+		quoted := make([]string, len(p.Config.Packages))
+		for i, pkg := range p.Config.Packages {
+			quoted[i] = shell.Quote(pkg)
+		}
+		packageScript = "echo \"Installing packages: " + strings.Join(quoted, " ") + "\"\napt-get update -qq && apt-get install -y -qq " + strings.Join(quoted, " ") + " || { echo \"ERROR: package installation failed\"; exit 1; }\n"
 	}
 
 	// Merge config args with passthrough args
@@ -103,10 +108,10 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	var gitScript string
 	if p.Config.Git != nil {
 		if p.Config.Git.Name != "" {
-			gitScript += fmt.Sprintf("git config --global user.name %s\n", shellQuote(p.Config.Git.Name))
+			gitScript += fmt.Sprintf("git config --global user.name %s\n", shell.Quote(p.Config.Git.Name))
 		}
 		if p.Config.Git.Email != "" {
-			gitScript += fmt.Sprintf("git config --global user.email %s\n", shellQuote(p.Config.Git.Email))
+			gitScript += fmt.Sprintf("git config --global user.email %s\n", shell.Quote(p.Config.Git.Email))
 		}
 	}
 
@@ -335,7 +340,7 @@ func isTTY() bool {
 }
 
 func generateContainerName(agentName, profile, workspaceHash string) string {
-	suffix := randomSuffix(4)
+	suffix := randomSuffix(8)
 	return fmt.Sprintf("%s-%s-%s-%s", agentName, profile, workspaceHash, suffix)
 }
 
@@ -346,16 +351,6 @@ func randomSuffix(n int) string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())[:n]
 	}
 	return fmt.Sprintf("%x", b)[:n]
-}
-
-func shellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	if !strings.ContainsAny(s, " \t\n\"'\\$`!#&|;(){}[]<>?*~") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 // mcpServersJSON serializes MCP server definitions to JSON for the MCP_SERVERS

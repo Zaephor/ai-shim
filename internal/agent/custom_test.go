@@ -140,6 +140,67 @@ func TestSetCustomAgents_Nil(t *testing.T) {
 	assert.False(t, ok, "nil should clear custom agents")
 }
 
+func TestValidateDataPath_Valid(t *testing.T) {
+	valid := []string{".claude", ".config/goose", "data", ".claude.json", "a/b/c"}
+	for _, p := range valid {
+		assert.NoError(t, ValidateDataPath(p), "should accept %q", p)
+	}
+}
+
+func TestValidateDataPath_Empty(t *testing.T) {
+	err := ValidateDataPath("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty")
+}
+
+func TestValidateDataPath_Absolute(t *testing.T) {
+	err := ValidateDataPath("/etc/passwd")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "absolute")
+}
+
+func TestValidateDataPath_Traversal(t *testing.T) {
+	traversals := []string{
+		"../../etc/passwd",
+		"../secret",
+		"..",
+	}
+	for _, p := range traversals {
+		err := ValidateDataPath(p)
+		assert.Error(t, err, "should reject %q", p)
+		assert.Contains(t, err.Error(), "traversal", "error for %q should mention traversal", p)
+	}
+}
+
+func TestLoadCustomAgents_FiltersBadPaths(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0755))
+
+	content := `
+agent_def:
+  install_type: npm
+  package: evil-agent
+  binary: evil
+  data_dirs:
+    - "../../etc"
+    - ".evil"
+    - "/absolute/path"
+  data_files:
+    - "../../../etc/passwd"
+    - ".evil.json"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "evil.yaml"), []byte(content), 0644))
+
+	customs := LoadCustomAgents(dir)
+	require.NotNil(t, customs)
+	def, ok := customs["evil"]
+	require.True(t, ok)
+	// Only safe paths should remain
+	assert.Equal(t, []string{".evil"}, def.DataDirs)
+	assert.Equal(t, []string{".evil.json"}, def.DataFiles)
+}
+
 func TestLoadCustomAgents_SkipsNonYAML(t *testing.T) {
 	dir := t.TempDir()
 	agentsDir := filepath.Join(dir, "agents")

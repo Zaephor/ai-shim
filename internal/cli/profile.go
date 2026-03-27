@@ -4,10 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/ai-shim/ai-shim/internal/storage"
 )
+
+var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// isValidProfileName returns true if the profile name contains only
+// alphanumeric characters, hyphens, and underscores.
+func isValidProfileName(name string) bool {
+	return validProfileName.MatchString(name)
+}
 
 const currentProfileFile = ".current-profile"
 
@@ -17,9 +26,9 @@ func SwitchProfile(layout storage.Layout, profile string) error {
 		return fmt.Errorf("profile name cannot be empty")
 	}
 
-	// Validate profile name: no slashes, no path traversal
-	if strings.Contains(profile, "/") || strings.Contains(profile, "\\") || profile == "." || profile == ".." {
-		return fmt.Errorf("invalid profile name: %q", profile)
+	// Validate profile name: allowlist of safe characters only
+	if !isValidProfileName(profile) {
+		return fmt.Errorf("invalid profile name: %q (only alphanumeric, hyphens, and underscores allowed)", profile)
 	}
 
 	markerPath := filepath.Join(layout.ConfigDir, currentProfileFile)
