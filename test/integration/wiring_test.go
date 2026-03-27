@@ -71,15 +71,15 @@ func TestAllPackagesReachableFromMain(t *testing.T) {
 func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	p := container.BuildParams{
 		Config: config.Config{
-			Image:    "test-image",
-			Hostname: "test-host",
-			Env:      map[string]string{"K": "V"},
-			Args:     []string{"--flag"},
-			Volumes:  []string{"/a:/b"},
-			Ports:    []string{"8080:80"},
-			Packages: []string{"tmux"},
-			Tools:    map[string]config.ToolDef{"t": {Type: "apt", Package: "curl", Binary: "curl"}},
-			GPU:      testutil.BoolPtr(true),
+			Image:     "test-image",
+			Hostname:  "test-host",
+			Env:       map[string]string{"K": "V"},
+			Args:      []string{"--flag"},
+			Volumes:   []string{"/a:/b"},
+			Ports:     []string{"8080:80"},
+			Packages:  []string{"tmux"},
+			Tools:     map[string]config.ToolDef{"t": {Type: "apt", Package: "curl", Binary: "curl"}},
+			GPU:       testutil.BoolPtr(true),
 			Resources: &config.ResourceLimits{Memory: "2g", CPUs: "1.0"},
 			Git:       &config.GitConfig{Name: "Test User", Email: "test@example.com"},
 			MCPServers: map[string]config.MCPServerDef{
@@ -87,13 +87,13 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 			},
 			SecurityProfile: "strict",
 		},
-		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin", DataDirs: []string{".test-data"}, DataFiles: []string{".test-config.json"}},
-		Profile: "work",
-		Layout:  storage.NewLayout("/tmp/test-ai-shim"),
+		Agent:    agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin", DataDirs: []string{".test-data"}, DataFiles: []string{".test-config.json"}},
+		Profile:  "work",
+		Layout:   storage.NewLayout("/tmp/test-ai-shim"),
 		Platform: platform.Info{UID: 1000, GID: 1000, Hostname: "host"},
-		Args:    []string{"--extra"},
-		HomeDir: "/home/custom",
-		LogDir:  "/tmp/logs",
+		Args:     []string{"--extra"},
+		HomeDir:  "/home/custom",
+		LogDir:   "/tmp/logs",
 	}
 
 	spec := container.BuildSpec(p)
@@ -106,12 +106,12 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	assert.NotNil(t, spec.Resources)
 	// HomeDir is used: in isolated mode, data dirs mount under /home/custom/
 	assert.Equal(t, "/home/custom/.test-data", findMountTarget(spec.Mounts, ".test-data"))
-	assert.NotEmpty(t, spec.Name) // container naming
-	assert.Contains(t, spec.Entrypoint[2], "--flag") // config args
-	assert.Contains(t, spec.Entrypoint[2], "--extra") // passthrough args
-	assert.Contains(t, spec.Entrypoint[2], "tmux") // packages
-	assert.Contains(t, spec.Entrypoint[2], "curl") // tools
-	assert.Contains(t, spec.Entrypoint[2], "git config --global user.name") // git config
+	assert.NotEmpty(t, spec.Name)                                            // container naming
+	assert.Contains(t, spec.Entrypoint[2], "--flag")                         // config args
+	assert.Contains(t, spec.Entrypoint[2], "--extra")                        // passthrough args
+	assert.Contains(t, spec.Entrypoint[2], "tmux")                           // packages
+	assert.Contains(t, spec.Entrypoint[2], "curl")                           // tools
+	assert.Contains(t, spec.Entrypoint[2], "git config --global user.name")  // git config
 	assert.Contains(t, spec.Entrypoint[2], "git config --global user.email") // git config
 	// MCP servers should be in env vars
 	hasMCPEnv := false

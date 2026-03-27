@@ -37,17 +37,17 @@ type AgentEntry struct {
 
 // DoctorResult represents the result of a doctor check in JSON output.
 type DoctorResult struct {
-	Docker       DoctorCheck   `json:"docker"`
-	DefaultImage DoctorCheck   `json:"default_image"`
-	StorageRoot  string        `json:"storage_root"`
-	ConfigDir    string        `json:"config_dir"`
-	ImagePinning []PinStatus   `json:"image_pinning"`
+	Docker       DoctorCheck `json:"docker"`
+	DefaultImage DoctorCheck `json:"default_image"`
+	StorageRoot  string      `json:"storage_root"`
+	ConfigDir    string      `json:"config_dir"`
+	ImagePinning []PinStatus `json:"image_pinning"`
 }
 
 // DoctorCheck represents a single diagnostic check.
 type DoctorCheck struct {
-	Status  string `json:"status"` // "ok", "fail", "not_cached"
-	Detail  string `json:"detail,omitempty"`
+	Status string `json:"status"` // "ok", "fail", "not_cached"
+	Detail string `json:"detail,omitempty"`
 }
 
 // PinStatus represents the pinning status of an image.

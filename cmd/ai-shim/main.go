@@ -23,7 +23,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 )
 
-const version = "dev"
+var version = "dev"
 
 func main() {
 	logging.Init()
@@ -257,22 +257,22 @@ Subcommands:
 
 func printSubcommandHelp(cmd string) error {
 	helps := map[string]string{
-		"agents":     "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.",
-		"profiles":   "Usage: ai-shim manage profiles\n\n  List all profiles in ~/.ai-shim/profiles/.",
-		"config":     "Usage: ai-shim manage config <agent> <profile>\n\n  Show the fully resolved config for an agent+profile combination.",
-		"doctor":     "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
-		"symlinks":   "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink",
-		"dry-run":    "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
-		"cleanup":    "Usage: ai-shim manage cleanup\n\n  Remove orphaned ai-shim containers, networks, and volumes.",
-		"status":     "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
-		"backup":     "Usage: ai-shim manage backup <profile> [output-path]\n\n  Create a tar.gz backup of a profile's home directory.",
-		"restore":    "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
-		"disk-usage":      "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
-		"agent-versions":  "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
-		"reinstall":       "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
-		"exec":            "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
-		"watch":           "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
-		"switch-profile":  "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
+		"agents":         "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.",
+		"profiles":       "Usage: ai-shim manage profiles\n\n  List all profiles in ~/.ai-shim/profiles/.",
+		"config":         "Usage: ai-shim manage config <agent> <profile>\n\n  Show the fully resolved config for an agent+profile combination.",
+		"doctor":         "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
+		"symlinks":       "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink",
+		"dry-run":        "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
+		"cleanup":        "Usage: ai-shim manage cleanup\n\n  Remove orphaned ai-shim containers, networks, and volumes.",
+		"status":         "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
+		"backup":         "Usage: ai-shim manage backup <profile> [output-path]\n\n  Create a tar.gz backup of a profile's home directory.",
+		"restore":        "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
+		"disk-usage":     "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
+		"agent-versions": "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
+		"reinstall":      "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
+		"exec":           "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
+		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
+		"switch-profile": "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
 	}
 	if help, ok := helps[cmd]; ok {
 		fmt.Println(help)

@@ -332,33 +332,33 @@ git:
 
 	// Every config concept should appear in output
 	expectedSubstrings := []string{
-		"test-image",     // image
-		"test-host",      // hostname
-		"1.0.0",          // version
-		"KEY=value",      // env
-		"--flag",         // args
-		"/a:/b",          // volumes
-		"8080:80",        // ports
-		"tmux",           // packages
-		"dind:",          // dind toggle
-		"gpu:",           // gpu toggle
-		"network_scope:", // network scope
-		"dind_hostname:", // dind hostname
-		"mirror.example", // dind mirrors
-		"dind_cache:",          // dind cache
-		"dind_tls:",           // dind tls
-		"isolated:",           // isolation
-		"security_profile:",   // security profile
-		"gemini-cli",     // allow_agents
-		"2g",             // resources memory
-		"1.0",            // resources cpus
-		"1g",             // dind_resources memory
-		"mcp_servers:",   // mcp servers section
-		"filesystem",     // mcp server name
-		"act",            // tools
-		"Test User",      // git name
-		"test@example.com",    // git email
-		"var1=val1",           // variables
+		"test-image",        // image
+		"test-host",         // hostname
+		"1.0.0",             // version
+		"KEY=value",         // env
+		"--flag",            // args
+		"/a:/b",             // volumes
+		"8080:80",           // ports
+		"tmux",              // packages
+		"dind:",             // dind toggle
+		"gpu:",              // gpu toggle
+		"network_scope:",    // network scope
+		"dind_hostname:",    // dind hostname
+		"mirror.example",    // dind mirrors
+		"dind_cache:",       // dind cache
+		"dind_tls:",         // dind tls
+		"isolated:",         // isolation
+		"security_profile:", // security profile
+		"gemini-cli",        // allow_agents
+		"2g",                // resources memory
+		"1.0",               // resources cpus
+		"1g",                // dind_resources memory
+		"mcp_servers:",      // mcp servers section
+		"filesystem",        // mcp server name
+		"act",               // tools
+		"Test User",         // git name
+		"test@example.com",  // git email
+		"var1=val1",         // variables
 	}
 
 	for _, sub := range expectedSubstrings {

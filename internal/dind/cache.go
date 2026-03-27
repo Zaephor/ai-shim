@@ -66,7 +66,6 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (stri
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 	}
 
-
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, CacheContainerName)
 	if err != nil {
 		return "", fmt.Errorf("creating cache container: %w", err)

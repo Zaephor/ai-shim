@@ -35,8 +35,8 @@ type BuildParams struct {
 	Layout   storage.Layout
 	Platform platform.Info
 	Args     []string
-	HomeDir string // container-side home directory (from image inspect)
-	LogDir  string // directory for exit logs (empty = no logging)
+	HomeDir  string // container-side home directory (from image inspect)
+	LogDir   string // directory for exit logs (empty = no logging)
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.

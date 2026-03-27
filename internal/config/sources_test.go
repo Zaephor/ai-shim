@@ -40,13 +40,13 @@ func TestComputeSources_AllFieldTypes(t *testing.T) {
 	trueVal := true
 	tiers := []namedConfig{
 		{name: "default.yaml", config: Config{
-			Image:    "img",
-			Hostname: "host",
-			Version:  "1.0",
-			DIND:     &trueVal,
-			Env:      map[string]string{"K": "V"},
-			Volumes:  []string{"/a:/b"},
-			Tools:    map[string]ToolDef{"t": {Type: "binary-download"}},
+			Image:      "img",
+			Hostname:   "host",
+			Version:    "1.0",
+			DIND:       &trueVal,
+			Env:        map[string]string{"K": "V"},
+			Volumes:    []string{"/a:/b"},
+			Tools:      map[string]ToolDef{"t": {Type: "binary-download"}},
 			MCPServers: map[string]MCPServerDef{"s": {Command: "cmd"}},
 		}},
 	}

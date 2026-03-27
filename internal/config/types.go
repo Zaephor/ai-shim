@@ -13,31 +13,31 @@ type ResourceLimits struct {
 
 // Config represents the fully resolved configuration for an agent+profile invocation.
 type Config struct {
-	Variables       map[string]string        `yaml:"variables,omitempty" json:"variables,omitempty"`
-	Env             map[string]string        `yaml:"env,omitempty" json:"env,omitempty"`
-	Image           string                   `yaml:"image,omitempty" json:"image,omitempty"`
-	Hostname        string                   `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	Version         string                   `yaml:"version,omitempty" json:"version,omitempty"`
-	Args            []string                 `yaml:"args,omitempty" json:"args,omitempty"`
-	Volumes         []string                 `yaml:"volumes,omitempty" json:"volumes,omitempty"`
-	Ports           []string                 `yaml:"ports,omitempty" json:"ports,omitempty"`
-	Packages        []string                 `yaml:"packages,omitempty" json:"packages,omitempty"`
-	NetworkScope    string                   `yaml:"network_scope,omitempty" json:"network_scope,omitempty"`
-	DINDHostname    string                   `yaml:"dind_hostname,omitempty" json:"dind_hostname,omitempty"`
-	DIND            *bool                    `yaml:"dind,omitempty" json:"dind,omitempty"`
-	DINDGpu         *bool                    `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
-	GPU             *bool                    `yaml:"gpu,omitempty" json:"gpu,omitempty"`
-	DINDMirrors     []string                 `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
-	DINDCache       *bool                    `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
-	DINDTLS         *bool                    `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
-	AllowAgents     []string                 `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
-	Isolated        *bool                    `yaml:"isolated,omitempty" json:"isolated,omitempty"`
-	MCPServers      map[string]MCPServerDef  `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
-	Tools           map[string]ToolDef       `yaml:"tools,omitempty" json:"tools,omitempty"`
-	Resources       *ResourceLimits          `yaml:"resources,omitempty" json:"resources,omitempty"`
-	DINDResources   *ResourceLimits          `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
-	Git             *GitConfig               `yaml:"git,omitempty" json:"git,omitempty"`
-	SecurityProfile string                   `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
+	Variables       map[string]string       `yaml:"variables,omitempty" json:"variables,omitempty"`
+	Env             map[string]string       `yaml:"env,omitempty" json:"env,omitempty"`
+	Image           string                  `yaml:"image,omitempty" json:"image,omitempty"`
+	Hostname        string                  `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Version         string                  `yaml:"version,omitempty" json:"version,omitempty"`
+	Args            []string                `yaml:"args,omitempty" json:"args,omitempty"`
+	Volumes         []string                `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Ports           []string                `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Packages        []string                `yaml:"packages,omitempty" json:"packages,omitempty"`
+	NetworkScope    string                  `yaml:"network_scope,omitempty" json:"network_scope,omitempty"`
+	DINDHostname    string                  `yaml:"dind_hostname,omitempty" json:"dind_hostname,omitempty"`
+	DIND            *bool                   `yaml:"dind,omitempty" json:"dind,omitempty"`
+	DINDGpu         *bool                   `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
+	GPU             *bool                   `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+	DINDMirrors     []string                `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
+	DINDCache       *bool                   `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
+	DINDTLS         *bool                   `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
+	AllowAgents     []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
+	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
+	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+	Tools           map[string]ToolDef      `yaml:"tools,omitempty" json:"tools,omitempty"`
+	Resources       *ResourceLimits         `yaml:"resources,omitempty" json:"resources,omitempty"`
+	DINDResources   *ResourceLimits         `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
+	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`
+	SecurityProfile string                  `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
 }
 
 // GitConfig defines git user identity for commits inside the container.

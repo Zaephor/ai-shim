@@ -57,4 +57,3 @@ func generateUVInstall(p EntrypointParams) string {
 func generateCustomInstall(p EntrypointParams) string {
 	return p.Package + "\n"
 }
-

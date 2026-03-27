@@ -574,4 +574,3 @@ func TestResolveSecurityProfile(t *testing.T) {
 		})
 	}
 }
-

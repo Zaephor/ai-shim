@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/ai-shim/ai-shim/internal/testutil"
-	"github.com/docker/docker/client"
 	dnetwork "github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

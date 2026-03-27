@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+errors=0
+
+# Check gofmt on staged .go files
+staged_go=$(git diff --cached --name-only --diff-filter=ACM -- '*.go' || true)
+if [ -n "$staged_go" ]; then
+    unformatted=$(echo "$staged_go" | xargs gofmt -l 2>/dev/null || true)
+    if [ -n "$unformatted" ]; then
+        echo "ERROR: The following files need gofmt:"
+        echo "$unformatted" | sed 's/^/  /'
+        echo ""
+        echo "Run: gofmt -w ."
+        errors=1
+    fi
+fi
+
+# Check go vet compiles (catches cross-platform issues like undefined symbols)
+if [ -n "$staged_go" ]; then
+    if ! go vet ./... 2>/dev/null; then
+        echo "ERROR: go vet failed"
+        errors=1
+    fi
+fi
+
+# Check for silent failure patterns in production code
+if [ -n "$staged_go" ]; then
+    silent=$(echo "$staged_go" | grep -v '_test\.go' | xargs grep -n '2>/dev/null' 2>/dev/null | grep -v 'command -v' || true)
+    if [ -n "$silent" ]; then
+        echo "WARNING: Found 2>/dev/null in production code (silent failure pattern):"
+        echo "$silent" | sed 's/^/  /'
+        echo ""
+    fi
+fi
+
+# Check go.mod tidiness
+if echo "$staged_go" | grep -q 'go\.mod\|go\.sum' 2>/dev/null || [ -n "$staged_go" ]; then
+    if command -v go &>/dev/null; then
+        cp go.mod go.mod.bak
+        cp go.sum go.sum.bak 2>/dev/null || true
+        go mod tidy 2>/dev/null
+        if ! diff -q go.mod go.mod.bak &>/dev/null || ! diff -q go.sum go.sum.bak &>/dev/null 2>/dev/null; then
+            echo "ERROR: go.mod/go.sum not tidy. Run: go mod tidy"
+            mv go.mod.bak go.mod
+            mv go.sum.bak go.sum 2>/dev/null || true
+            errors=1
+        else
+            mv go.mod.bak go.mod
+            mv go.sum.bak go.sum 2>/dev/null || true
+        fi
+    fi
+fi
+
+if [ "$errors" -ne 0 ]; then
+    echo ""
+    echo "Pre-commit checks failed. Fix the issues above and try again."
+    exit 1
+fi

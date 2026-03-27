@@ -42,13 +42,13 @@ type Config struct {
 	GPU           bool   // GPU passthrough for DIND
 	UseSysbox     bool   // use sysbox runtime if available
 	Labels        map[string]string
-	ContainerName string // display name for the DIND container
-	Hostname      string // hostname inside the DIND container
-	NetworkID     string   // pre-created network ID to join
-	Mirrors       []string         // registry mirror URLs
-	CacheAddr     string           // pull-through cache address (added as mirror)
-	Resources     *ResourceLimits  // optional resource constraints
-	TLS           bool             // enable TLS for DIND socket communication
+	ContainerName string          // display name for the DIND container
+	Hostname      string          // hostname inside the DIND container
+	NetworkID     string          // pre-created network ID to join
+	Mirrors       []string        // registry mirror URLs
+	CacheAddr     string          // pull-through cache address (added as mirror)
+	Resources     *ResourceLimits // optional resource constraints
+	TLS           bool            // enable TLS for DIND socket communication
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.

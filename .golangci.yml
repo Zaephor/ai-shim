@@ -1,7 +1,10 @@
+version: "2"
+
 run:
   timeout: 5m
 
 linters:
+  default: none
   enable:
     - errcheck
     - govet
@@ -9,19 +12,16 @@ linters:
     - unused
     - ineffassign
     - gosimple
-    - typecheck
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-
-issues:
-  exclude-rules:
-    # Allow unchecked errors in test files
-    - path: _test\.go
-      linters:
-        - errcheck
-    # Allow fmt.Fprintf to stderr (logging pattern)
-    - linters:
-        - errcheck
-      text: "fmt.Fprint"
+  settings:
+    errcheck:
+      check-type-assertions: true
+  exclusions:
+    rules:
+      # Allow unchecked errors in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Allow fmt.Fprintf to stderr (logging pattern)
+      - linters:
+          - errcheck
+        text: "fmt.Fprint"
