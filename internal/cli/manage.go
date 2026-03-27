@@ -144,6 +144,7 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	}
 
 	b.WriteString(formatBoolField("dind_cache", cfg.DINDCache, false))
+	b.WriteString(formatBoolField("dind_tls", cfg.DINDTLS, false))
 	b.WriteString(formatBoolField("isolated", cfg.Isolated, true))
 
 	if len(cfg.AllowAgents) > 0 {
@@ -153,11 +154,44 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 
+	if len(cfg.MCPServers) > 0 {
+		b.WriteString("  mcp_servers:\n")
+		for name, srv := range cfg.MCPServers {
+			b.WriteString(fmt.Sprintf("    %s: %s\n", name, srv.Command))
+		}
+	}
+
 	if len(cfg.Tools) > 0 {
 		b.WriteString("  tools:\n")
 		for name, tool := range cfg.Tools {
 			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
 		}
+	}
+
+	if cfg.NetworkRules != nil {
+		b.WriteString("  network_rules:\n")
+		if len(cfg.NetworkRules.AllowedHosts) > 0 {
+			b.WriteString("    allowed_hosts:\n")
+			for _, h := range cfg.NetworkRules.AllowedHosts {
+				b.WriteString(fmt.Sprintf("      - %s\n", h))
+			}
+		}
+		if len(cfg.NetworkRules.BlockedHosts) > 0 {
+			b.WriteString("    blocked_hosts:\n")
+			for _, h := range cfg.NetworkRules.BlockedHosts {
+				b.WriteString(fmt.Sprintf("      - %s\n", h))
+			}
+		}
+		if len(cfg.NetworkRules.AllowedPorts) > 0 {
+			b.WriteString("    allowed_ports:\n")
+			for _, p := range cfg.NetworkRules.AllowedPorts {
+				b.WriteString(fmt.Sprintf("      - %s\n", p))
+			}
+		}
+	}
+
+	if cfg.SecurityProfile != "" {
+		b.WriteString(fmt.Sprintf("  security_profile: %s\n", cfg.SecurityProfile))
 	}
 
 	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {

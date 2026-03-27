@@ -2,6 +2,7 @@ package container
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/install"
+	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/provision"
 	"github.com/ai-shim/ai-shim/internal/security"
@@ -109,10 +111,18 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		}
 	}
 
-	// Prepend tool, package, and git scripts to entrypoint
-	fullScript := toolScript + packageScript + gitScript + entrypoint
+	// Network firewall rules (iptables, runs before agent launch)
+	firewallScript := network.GenerateFirewallScript(p.Config.NetworkRules)
+
+	// Prepend tool, package, git, and firewall scripts to entrypoint
+	fullScript := toolScript + packageScript + gitScript + firewallScript + entrypoint
 
 	env := buildEnv(p.Config.Env)
+
+	// MCP server config as env var (JSON format for agent consumption)
+	if len(p.Config.MCPServers) > 0 {
+		env = append(env, "MCP_SERVERS="+mcpServersJSON(p.Config.MCPServers))
+	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
 
@@ -128,6 +138,9 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	}
 
 	tty := isTTY()
+
+	// Security profile
+	securityOpt, capDrop := resolveSecurityProfile(p.Config.SecurityProfile)
 
 	return ContainerSpec{
 		Name:         name,
@@ -145,6 +158,8 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		Stdin:        tty,
 		GPU:          gpu,
 		Resources:    resources,
+		SecurityOpt:  securityOpt,
+		CapDrop:      capDrop,
 		LogDir:       p.LogDir,
 	}
 }
@@ -345,6 +360,45 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+// mcpServersJSON serializes MCP server definitions to JSON for the MCP_SERVERS
+// env var. The format matches what claude-code and other agents expect.
+func mcpServersJSON(servers map[string]config.MCPServerDef) string {
+	type mcpEntry struct {
+		Command string            `json:"command"`
+		Args    []string          `json:"args,omitempty"`
+		Env     map[string]string `json:"env,omitempty"`
+	}
+	m := make(map[string]mcpEntry, len(servers))
+	for name, srv := range servers {
+		m[name] = mcpEntry{
+			Command: srv.Command,
+			Args:    srv.Args,
+			Env:     srv.Env,
+		}
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		// Should not happen with string maps, but be safe
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP servers: %v\n", err)
+		return "{}"
+	}
+	return string(data)
+}
+
+// resolveSecurityProfile returns SecurityOpt and CapDrop based on the profile.
+func resolveSecurityProfile(profile string) (securityOpt []string, capDrop []string) {
+	switch profile {
+	case "strict":
+		securityOpt = []string{"no-new-privileges:true"}
+		capDrop = []string{"ALL"}
+	case "none":
+		securityOpt = []string{"seccomp=unconfined"}
+	default:
+		// "default" or empty — Docker's default behavior, no changes
+	}
+	return
 }
 
 // ValidateConfigVolumes checks all volume mount paths for security issues.

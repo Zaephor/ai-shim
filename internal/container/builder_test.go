@@ -478,3 +478,46 @@ func TestBuildSpec_NoGitConfig(t *testing.T) {
 	assert.NotContains(t, entrypoint, "git config --global", "should not set git config when not configured")
 }
 
+func TestBuildSpec_MCPServersEnvVar(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.MCPServers = map[string]config.MCPServerDef{
+		"filesystem": {
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-filesystem"},
+			Env:     map[string]string{"MCP_ROOT": "/workspace"},
+		},
+	}
+	spec := BuildSpec(p)
+
+	var mcpEnv string
+	for _, e := range spec.Env {
+		if strings.HasPrefix(e, "MCP_SERVERS=") {
+			mcpEnv = e
+			break
+		}
+	}
+	require.NotEmpty(t, mcpEnv, "MCP_SERVERS env var should be set")
+	assert.Contains(t, mcpEnv, "filesystem")
+	assert.Contains(t, mcpEnv, "npx")
+	assert.Contains(t, mcpEnv, "@modelcontextprotocol/server-filesystem")
+}
+
+func TestBuildSpec_NoMCPServers(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+
+	for _, e := range spec.Env {
+		assert.False(t, strings.HasPrefix(e, "MCP_SERVERS="), "MCP_SERVERS should not be set when no MCP servers configured")
+	}
+}
+
+func TestMCPServersJSON(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"test": {Command: "cmd", Args: []string{"arg1"}, Env: map[string]string{"K": "V"}},
+	}
+	result := mcpServersJSON(servers)
+	assert.Contains(t, result, `"command":"cmd"`)
+	assert.Contains(t, result, `"args":["arg1"]`)
+	assert.Contains(t, result, `"K":"V"`)
+}
+

@@ -84,6 +84,8 @@ Environment Variables:
   AI_SHIM_NETWORK_SCOPE Network isolation scope
   AI_SHIM_DIND_HOSTNAME DIND container hostname
   AI_SHIM_DIND_CACHE    Enable registry cache (0/1)
+  AI_SHIM_DIND_TLS      Enable TLS for DIND socket (0/1)
+  AI_SHIM_SECURITY_PROFILE Security profile (default/strict/none)
   AI_SHIM_GIT_NAME      Git user.name for container commits
   AI_SHIM_GIT_EMAIL     Git user.email for container commits
   AI_SHIM_VERBOSE       Enable debug output (0/1)
@@ -635,6 +637,7 @@ func runAgent(name string, args []string) (int, error) {
 			Mirrors:       mirrors,
 			CacheAddr:     cacheAddr,
 			Resources:     dindResources,
+			TLS:           cfg.IsDINDTLSEnabled(),
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
@@ -653,6 +656,17 @@ func runAgent(name string, args []string) (int, error) {
 			Target: "/var/run/dind",
 		})
 		spec.Env = append(spec.Env, "DOCKER_HOST=unix:///var/run/dind/docker.sock")
+
+		// Mount TLS certs volume if TLS is enabled
+		if sidecar.CertsVolume() != "" {
+			spec.Mounts = append(spec.Mounts, mount.Mount{
+				Type:   mount.TypeVolume,
+				Source: sidecar.CertsVolume(),
+				Target: "/certs",
+			})
+			spec.Env = append(spec.Env, "DOCKER_TLS_VERIFY=1")
+			spec.Env = append(spec.Env, "DOCKER_CERT_PATH=/certs/client")
+		}
 	}
 
 	// 8. Run container, return its exit code

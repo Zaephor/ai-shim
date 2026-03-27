@@ -281,6 +281,14 @@ resources:
 dind_resources:
   memory: "1g"
   cpus: "0.5"
+mcp_servers:
+  filesystem:
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+    env:
+      MCP_ROOT: "/workspace"
 tools:
   act:
     type: binary-download
@@ -317,6 +325,8 @@ git:
 		"2g",             // resources memory
 		"1.0",            // resources cpus
 		"1g",             // dind_resources memory
+		"mcp_servers:",   // mcp servers section
+		"filesystem",     // mcp server name
 		"act",            // tools
 		"Test User",      // git name
 		"test@example.com", // git email

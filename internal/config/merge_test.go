@@ -156,6 +156,21 @@ func TestMerge_DINDResources(t *testing.T) {
 	assert.Equal(t, "1g", result.DINDResources.Memory)
 }
 
+func TestMerge_DINDTLS(t *testing.T) {
+	base := Config{DINDTLS: testutil.BoolPtr(false)}
+	over := Config{DINDTLS: testutil.BoolPtr(true)}
+	result := Merge(base, over)
+	assert.True(t, *result.DINDTLS)
+}
+
+func TestMerge_DINDTLSNilPreserved(t *testing.T) {
+	base := Config{DINDTLS: testutil.BoolPtr(true)}
+	over := Config{}
+	result := Merge(base, over)
+	require.NotNil(t, result.DINDTLS)
+	assert.True(t, *result.DINDTLS)
+}
+
 func TestMerge_GitConfig(t *testing.T) {
 	base := Config{Git: &GitConfig{Name: "Base User", Email: "base@example.com"}}
 	over := Config{Git: &GitConfig{Name: "Override User"}}
@@ -179,4 +194,28 @@ func TestMerge_GitConfigFromNil(t *testing.T) {
 	result := Merge(base, over)
 	require.NotNil(t, result.Git)
 	assert.Equal(t, "test@example.com", result.Git.Email)
+}
+
+func TestMerge_MCPServersPerKeyReplace(t *testing.T) {
+	base := Config{
+		MCPServers: map[string]MCPServerDef{
+			"filesystem": {Command: "npx", Args: []string{"-y", "fs-server"}},
+			"git":        {Command: "npx", Args: []string{"-y", "git-server"}},
+		},
+	}
+	over := Config{
+		MCPServers: map[string]MCPServerDef{
+			"filesystem": {Command: "node", Args: []string{"fs-server.js"}},
+		},
+	}
+	result := Merge(base, over)
+	assert.Equal(t, "node", result.MCPServers["filesystem"].Command, "overridden server replaced")
+	assert.Equal(t, "npx", result.MCPServers["git"].Command, "untouched server preserved")
+}
+
+func TestMerge_MCPServersNilPreserved(t *testing.T) {
+	base := Config{MCPServers: map[string]MCPServerDef{"fs": {Command: "npx"}}}
+	over := Config{}
+	result := Merge(base, over)
+	assert.Equal(t, "npx", result.MCPServers["fs"].Command)
 }

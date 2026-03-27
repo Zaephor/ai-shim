@@ -29,12 +29,23 @@ type Config struct {
 	GPU         *bool              `yaml:"gpu,omitempty"`
 	DINDMirrors []string           `yaml:"dind_mirrors,omitempty"` // registry mirror URLs
 	DINDCache   *bool              `yaml:"dind_cache,omitempty"`   // enable pull-through cache
+	DINDTLS     *bool              `yaml:"dind_tls,omitempty"`     // enable TLS for DIND socket
 	AllowAgents []string           `yaml:"allow_agents,omitempty"`
 	Isolated    *bool              `yaml:"isolated,omitempty"`
-	Tools         map[string]ToolDef `yaml:"tools,omitempty"`
+	MCPServers    map[string]MCPServerDef `yaml:"mcp_servers,omitempty"`
+	Tools         map[string]ToolDef     `yaml:"tools,omitempty"`
 	Resources     *ResourceLimits    `yaml:"resources,omitempty"`      // agent container limits
 	DINDResources *ResourceLimits    `yaml:"dind_resources,omitempty"` // DIND container limits
 	Git           *GitConfig         `yaml:"git,omitempty"`            // git user config for container
+	NetworkRules  *NetworkRules      `yaml:"network_rules,omitempty"`  // egress firewall rules
+	SecurityProfile string           `yaml:"security_profile,omitempty"` // seccomp/apparmor profile: default, strict, none
+}
+
+// NetworkRules defines egress firewall rules for the container.
+type NetworkRules struct {
+	AllowedHosts []string `yaml:"allowed_hosts,omitempty"` // allowlist mode: block all except these hosts
+	BlockedHosts []string `yaml:"blocked_hosts,omitempty"` // blocklist mode: allow all except these hosts
+	AllowedPorts []string `yaml:"allowed_ports,omitempty"` // restrict egress to these ports only
 }
 
 // GitConfig defines git user identity for commits inside the container.
@@ -55,6 +66,9 @@ func (c Config) IsDINDGPUEnabled() bool { return c.DINDGpu != nil && *c.DINDGpu 
 // IsCacheEnabled returns true if pull-through cache is explicitly enabled.
 func (c Config) IsCacheEnabled() bool { return c.DINDCache != nil && *c.DINDCache }
 
+// IsDINDTLSEnabled returns true if DIND TLS is explicitly enabled.
+func (c Config) IsDINDTLSEnabled() bool { return c.DINDTLS != nil && *c.DINDTLS }
+
 // IsIsolated returns true if agent isolation is enabled (default: true).
 func (c Config) IsIsolated() bool { return c.Isolated == nil || *c.Isolated }
 
@@ -72,6 +86,13 @@ func (c Config) GetHostname() string {
 		return c.Hostname
 	}
 	return "ai-shim"
+}
+
+// MCPServerDef defines an MCP (Model Context Protocol) server to expose to the agent.
+type MCPServerDef struct {
+	Command string            `yaml:"command"`
+	Args    []string          `yaml:"args,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty"`
 }
 
 // ToolDef defines a tool to provision in the container.

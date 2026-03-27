@@ -36,11 +36,20 @@ func Merge(base, over Config) Config {
 	if over.DINDCache != nil {
 		result.DINDCache = over.DINDCache
 	}
+	if over.DINDTLS != nil {
+		result.DINDTLS = over.DINDTLS
+	}
 	if over.Resources != nil {
 		result.Resources = over.Resources
 	}
 	if over.DINDResources != nil {
 		result.DINDResources = over.DINDResources
+	}
+	if over.NetworkRules != nil {
+		result.NetworkRules = over.NetworkRules
+	}
+	if over.SecurityProfile != "" {
+		result.SecurityProfile = over.SecurityProfile
 	}
 	if over.Git != nil {
 		if result.Git == nil {
@@ -57,6 +66,7 @@ func Merge(base, over Config) Config {
 	result.Env = mergeMaps(result.Env, over.Env)
 	result.Variables = mergeMaps(result.Variables, over.Variables)
 	result.Tools = mergeToolMaps(result.Tools, over.Tools)
+	result.MCPServers = mergeMCPServerMaps(result.MCPServers, over.MCPServers)
 
 	result.Volumes = appendUnique(result.Volumes, over.Volumes)
 	result.Args = append(result.Args, over.Args...)
@@ -113,6 +123,27 @@ func mergeToolMaps(base, over map[string]ToolDef) map[string]ToolDef {
 		return result
 	}
 	result := make(map[string]ToolDef, len(base)+len(over))
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, v := range over {
+		result[k] = v
+	}
+	return result
+}
+
+func mergeMCPServerMaps(base, over map[string]MCPServerDef) map[string]MCPServerDef {
+	if len(over) == 0 {
+		return base
+	}
+	if len(base) == 0 {
+		result := make(map[string]MCPServerDef, len(over))
+		for k, v := range over {
+			result[k] = v
+		}
+		return result
+	}
+	result := make(map[string]MCPServerDef, len(base)+len(over))
 	for k, v := range base {
 		result[k] = v
 	}
