@@ -91,6 +91,8 @@ Environment Variables:
   AI_SHIM_GIT_NAME      Git user.name for container commits
   AI_SHIM_GIT_EMAIL     Git user.email for container commits
   AI_SHIM_VERBOSE       Enable debug output (0/1)
+  AI_SHIM_JSON          Enable JSON output for management commands (0/1)
+  AI_SHIM_NO_COLOR      Disable colored output (0/1)
 `)
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
+	"github.com/ai-shim/ai-shim/internal/color"
 	"github.com/ai-shim/ai-shim/internal/config"
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/dind"
@@ -213,6 +214,12 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 
 // Doctor runs diagnostic checks and returns results.
 func Doctor() string {
+	return DoctorWithColor(color.Enabled())
+}
+
+// DoctorWithColor runs diagnostic checks with explicit color control.
+func DoctorWithColor(useColor bool) string {
+	c := color.New(useColor)
 	var b strings.Builder
 	b.WriteString("ai-shim doctor\n\n")
 
@@ -220,22 +227,22 @@ func Doctor() string {
 	ctx := context.Background()
 	cli, err := docker.NewClientNoPing()
 	if err != nil {
-		b.WriteString("  Docker client:  FAIL (" + err.Error() + ")\n")
+		b.WriteString(fmt.Sprintf("  Docker client:  %s (%s)\n", c.Red("FAIL"), err.Error()))
 	} else {
 		defer cli.Close()
 		if _, err := cli.Ping(ctx); err != nil {
-			b.WriteString("  Docker daemon:  FAIL (" + err.Error() + ")\n")
+			b.WriteString(fmt.Sprintf("  Docker daemon:  %s (%s)\n", c.Red("FAIL"), err.Error()))
 		} else {
 			info, _ := cli.Info(ctx)
-			b.WriteString(fmt.Sprintf("  Docker daemon:  OK (server %s)\n", info.ServerVersion))
+			b.WriteString(fmt.Sprintf("  Docker daemon:  %s (server %s)\n", c.Green("OK"), info.ServerVersion))
 		}
 
 		// Check default image
 		_, _, imgErr := cli.ImageInspectWithRaw(ctx, container.DefaultImage)
 		if imgErr != nil {
-			b.WriteString(fmt.Sprintf("  Default image:  NOT CACHED (%s) — will be pulled on first use\n", container.DefaultImage))
+			b.WriteString(fmt.Sprintf("  Default image:  %s (%s) — will be pulled on first use\n", c.Yellow("NOT CACHED"), container.DefaultImage))
 		} else {
-			b.WriteString(fmt.Sprintf("  Default image:  OK (%s)\n", container.DefaultImage))
+			b.WriteString(fmt.Sprintf("  Default image:  %s (%s)\n", c.Green("OK"), container.DefaultImage))
 		}
 	}
 
@@ -440,6 +447,13 @@ func Cleanup() (CleanupResult, error) {
 
 // Status returns a formatted list of running ai-shim containers.
 func Status() (string, error) {
+	return StatusWithColor(color.Enabled())
+}
+
+// StatusWithColor returns a formatted list of running ai-shim containers
+// with explicit color control.
+func StatusWithColor(useColor bool) (string, error) {
+	col := color.New(useColor)
 	ctx := context.Background()
 	cli, err := docker.NewClient(ctx)
 	if err != nil {
@@ -465,15 +479,15 @@ func Status() (string, error) {
 
 	for _, c := range containers {
 		name := containerDisplayName(c)
-		agent := c.Labels[container.LabelAgent]
+		agentLabel := c.Labels[container.LabelAgent]
 		profile := c.Labels[container.LabelProfile]
 
 		// Mark cache and DIND containers
 		if c.Labels[container.LabelCache] == "true" {
-			agent = "(cache)"
+			agentLabel = "(cache)"
 			profile = ""
 		} else if strings.HasSuffix(name, "-dind") {
-			agent = agent + " (dind)"
+			agentLabel = agentLabel + " (dind)"
 		}
 
 		image := c.Image
@@ -481,9 +495,25 @@ func Status() (string, error) {
 			image = image[:22] + "..."
 		}
 
-		b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", name, agent, profile, image, c.Status))
+		status := colorizeStatus(col, c.Status)
+		b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", name, agentLabel, profile, image, status))
 	}
 	return b.String(), nil
+}
+
+// colorizeStatus applies color to container status strings.
+func colorizeStatus(c color.Colorer, status string) string {
+	lower := strings.ToLower(status)
+	switch {
+	case strings.HasPrefix(lower, "up"):
+		return c.Green(status)
+	case strings.HasPrefix(lower, "exited"):
+		return c.Red(status)
+	case strings.Contains(lower, "created"), strings.Contains(lower, "restarting"):
+		return c.Yellow(status)
+	default:
+		return status
+	}
 }
 
 // BackupProfile creates a tar.gz archive of a profile's home directory.

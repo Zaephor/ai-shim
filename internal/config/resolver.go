@@ -75,6 +75,8 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 //   - AI_SHIM_DIND_TLS      — toggle TLS for DIND socket (0/1/true/false)
 //   - AI_SHIM_GIT_NAME      — git user.name for container commits
 //   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
+//   - AI_SHIM_JSON          — enable JSON output for management commands (0/1)
+//   - AI_SHIM_NO_COLOR      — disable colored output (0/1)
 func loadEnvOverrides() Config {
 	var cfg Config
 
@@ -120,6 +122,11 @@ func loadEnvOverrides() Config {
 	if gitName != "" || gitEmail != "" {
 		cfg.Git = &GitConfig{Name: gitName, Email: gitEmail}
 	}
+
+	// Output formatting env vars (checked here for documentation consistency;
+	// actual logic lives in internal/color and internal/cli).
+	_ = os.Getenv("AI_SHIM_JSON")
+	_ = os.Getenv("AI_SHIM_NO_COLOR")
 
 	return cfg
 }

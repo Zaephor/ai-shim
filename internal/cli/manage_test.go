@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ai-shim/ai-shim/internal/color"
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/storage"
 )
@@ -442,6 +443,37 @@ func TestFormatBytes(t *testing.T) {
 	assert.Equal(t, "1.0 KB", formatBytes(1024))
 	assert.Equal(t, "1.5 MB", formatBytes(1572864))
 	assert.Equal(t, "2.0 GB", formatBytes(2147483648))
+}
+
+func TestDoctor_NoColorNoANSI(t *testing.T) {
+	t.Setenv("AI_SHIM_NO_COLOR", "1")
+	output := DoctorWithColor(false)
+	assert.NotContains(t, output, "\033[", "should not contain ANSI codes when color disabled")
+	// Should still have content
+	assert.Contains(t, output, "ai-shim doctor")
+}
+
+func TestDoctor_WithColor(t *testing.T) {
+	output := DoctorWithColor(true)
+	// Should contain ANSI codes for OK or FAIL
+	assert.Contains(t, output, "\033[", "should contain ANSI codes when color enabled")
+}
+
+func TestColorizeStatus(t *testing.T) {
+	c := color.New(true)
+	noColor := color.New(false)
+
+	// Up status should be green
+	assert.Contains(t, colorizeStatus(c, "Up 2 hours"), "\033[32m")
+
+	// Exited status should be red
+	assert.Contains(t, colorizeStatus(c, "Exited (1) 5 minutes ago"), "\033[31m")
+
+	// Created should be yellow
+	assert.Contains(t, colorizeStatus(c, "Created"), "\033[33m")
+
+	// No color should have no ANSI
+	assert.NotContains(t, colorizeStatus(noColor, "Up 2 hours"), "\033[")
 }
 
 func TestDryRun_ShowsResources(t *testing.T) {
