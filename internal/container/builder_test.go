@@ -398,15 +398,23 @@ func TestBuildSpec_ContainerNameDeterministicPrefix(t *testing.T) {
 }
 
 func TestRandomSuffix_Length(t *testing.T) {
-	s := randomSuffix(4)
-	assert.Len(t, s, 4, "suffix should be exactly 4 characters")
+	s := randomSuffix(8)
+	assert.Len(t, s, 8, "suffix should be exactly 8 characters")
 	assert.Regexp(t, "^[0-9a-f]+$", s, "suffix should be hex characters only")
 }
 
 func TestRandomSuffix_Unique(t *testing.T) {
-	s1 := randomSuffix(4)
-	s2 := randomSuffix(4)
+	s1 := randomSuffix(8)
+	s2 := randomSuffix(8)
 	assert.NotEqual(t, s1, s2, "two calls should produce different suffixes")
+}
+
+func TestGenerateContainerName_SuffixLength(t *testing.T) {
+	name := generateContainerName("agent", "profile", "hash")
+	// Format: agent-profile-hash-<8 hex chars>
+	parts := strings.Split(name, "-")
+	suffix := parts[len(parts)-1]
+	assert.Len(t, suffix, 8, "container name suffix should be 8 hex chars")
 }
 
 func TestBuildSpec_WorkdirUsesRealPwd(t *testing.T) {

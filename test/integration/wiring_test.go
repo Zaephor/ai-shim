@@ -82,6 +82,10 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 			GPU:      testutil.BoolPtr(true),
 			Resources: &config.ResourceLimits{Memory: "2g", CPUs: "1.0"},
 			Git:       &config.GitConfig{Name: "Test User", Email: "test@example.com"},
+			MCPServers: map[string]config.MCPServerDef{
+				"test": {Command: "echo", Args: []string{"test"}},
+			},
+			SecurityProfile: "strict",
 		},
 		Agent:   agent.Definition{Name: "test", InstallType: "npm", Package: "test-pkg", Binary: "test-bin", DataDirs: []string{".test-data"}, DataFiles: []string{".test-config.json"}},
 		Profile: "work",
@@ -109,7 +113,19 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	assert.Contains(t, spec.Entrypoint[2], "curl") // tools
 	assert.Contains(t, spec.Entrypoint[2], "git config --global user.name") // git config
 	assert.Contains(t, spec.Entrypoint[2], "git config --global user.email") // git config
+	// MCP servers should be in env vars
+	hasMCPEnv := false
+	for _, e := range spec.Env {
+		if strings.HasPrefix(e, "MCP_SERVERS=") {
+			hasMCPEnv = true
+			break
+		}
+	}
+	assert.True(t, hasMCPEnv, "MCP_SERVERS should be set in env")
 	assert.Equal(t, "/tmp/logs", spec.LogDir)
+	assert.NotEmpty(t, spec.SecurityOpt, "strict security profile should set SecurityOpt")
+	assert.Contains(t, spec.SecurityOpt, "no-new-privileges:true")
+	assert.NotEmpty(t, spec.CapDrop, "strict security profile should drop capabilities")
 }
 
 func findMountTarget(mounts []mount.Mount, keyword string) string {

@@ -43,7 +43,10 @@ func TestFindContainerByName_NotFound(t *testing.T) {
 }
 
 func TestStdinIsTerminal(t *testing.T) {
-	// Just verify it returns a bool without panicking.
-	// The actual value depends on the test runner environment.
-	_ = stdinIsTerminal()
+	// Verify stdinIsTerminal returns a valid bool without panicking.
+	// The result depends on the test runner environment (race detector
+	// may change stdin behavior), so we just verify the function
+	// completes and returns a deterministic type.
+	result := stdinIsTerminal()
+	assert.IsType(t, true, result, "stdinIsTerminal should return a bool")
 }

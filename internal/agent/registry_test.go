@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,31 @@ func TestNames_Sorted(t *testing.T) {
 	for i := 1; i < len(names); i++ {
 		assert.True(t, names[i-1] < names[i])
 	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	// Verify that concurrent reads and writes don't panic or race
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			SetCustomAgents(map[string]Definition{
+				"concurrent-test": {Name: "concurrent-test", Binary: "ct"},
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = Lookup("concurrent-test")
+		}()
+		go func() {
+			defer wg.Done()
+			_ = Names()
+		}()
+	}
+	wg.Wait()
+	// Clean up
+	SetCustomAgents(nil)
 }
 
 func TestInstallTypes(t *testing.T) {

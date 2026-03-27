@@ -296,7 +296,9 @@ dind_hostname: my-dind
 dind_mirrors:
   - https://mirror.example.com
 dind_cache: true
+dind_tls: true
 isolated: false
+security_profile: strict
 allow_agents:
   - gemini-cli
 resources:
@@ -343,8 +345,10 @@ git:
 		"network_scope:", // network scope
 		"dind_hostname:", // dind hostname
 		"mirror.example", // dind mirrors
-		"dind_cache:",    // dind cache
-		"isolated:",      // isolation
+		"dind_cache:",          // dind cache
+		"dind_tls:",           // dind tls
+		"isolated:",           // isolation
+		"security_profile:",   // security profile
 		"gemini-cli",     // allow_agents
 		"2g",             // resources memory
 		"1.0",            // resources cpus
@@ -353,7 +357,8 @@ git:
 		"filesystem",     // mcp server name
 		"act",            // tools
 		"Test User",      // git name
-		"test@example.com", // git email
+		"test@example.com",    // git email
+		"var1=val1",           // variables
 	}
 
 	for _, sub := range expectedSubstrings {
@@ -566,6 +571,75 @@ func TestReinstall_NotInstalled(t *testing.T) {
 	err := Reinstall(layout, "claude-code")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not installed")
+}
+
+func TestDryRun_ShowsAllFields(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+hostname: "test"
+packages:
+  - tmux
+network_scope: profile
+dind_hostname: my-dind
+dind: true
+gpu: true
+dind_gpu: true
+dind_mirrors:
+  - https://mirror.example.com
+dind_cache: true
+dind_tls: true
+isolated: false
+allow_agents:
+  - gemini-cli
+mcp_servers:
+  filesystem:
+    command: npx
+tools:
+  act:
+    type: binary-download
+    url: https://example.com/act
+    binary: act
+git:
+  name: "Test User"
+  email: "test@example.com"
+security_profile: strict
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "work", nil)
+	require.NoError(t, err)
+
+	expectedSubstrings := []string{
+		"Packages:",
+		"tmux",
+		"Network:",
+		"DIND Host:",
+		"DIND Mirrors:",
+		"mirror.example.com",
+		"DIND Cache:",
+		"DIND TLS:",
+		"Isolated:",
+		"Allow Agents:",
+		"gemini-cli",
+		"MCP Servers:",
+		"filesystem",
+		"Tools:",
+		"act",
+		"Git:",
+		"Test User",
+		"test@example.com",
+		"Security:",
+		"strict",
+	}
+	for _, sub := range expectedSubstrings {
+		assert.Contains(t, output, sub, "DryRun should display: %s", sub)
+	}
 }
 
 func TestShowConfig_SecurityProfile(t *testing.T) {
