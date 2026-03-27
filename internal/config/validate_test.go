@@ -65,3 +65,54 @@ func TestValidate_EmptyImage(t *testing.T) {
 	warnings := cfg.Validate()
 	assert.Empty(t, warnings)
 }
+
+func TestValidate_NetworkRulesBothAllowedAndBlocked(t *testing.T) {
+	cfg := Config{
+		NetworkRules: &NetworkRules{
+			AllowedHosts: []string{"good.com"},
+			BlockedHosts: []string{"bad.com"},
+		},
+	}
+	warnings := cfg.Validate()
+	assert.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "cannot set both")
+}
+
+func TestValidate_NetworkRulesAllowedOnly(t *testing.T) {
+	cfg := Config{
+		NetworkRules: &NetworkRules{
+			AllowedHosts: []string{"api.example.com"},
+		},
+	}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}
+
+func TestValidate_NetworkRulesNil(t *testing.T) {
+	cfg := Config{}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}
+
+func TestValidateSecurityProfile_Valid(t *testing.T) {
+	for _, profile := range []string{"", "default", "strict", "none"} {
+		assert.NoError(t, ValidateSecurityProfile(profile), "profile %q should be valid", profile)
+	}
+}
+
+func TestValidateSecurityProfile_Invalid(t *testing.T) {
+	assert.Error(t, ValidateSecurityProfile("banana"))
+}
+
+func TestValidate_InvalidSecurityProfile(t *testing.T) {
+	cfg := Config{SecurityProfile: "invalid"}
+	warnings := cfg.Validate()
+	assert.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "invalid security_profile")
+}
+
+func TestValidate_ValidSecurityProfile(t *testing.T) {
+	cfg := Config{SecurityProfile: "strict"}
+	warnings := cfg.Validate()
+	assert.Empty(t, warnings)
+}

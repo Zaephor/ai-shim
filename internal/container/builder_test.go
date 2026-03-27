@@ -521,3 +521,69 @@ func TestMCPServersJSON(t *testing.T) {
 	assert.Contains(t, result, `"K":"V"`)
 }
 
+func TestBuildSpec_FirewallRulesInEntrypoint(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.NetworkRules = &config.NetworkRules{
+		AllowedHosts: []string{"api.example.com"},
+	}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, "iptables", "firewall rules should be in entrypoint")
+	assert.Contains(t, entrypoint, "api.example.com", "allowed host should be in entrypoint")
+}
+
+func TestBuildSpec_NoFirewallRulesWhenNil(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.NotContains(t, entrypoint, "iptables", "no iptables rules when NetworkRules is nil")
+}
+
+func TestBuildSpec_SecurityProfileDefault(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+
+	assert.Empty(t, spec.SecurityOpt, "default profile should not set SecurityOpt")
+	assert.Empty(t, spec.CapDrop, "default profile should not drop capabilities")
+}
+
+func TestBuildSpec_SecurityProfileStrict(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.SecurityProfile = "strict"
+	spec := BuildSpec(p)
+
+	assert.Contains(t, spec.SecurityOpt, "no-new-privileges:true")
+	assert.Contains(t, spec.CapDrop, "ALL")
+}
+
+func TestBuildSpec_SecurityProfileNone(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.SecurityProfile = "none"
+	spec := BuildSpec(p)
+
+	assert.Contains(t, spec.SecurityOpt, "seccomp=unconfined")
+	assert.Empty(t, spec.CapDrop)
+}
+
+func TestResolveSecurityProfile(t *testing.T) {
+	tests := []struct {
+		profile     string
+		wantSecOpt  []string
+		wantCapDrop []string
+	}{
+		{"", nil, nil},
+		{"default", nil, nil},
+		{"strict", []string{"no-new-privileges:true"}, []string{"ALL"}},
+		{"none", []string{"seccomp=unconfined"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.profile, func(t *testing.T) {
+			secOpt, capDrop := resolveSecurityProfile(tt.profile)
+			assert.Equal(t, tt.wantSecOpt, secOpt)
+			assert.Equal(t, tt.wantCapDrop, capDrop)
+		})
+	}
+}
+

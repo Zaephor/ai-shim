@@ -219,3 +219,34 @@ func TestMerge_MCPServersNilPreserved(t *testing.T) {
 	result := Merge(base, over)
 	assert.Equal(t, "npx", result.MCPServers["fs"].Command)
 }
+
+func TestMerge_NetworkRules(t *testing.T) {
+	base := Config{NetworkRules: &NetworkRules{AllowedHosts: []string{"base.com"}}}
+	over := Config{NetworkRules: &NetworkRules{BlockedHosts: []string{"bad.com"}}}
+	result := Merge(base, over)
+	require.NotNil(t, result.NetworkRules)
+	assert.Equal(t, []string{"bad.com"}, result.NetworkRules.BlockedHosts, "override should replace entire NetworkRules")
+	assert.Empty(t, result.NetworkRules.AllowedHosts, "base AllowedHosts should not carry over")
+}
+
+func TestMerge_NetworkRulesNilPreserved(t *testing.T) {
+	base := Config{NetworkRules: &NetworkRules{AllowedHosts: []string{"api.com"}}}
+	over := Config{}
+	result := Merge(base, over)
+	require.NotNil(t, result.NetworkRules)
+	assert.Equal(t, []string{"api.com"}, result.NetworkRules.AllowedHosts)
+}
+
+func TestMerge_SecurityProfile(t *testing.T) {
+	base := Config{SecurityProfile: "default"}
+	over := Config{SecurityProfile: "strict"}
+	result := Merge(base, over)
+	assert.Equal(t, "strict", result.SecurityProfile)
+}
+
+func TestMerge_SecurityProfileNilPreserved(t *testing.T) {
+	base := Config{SecurityProfile: "strict"}
+	over := Config{}
+	result := Merge(base, over)
+	assert.Equal(t, "strict", result.SecurityProfile)
+}

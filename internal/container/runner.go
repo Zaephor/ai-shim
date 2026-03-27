@@ -46,9 +46,11 @@ type ContainerSpec struct {
 	TTY          bool
 	Stdin        bool
 	GPU          bool
-	NetworkID    string           // Docker network ID to attach container to
-	Resources    *ResourceLimits  // optional resource constraints
-	LogDir       string           // directory for exit logs (empty = no logging)
+	NetworkID       string           // Docker network ID to attach container to
+	Resources       *ResourceLimits  // optional resource constraints
+	SecurityOpt     []string         // Docker SecurityOpt (e.g. no-new-privileges)
+	CapDrop         []string         // Linux capabilities to drop
+	LogDir          string           // directory for exit logs (empty = no logging)
 }
 
 // Runner manages container lifecycle via the Docker API.
@@ -109,6 +111,8 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		Mounts:       spec.Mounts,
 		AutoRemove:   true,
 		PortBindings: spec.Ports,
+		SecurityOpt:  spec.SecurityOpt,
+		CapDrop:      spec.CapDrop,
 	}
 
 	if spec.GPU {

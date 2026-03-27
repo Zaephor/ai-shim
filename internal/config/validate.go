@@ -45,8 +45,43 @@ func (c Config) Validate() []string {
 	warnings = append(warnings, validateImageDigest(c.Image)...)
 	warnings = append(warnings, validateResourceLimits("resources", c.Resources)...)
 	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
+	warnings = append(warnings, validateNetworkRules(c.NetworkRules)...)
+	warnings = append(warnings, validateSecurityProfile(c.SecurityProfile)...)
 
 	return warnings
+}
+
+// validateNetworkRules checks that network rules are consistent.
+func validateNetworkRules(rules *NetworkRules) []string {
+	if rules == nil {
+		return nil
+	}
+	var warnings []string
+	if len(rules.AllowedHosts) > 0 && len(rules.BlockedHosts) > 0 {
+		warnings = append(warnings, "network_rules: cannot set both allowed_hosts and blocked_hosts")
+	}
+	return warnings
+}
+
+// ValidateSecurityProfile checks if a security profile value is valid.
+func ValidateSecurityProfile(profile string) error {
+	valid := map[string]bool{
+		"":        true,
+		"default": true,
+		"strict":  true,
+		"none":    true,
+	}
+	if !valid[profile] {
+		return fmt.Errorf("invalid security_profile %q (valid: default, strict, none)", profile)
+	}
+	return nil
+}
+
+func validateSecurityProfile(profile string) []string {
+	if err := ValidateSecurityProfile(profile); err != nil {
+		return []string{err.Error()}
+	}
+	return nil
 }
 
 // validateResourceLimits checks that resource limit values are parseable.
