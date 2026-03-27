@@ -63,6 +63,7 @@ func TestE2E_EntrypointContainsInstallCommand(t *testing.T) {
 			root := t.TempDir()
 			layout := storage.NewLayout(root)
 			require.NoError(t, layout.EnsureDirectories(name, "default"))
+			require.NoError(t, layout.EnsureAgentData("default", def.DataDirs, def.DataFiles))
 
 			spec := container.BuildSpec(container.BuildParams{
 				Config:   config.Config{},
@@ -311,6 +312,9 @@ env:
 	agentDef, ok := agent.Lookup("opencode")
 	require.True(t, ok)
 
+	// Pre-create agent data dirs/files (required for isolated mode mounts)
+	require.NoError(t, lay.EnsureAgentData("test", agentDef.DataDirs, agentDef.DataFiles))
+
 	plat := platform.Detect()
 
 	spec := container.BuildSpec(container.BuildParams{
@@ -365,6 +369,9 @@ func TestE2E_FullBuildSpecProducesValidContainer(t *testing.T) {
 
 	agentDef, ok := agent.Lookup("opencode")
 	require.True(t, ok)
+
+	// Pre-create agent data dirs/files (required for isolated mode mounts)
+	require.NoError(t, layout.EnsureAgentData("default", agentDef.DataDirs, agentDef.DataFiles))
 
 	plat := platform.Detect()
 
