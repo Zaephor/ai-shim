@@ -83,6 +83,21 @@
 #   name: "Your Name"
 #   email: "you@example.com"
 
+# Security profile: controls Linux capability dropping.
+# Options: default, strict, none
+# security_profile: default
+
+# Enable TLS for the DIND Docker socket. Default: false
+# dind_tls: false
+
+# MCP servers exposed to the agent (serialized as MCP_SERVERS JSON env var).
+# mcp_servers:
+#   filesystem:
+#     command: npx
+#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
+#     env:
+#       NODE_ENV: production
+
 # Cross-agent access: list of agent names whose bins AND data directories
 # get mounted into the container.
 # allow_agents: []

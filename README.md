@@ -91,6 +91,18 @@ dind_cache: false            # enable pull-through registry cache
 packages:
   - tmux
   - git
+
+# Security profile: default, strict, or none
+# security_profile: default
+
+# Enable TLS for the DIND Docker socket
+# dind_tls: false
+
+# MCP servers exposed to the agent (injected as MCP_SERVERS env var)
+# mcp_servers:
+#   filesystem:
+#     command: npx
+#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
 ```
 
 Scalars (image, version, hostname) use last-wins. Maps (env, variables, tools)
@@ -137,6 +149,30 @@ See `configs/examples/` for annotated example files and
 - **Package installation** -- install apt packages at container startup
 - **Resource limits** -- optional memory and CPU limits for agent and DIND
   containers independently via `resources` and `dind_resources`
+- **MCP server configuration** -- define MCP servers in `mcp_servers:` config
+  blocks; injected into containers as a `MCP_SERVERS` JSON env var
+- **Custom agent definitions** -- add `agent_def:` to agent YAML files to
+  define new agents or override built-in definitions
+- **Config source annotation** -- `ai-shim manage config` shows which
+  configuration tier set each value (e.g. "from agents/claude-code.yaml")
+- **Security profiles** -- `security_profile: default|strict|none` controls
+  Linux capability dropping for the container
+- **JSON output** -- set `AI_SHIM_JSON=1` for machine-readable JSON output
+  from management commands
+- **Colorized output** -- management output uses ANSI colors; disable with
+  `AI_SHIM_NO_COLOR=1` or the standard `NO_COLOR` variable
+- **Container exec** -- `ai-shim manage exec <name> <command...>` runs a
+  command in a running ai-shim container
+- **Watch mode** -- `ai-shim manage watch <agent> [profile]` auto-restarts
+  an agent on crash, controlled by `AI_SHIM_WATCH_RETRIES` (default 3)
+- **Agent version management** -- `ai-shim manage agent-versions` lists
+  installed versions; `ai-shim manage reinstall <agent>` forces a reinstall
+- **Profile switching** -- `ai-shim manage switch-profile <profile>` sets the
+  default profile for subsequent invocations
+- **DIND TLS** -- `dind_tls: true` enables TLS-secured Docker socket for the
+  DIND sidecar
+- **DIND health check** -- DIND sidecar startup includes automatic readiness
+  polling before the agent container launches
 
 ## CLI Reference
 
@@ -176,6 +212,15 @@ ai-shim manage symlinks remove <path>
                                 # remove a symlink
 ai-shim manage cleanup          # remove orphaned ai-shim containers
 ai-shim manage status           # show running ai-shim containers
+ai-shim manage exec <name> <cmd...>
+                                # run command in a running container
+ai-shim manage watch <agent> [profile]
+                                # restart agent on crash with retries
+ai-shim manage agent-versions   # show installed agent versions
+ai-shim manage reinstall <agent>
+                                # force reinstall an agent
+ai-shim manage switch-profile <profile>
+                                # set the default profile
 ai-shim manage backup <profile> [path]
                                 # backup profile to tar.gz
 ai-shim manage restore <profile> <archive>
@@ -194,9 +239,14 @@ AI_SHIM_GPU=0/1                 # toggle GPU for agent container
 AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
+AI_SHIM_DIND_TLS=0/1            # toggle TLS for DIND socket
+AI_SHIM_SECURITY_PROFILE=<p>    # security profile (default/strict/none)
 AI_SHIM_GIT_NAME=<name>         # git user.name for container commits
 AI_SHIM_GIT_EMAIL=<email>       # git user.email for container commits
 AI_SHIM_VERBOSE=0/1             # enable debug output
+AI_SHIM_JSON=0/1                # JSON output for management commands
+AI_SHIM_NO_COLOR=0/1            # disable colored output
+AI_SHIM_WATCH_RETRIES=<n>       # max restarts for watch mode (default 3)
 ```
 
 ## Building from Source

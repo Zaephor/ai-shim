@@ -35,6 +35,12 @@ tools:
     url: "https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_amd64.tar.gz"
     binary: gh
 
+# MCP servers available to claude-code (injected as MCP_SERVERS env var).
+# mcp_servers:
+#   filesystem:
+#     command: npx
+#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
+
 packages:
   - git
   - jq

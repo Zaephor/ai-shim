@@ -34,6 +34,10 @@ allow_agents:
   - gemini-cli
   - claude-code
 
+# Security profile for this profile's containers.
+# Options: default, strict, none
+# security_profile: strict
+
 # Home directory isolation. Set to false to mount the full profile home
 # instead of only agent-specific data dirs. Default: true.
 # isolated: false

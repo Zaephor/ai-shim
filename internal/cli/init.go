@@ -55,6 +55,18 @@ func Init(layout storage.Layout) error {
 # Template variables (not injected, used for templating)
 # variables:
 #   llm_host: "my-host:8080"
+
+# Security profile: default, strict, or none
+# security_profile: default
+
+# MCP servers (injected as MCP_SERVERS JSON env var)
+# mcp_servers:
+#   my-server:
+#     command: npx
+#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
+
+# Enable TLS for the DIND Docker socket
+# dind_tls: false
 `
 	configPath := filepath.Join(layout.ConfigDir, "default.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -75,6 +87,10 @@ func Init(layout storage.Layout) error {
 #   email: "you@example.com"
 # args:
 #   - "--no-telemetry"
+# mcp_servers:
+#   filesystem:
+#     command: npx
+#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
 `), 0644)
 	}
 
@@ -88,6 +104,7 @@ func Init(layout storage.Layout) error {
 #   EDITOR: "vim"
 # volumes:
 #   - "/host/path:/container/path"
+# security_profile: strict
 `), 0644)
 	}
 
