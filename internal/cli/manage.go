@@ -56,69 +56,73 @@ func ListProfiles(layout storage.Layout) (string, error) {
 
 // ShowConfig returns the fully resolved config for an agent+profile combination.
 func ShowConfig(layout storage.Layout, agentName, profile string) (string, error) {
-	cfg, err := config.Resolve(layout.ConfigDir, agentName, profile)
+	cfg, sources, err := config.ResolveWithSources(layout.ConfigDir, agentName, profile)
 	if err != nil {
 		return "", err
+	}
+
+	src := func(field string) string {
+		return sources.FormatSource(field)
 	}
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Resolved config for %s_%s:\n\n", agentName, profile))
 
 	if cfg.Image != "" {
-		b.WriteString(fmt.Sprintf("  image:    %s\n", cfg.GetImage()))
+		b.WriteString(fmt.Sprintf("  image:    %s%s\n", cfg.GetImage(), src("image")))
 	}
 	if cfg.Hostname != "" {
-		b.WriteString(fmt.Sprintf("  hostname: %s\n", cfg.GetHostname()))
+		b.WriteString(fmt.Sprintf("  hostname: %s%s\n", cfg.GetHostname(), src("hostname")))
 	}
 	if cfg.Version != "" {
-		b.WriteString(fmt.Sprintf("  version:  %s\n", cfg.Version))
+		b.WriteString(fmt.Sprintf("  version:  %s%s\n", cfg.Version, src("version")))
 	}
 
 	if len(cfg.Env) > 0 {
-		b.WriteString("  env:\n")
+		b.WriteString(fmt.Sprintf("  env:%s\n", src("env")))
 		for k, v := range cfg.Env {
 			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
 		}
 	}
 
 	if len(cfg.Args) > 0 {
-		b.WriteString(fmt.Sprintf("  args:     %s\n", strings.Join(cfg.Args, " ")))
+		b.WriteString(fmt.Sprintf("  args:     %s%s\n", strings.Join(cfg.Args, " "), src("args")))
 	}
 
 	if len(cfg.Volumes) > 0 {
-		b.WriteString("  volumes:\n")
+		b.WriteString(fmt.Sprintf("  volumes:%s\n", src("volumes")))
 		for _, v := range cfg.Volumes {
 			b.WriteString(fmt.Sprintf("    %s\n", v))
 		}
 	}
 
 	if len(cfg.Ports) > 0 {
-		b.WriteString("  ports:\n")
+		b.WriteString(fmt.Sprintf("  ports:%s\n", src("ports")))
 		for _, p := range cfg.Ports {
 			b.WriteString(fmt.Sprintf("    %s\n", p))
 		}
 	}
 
 	if len(cfg.Packages) > 0 {
-		b.WriteString("  packages:\n")
+		b.WriteString(fmt.Sprintf("  packages:%s\n", src("packages")))
 		for _, p := range cfg.Packages {
 			b.WriteString(fmt.Sprintf("    - %s\n", p))
 		}
 	}
 
-	b.WriteString(formatBoolField("dind", cfg.DIND, false))
-	b.WriteString(formatBoolField("gpu", cfg.GPU, false))
-	b.WriteString(formatBoolField("dind_gpu", cfg.DINDGpu, false))
+	b.WriteString(formatBoolFieldSrc("dind", cfg.DIND, false, src("dind")))
+	b.WriteString(formatBoolFieldSrc("gpu", cfg.GPU, false, src("gpu")))
+	b.WriteString(formatBoolFieldSrc("dind_gpu", cfg.DINDGpu, false, src("dind_gpu")))
 
 	if cfg.NetworkScope != "" {
-		b.WriteString(fmt.Sprintf("  network_scope: %s\n", cfg.NetworkScope))
+		b.WriteString(fmt.Sprintf("  network_scope: %s%s\n", cfg.NetworkScope, src("network_scope")))
 	}
 	if cfg.DINDHostname != "" {
-		b.WriteString(fmt.Sprintf("  dind_hostname: %s\n", cfg.DINDHostname))
+		b.WriteString(fmt.Sprintf("  dind_hostname: %s%s\n", cfg.DINDHostname, src("dind_hostname")))
 	}
 
 	if cfg.Resources != nil {
-		b.WriteString("  resources:\n")
+		b.WriteString(fmt.Sprintf("  resources:%s\n", src("resources")))
 		if cfg.Resources.Memory != "" {
 			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.Resources.Memory))
 		}
@@ -127,7 +131,7 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 		}
 	}
 	if cfg.DINDResources != nil {
-		b.WriteString("  dind_resources:\n")
+		b.WriteString(fmt.Sprintf("  dind_resources:%s\n", src("dind_resources")))
 		if cfg.DINDResources.Memory != "" {
 			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.DINDResources.Memory))
 		}
@@ -137,39 +141,39 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	}
 
 	if len(cfg.DINDMirrors) > 0 {
-		b.WriteString("  dind_mirrors:\n")
+		b.WriteString(fmt.Sprintf("  dind_mirrors:%s\n", src("dind_mirrors")))
 		for _, m := range cfg.DINDMirrors {
 			b.WriteString(fmt.Sprintf("    - %s\n", m))
 		}
 	}
 
-	b.WriteString(formatBoolField("dind_cache", cfg.DINDCache, false))
-	b.WriteString(formatBoolField("dind_tls", cfg.DINDTLS, false))
-	b.WriteString(formatBoolField("isolated", cfg.Isolated, true))
+	b.WriteString(formatBoolFieldSrc("dind_cache", cfg.DINDCache, false, src("dind_cache")))
+	b.WriteString(formatBoolFieldSrc("dind_tls", cfg.DINDTLS, false, src("dind_tls")))
+	b.WriteString(formatBoolFieldSrc("isolated", cfg.Isolated, true, src("isolated")))
 
 	if len(cfg.AllowAgents) > 0 {
-		b.WriteString("  allow_agents:\n")
+		b.WriteString(fmt.Sprintf("  allow_agents:%s\n", src("allow_agents")))
 		for _, a := range cfg.AllowAgents {
 			b.WriteString(fmt.Sprintf("    - %s\n", a))
 		}
 	}
 
 	if len(cfg.MCPServers) > 0 {
-		b.WriteString("  mcp_servers:\n")
+		b.WriteString(fmt.Sprintf("  mcp_servers:%s\n", src("mcp_servers")))
 		for name, srv := range cfg.MCPServers {
 			b.WriteString(fmt.Sprintf("    %s: %s\n", name, srv.Command))
 		}
 	}
 
 	if len(cfg.Tools) > 0 {
-		b.WriteString("  tools:\n")
+		b.WriteString(fmt.Sprintf("  tools:%s\n", src("tools")))
 		for name, tool := range cfg.Tools {
 			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
 		}
 	}
 
 	if cfg.NetworkRules != nil {
-		b.WriteString("  network_rules:\n")
+		b.WriteString(fmt.Sprintf("  network_rules:%s\n", src("network_rules")))
 		if len(cfg.NetworkRules.AllowedHosts) > 0 {
 			b.WriteString("    allowed_hosts:\n")
 			for _, h := range cfg.NetworkRules.AllowedHosts {
@@ -191,11 +195,11 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	}
 
 	if cfg.SecurityProfile != "" {
-		b.WriteString(fmt.Sprintf("  security_profile: %s\n", cfg.SecurityProfile))
+		b.WriteString(fmt.Sprintf("  security_profile: %s%s\n", cfg.SecurityProfile, src("security_profile")))
 	}
 
 	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {
-		b.WriteString("  git:\n")
+		b.WriteString(fmt.Sprintf("  git:%s\n", src("git")))
 		if cfg.Git.Name != "" {
 			b.WriteString(fmt.Sprintf("    name:  %s\n", cfg.Git.Name))
 		}
@@ -591,6 +595,20 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
+// formatBoolFieldSrc is like formatBoolField but appends a source annotation.
+func formatBoolFieldSrc(name string, val *bool, defaultVal bool, srcAnnotation string) string {
+	if val != nil {
+		if *val {
+			return fmt.Sprintf("  %-15s true%s\n", name+":", srcAnnotation)
+		}
+		return fmt.Sprintf("  %-15s false%s\n", name+":", srcAnnotation)
+	}
+	if defaultVal {
+		return fmt.Sprintf("  %-15s true (default)\n", name+":")
+	}
+	return fmt.Sprintf("  %-15s false (default)\n", name+":")
+}
+
 // formatBoolField formats a *bool config field with default annotation for ShowConfig output.
 func formatBoolField(name string, val *bool, defaultVal bool) string {
 	if val != nil {
@@ -632,6 +650,73 @@ func containerDisplayName(c container_types.Summary) string {
 		return strings.TrimPrefix(c.Names[0], "/")
 	}
 	return c.ID[:12]
+}
+
+// AgentVersions returns a formatted report of installed agent versions.
+func AgentVersions(layout storage.Layout) string {
+	var b strings.Builder
+	b.WriteString("Installed agent versions:\n\n")
+
+	for _, name := range agent.Names() {
+		def, _ := agent.Lookup(name)
+		binDir := layout.AgentBin(name)
+
+		status := "not installed"
+		entries, err := os.ReadDir(binDir)
+		if err == nil && len(entries) > 0 {
+			// Try to get version from the binary
+			binaryPath := filepath.Join(binDir, def.Binary)
+			if _, statErr := os.Stat(binaryPath); statErr == nil {
+				// Try --version
+				cmd := exec.Command(binaryPath, "--version")
+				cmd.Env = []string{"HOME=/tmp", "PATH=" + binDir + ":/usr/bin:/bin"}
+				out, err := cmd.Output()
+				if err == nil {
+					ver := strings.TrimSpace(string(out))
+					// Take just the first line
+					if idx := strings.IndexByte(ver, '\n'); idx >= 0 {
+						ver = ver[:idx]
+					}
+					status = ver
+				} else {
+					status = "installed (version unknown)"
+				}
+			} else {
+				status = "installed (binary not found in cache)"
+			}
+		}
+
+		b.WriteString(fmt.Sprintf("  %-15s  %s\n", name, status))
+	}
+
+	return b.String()
+}
+
+// Reinstall clears an agent's bin cache directory, forcing reinstall on next launch.
+func Reinstall(layout storage.Layout, agentName string) error {
+	if _, ok := agent.Lookup(agentName); !ok {
+		return fmt.Errorf("unknown agent: %s", agentName)
+	}
+
+	binDir := layout.AgentBin(agentName)
+	if _, err := os.Stat(binDir); os.IsNotExist(err) {
+		return fmt.Errorf("agent %s is not installed (no bin directory)", agentName)
+	}
+
+	// Remove all files in the bin directory
+	entries, err := os.ReadDir(binDir)
+	if err != nil {
+		return fmt.Errorf("reading bin directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(binDir, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("removing %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 func readDirNames(root, subdir string) ([]string, error) {

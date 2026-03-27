@@ -9,36 +9,57 @@ import (
 // Resolve loads, merges, and resolves the full 5-tier config for the given
 // agent and profile. configDir is the path to ~/.ai-shim/config/.
 func Resolve(configDir, agent, profile string) (Config, error) {
+	cfg, _, err := ResolveWithSources(configDir, agent, profile)
+	return cfg, err
+}
+
+// ResolveWithSources is like Resolve but also returns ConfigSources that
+// tracks which tier set each field.
+func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSources, error) {
 	defaultCfg, err := LoadFile(filepath.Join(configDir, "default.yaml"))
 	if err != nil {
-		return Config{}, fmt.Errorf("loading default config: %w", err)
+		return Config{}, ConfigSources{}, fmt.Errorf("loading default config: %w", err)
 	}
 
-	agentCfg, err := LoadFile(filepath.Join(configDir, "agents", agent+".yaml"))
+	agentCfg, err := LoadFile(filepath.Join(configDir, "agents", agentName+".yaml"))
 	if err != nil {
-		return Config{}, fmt.Errorf("loading agent config: %w", err)
+		return Config{}, ConfigSources{}, fmt.Errorf("loading agent config: %w", err)
 	}
 
 	profileCfg, err := LoadFile(filepath.Join(configDir, "profiles", profile+".yaml"))
 	if err != nil {
-		return Config{}, fmt.Errorf("loading profile config: %w", err)
+		return Config{}, ConfigSources{}, fmt.Errorf("loading profile config: %w", err)
 	}
 
-	agentProfileCfg, err := LoadFile(filepath.Join(configDir, "agent-profiles", agent+"_"+profile+".yaml"))
+	agentProfileCfg, err := LoadFile(filepath.Join(configDir, "agent-profiles", agentName+"_"+profile+".yaml"))
 	if err != nil {
-		return Config{}, fmt.Errorf("loading agent-profile config: %w", err)
+		return Config{}, ConfigSources{}, fmt.Errorf("loading agent-profile config: %w", err)
 	}
 
 	envCfg := loadEnvOverrides()
 
-	merged := MergeAll(defaultCfg, agentCfg, profileCfg, agentProfileCfg, envCfg)
+	tiers := []namedConfig{
+		{name: "default.yaml", config: defaultCfg},
+		{name: fmt.Sprintf("agent:%s", agentName), config: agentCfg},
+		{name: fmt.Sprintf("profile:%s", profile), config: profileCfg},
+		{name: fmt.Sprintf("agent-profile:%s_%s", agentName, profile), config: agentProfileCfg},
+		{name: "env", config: envCfg},
+	}
+
+	configs := make([]Config, len(tiers))
+	for i, t := range tiers {
+		configs[i] = t.config
+	}
+
+	merged := MergeAll(configs...)
+	sources := computeSources(tiers)
 
 	resolved, err := ResolveTemplates(merged)
 	if err != nil {
-		return Config{}, fmt.Errorf("resolving templates: %w", err)
+		return Config{}, ConfigSources{}, fmt.Errorf("resolving templates: %w", err)
 	}
 
-	return resolved, nil
+	return resolved, sources, nil
 }
 
 // loadEnvOverrides reads AI_SHIM_* environment variables and returns a Config

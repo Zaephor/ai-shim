@@ -59,6 +59,29 @@ hostname: "test"
 	assert.Contains(t, output, "test")
 }
 
+func TestShowConfig_SourceAnnotations(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "ubuntu:24.04"
+`), 0644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "agents", "claude.yaml"), []byte(`
+hostname: "claude-host"
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowConfig(layout, "claude", "work")
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "(from default.yaml)", "image source annotation")
+	assert.Contains(t, output, "(from agent:claude)", "hostname source annotation")
+}
+
 func TestDoctor(t *testing.T) {
 	output := Doctor()
 	assert.Contains(t, output, "ai-shim doctor")
@@ -448,4 +471,94 @@ dind_resources:
 	assert.Contains(t, output, "DIND Resources:")
 	assert.Contains(t, output, "memory: 2g")
 	assert.Contains(t, output, "cpus:   1.0")
+}
+
+func TestAgentVersions(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create bin dir for one agent
+	os.MkdirAll(layout.AgentBin("claude-code"), 0755)
+
+	output := AgentVersions(layout)
+	assert.Contains(t, output, "Installed agent versions:")
+	assert.Contains(t, output, "claude-code")
+	assert.Contains(t, output, "not installed") // most agents won't have bins
+}
+
+func TestAgentVersions_WithBinary(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create a fake binary
+	binDir := layout.AgentBin("claude-code")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "claude"), []byte("fake"), 0755)
+
+	output := AgentVersions(layout)
+	assert.Contains(t, output, "claude-code")
+	// Binary exists but won't actually run, so it should show version unknown or error
+}
+
+func TestReinstall_Success(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create bin dir with a file
+	binDir := layout.AgentBin("claude-code")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "claude"), []byte("binary"), 0755)
+
+	err := Reinstall(layout, "claude-code")
+	require.NoError(t, err)
+
+	// Bin dir should still exist but be empty
+	entries, err := os.ReadDir(binDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "bin dir should be empty after reinstall")
+}
+
+func TestReinstall_UnknownAgent(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	err := Reinstall(layout, "nonexistent-agent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown agent")
+}
+
+func TestReinstall_NotInstalled(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	err := Reinstall(layout, "claude-code")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not installed")
+}
+
+func TestShowConfig_NetworkRulesAndSecurityProfile(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+hostname: "test"
+network_rules:
+  allowed_hosts:
+    - api.example.com
+  allowed_ports:
+    - "443"
+security_profile: strict
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowConfig(layout, "claude-code", "work")
+	require.NoError(t, err)
+	assert.Contains(t, output, "network_rules:")
+	assert.Contains(t, output, "api.example.com")
+	assert.Contains(t, output, "443")
+	assert.Contains(t, output, "security_profile: strict")
 }
