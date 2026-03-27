@@ -749,6 +749,171 @@ func Reinstall(layout storage.Layout, agentName string) error {
 	return nil
 }
 
+// ListAgentsJSON returns agents as a JSON string.
+func ListAgentsJSON() (string, error) {
+	var entries []AgentEntry
+	for _, name := range agent.Names() {
+		def, _ := agent.Lookup(name)
+		entries = append(entries, AgentEntry{
+			Name:        name,
+			InstallType: def.InstallType,
+			Binary:      def.Binary,
+		})
+	}
+	return MarshalJSON(entries)
+}
+
+// ListProfilesJSON returns profile names as a JSON string.
+func ListProfilesJSON(layout storage.Layout) (string, error) {
+	entries, err := readDirNames(layout.Root, "profiles")
+	if err != nil {
+		return "", err
+	}
+	if entries == nil {
+		entries = []string{}
+	}
+	return MarshalJSON(entries)
+}
+
+// ShowConfigJSON returns the resolved config as JSON.
+func ShowConfigJSON(layout storage.Layout, agentName, profile string) (string, error) {
+	cfg, err := config.Resolve(layout.ConfigDir, agentName, profile)
+	if err != nil {
+		return "", err
+	}
+	return MarshalJSON(cfg)
+}
+
+// DoctorJSON runs diagnostic checks and returns results as JSON.
+func DoctorJSON() (string, error) {
+	result := DoctorResult{
+		ImagePinning: []PinStatus{},
+	}
+
+	ctx := context.Background()
+	cli, err := docker.NewClientNoPing()
+	if err != nil {
+		result.Docker = DoctorCheck{Status: "fail", Detail: err.Error()}
+	} else {
+		defer cli.Close()
+		if _, err := cli.Ping(ctx); err != nil {
+			result.Docker = DoctorCheck{Status: "fail", Detail: err.Error()}
+		} else {
+			info, _ := cli.Info(ctx)
+			result.Docker = DoctorCheck{Status: "ok", Detail: "server " + info.ServerVersion}
+		}
+
+		_, _, imgErr := cli.ImageInspectWithRaw(ctx, container.DefaultImage)
+		if imgErr != nil {
+			result.DefaultImage = DoctorCheck{Status: "not_cached", Detail: container.DefaultImage}
+		} else {
+			result.DefaultImage = DoctorCheck{Status: "ok", Detail: container.DefaultImage}
+		}
+	}
+
+	layout := storage.NewLayout(storage.DefaultRoot())
+	result.StorageRoot = layout.Root
+	result.ConfigDir = layout.ConfigDir
+
+	result.ImagePinning = []PinStatus{
+		{Label: "agent", Image: container.DefaultImage, Pinned: parse.IsDigestPinned(container.DefaultImage)},
+		{Label: "dind", Image: dind.DefaultImage, Pinned: parse.IsDigestPinned(dind.DefaultImage)},
+		{Label: "cache", Image: dind.CacheImage, Pinned: parse.IsDigestPinned(dind.CacheImage)},
+	}
+
+	return MarshalJSON(result)
+}
+
+// StatusJSON returns container status as a JSON string.
+func StatusJSON() (string, error) {
+	ctx := context.Background()
+	cli, err := docker.NewClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer cli.Close()
+
+	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
+	})
+	if err != nil {
+		return "", fmt.Errorf("listing containers: %w", err)
+	}
+
+	entries := make([]StatusEntry, 0, len(containers))
+	for _, c := range containers {
+		name := containerDisplayName(c)
+		agentLabel := c.Labels[container.LabelAgent]
+		profile := c.Labels[container.LabelProfile]
+
+		if c.Labels[container.LabelCache] == "true" {
+			agentLabel = "(cache)"
+			profile = ""
+		} else if strings.HasSuffix(name, "-dind") {
+			agentLabel = agentLabel + " (dind)"
+		}
+
+		entries = append(entries, StatusEntry{
+			Name:    name,
+			Agent:   agentLabel,
+			Profile: profile,
+			Image:   c.Image,
+			Status:  c.Status,
+		})
+	}
+	return MarshalJSON(entries)
+}
+
+// DiskUsageJSON returns disk usage as a JSON string.
+func DiskUsageJSON(layout storage.Layout) (string, error) {
+	dirs := []struct {
+		name string
+		path string
+	}{
+		{"Shared", filepath.Join(layout.Root, "shared")},
+		{"Agents", filepath.Join(layout.Root, "agents")},
+		{"Profiles", filepath.Join(layout.Root, "profiles")},
+		{"Config", layout.ConfigDir},
+		{"Logs", filepath.Join(layout.Root, "logs")},
+	}
+
+	result := DiskUsageResult{
+		Directories: make([]DiskUsageEntry, 0, len(dirs)),
+	}
+
+	for _, dir := range dirs {
+		size, err := dirSize(dir.path)
+		if err != nil {
+			result.Directories = append(result.Directories, DiskUsageEntry{
+				Name:  dir.name,
+				Path:  dir.path,
+				Bytes: 0,
+			})
+			continue
+		}
+		result.Total += size
+		result.Directories = append(result.Directories, DiskUsageEntry{
+			Name:  dir.name,
+			Path:  dir.path,
+			Bytes: size,
+		})
+	}
+
+	profilesDir := filepath.Join(layout.Root, "profiles")
+	entries, _ := os.ReadDir(profilesDir)
+	for _, e := range entries {
+		if e.IsDir() {
+			size, _ := dirSize(filepath.Join(profilesDir, e.Name()))
+			result.Profiles = append(result.Profiles, DiskUsageEntry{
+				Name:  e.Name(),
+				Bytes: size,
+			})
+		}
+	}
+
+	return MarshalJSON(result)
+}
+
 func readDirNames(root, subdir string) ([]string, error) {
 	dirPath := filepath.Join(root, subdir)
 	entries, err := os.ReadDir(dirPath)

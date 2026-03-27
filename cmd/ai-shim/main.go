@@ -277,12 +277,30 @@ func runManageSubcommand(args []string) error {
 
 	layout := storage.NewLayout(storage.DefaultRoot())
 
+	jsonMode := cli.IsJSONMode()
+
 	switch args[0] {
 	case "agents":
+		if jsonMode {
+			output, err := cli.ListAgentsJSON()
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		fmt.Print(cli.ListAgents())
 		return nil
 
 	case "profiles":
+		if jsonMode {
+			output, err := cli.ListProfilesJSON(layout)
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		output, err := cli.ListProfiles(layout)
 		if err != nil {
 			return err
@@ -294,6 +312,14 @@ func runManageSubcommand(args []string) error {
 		if len(args) < 3 {
 			return fmt.Errorf("usage: ai-shim manage config <agent> <profile>")
 		}
+		if jsonMode {
+			output, err := cli.ShowConfigJSON(layout, args[1], args[2])
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		output, err := cli.ShowConfig(layout, args[1], args[2])
 		if err != nil {
 			return err
@@ -302,6 +328,14 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "doctor":
+		if jsonMode {
+			output, err := cli.DoctorJSON()
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		fmt.Print(cli.Doctor())
 		return nil
 
@@ -372,6 +406,14 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "status":
+		if jsonMode {
+			output, err := cli.StatusJSON()
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		output, err := cli.Status()
 		if err != nil {
 			return err
@@ -404,6 +446,14 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "disk-usage":
+		if jsonMode {
+			output, err := cli.DiskUsageJSON(layout)
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+			return nil
+		}
 		output, err := cli.DiskUsage(layout)
 		if err != nil {
 			return err

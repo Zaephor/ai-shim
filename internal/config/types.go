@@ -7,51 +7,51 @@ const (
 
 // ResourceLimits defines optional container resource constraints.
 type ResourceLimits struct {
-	Memory string `yaml:"memory,omitempty"` // e.g. "512m", "2g", "4g"
-	CPUs   string `yaml:"cpus,omitempty"`   // decimal CPU count, e.g. "1.0", "2.5"
+	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"` // e.g. "512m", "2g", "4g"
+	CPUs   string `yaml:"cpus,omitempty" json:"cpus,omitempty"`     // decimal CPU count, e.g. "1.0", "2.5"
 }
 
 // Config represents the fully resolved configuration for an agent+profile invocation.
 type Config struct {
-	Variables   map[string]string  `yaml:"variables,omitempty"`
-	Env         map[string]string  `yaml:"env,omitempty"`
-	Image       string             `yaml:"image,omitempty"`
-	Hostname    string             `yaml:"hostname,omitempty"`
-	Version     string             `yaml:"version,omitempty"`
-	Args        []string           `yaml:"args,omitempty"`
-	Volumes     []string           `yaml:"volumes,omitempty"`
-	Ports       []string           `yaml:"ports,omitempty"`
-	Packages    []string           `yaml:"packages,omitempty"`
-	NetworkScope string             `yaml:"network_scope,omitempty"` // global, profile, workspace, profile-workspace, isolated (default)
-	DINDHostname string             `yaml:"dind_hostname,omitempty"`
-	DIND        *bool              `yaml:"dind,omitempty"`
-	DINDGpu     *bool              `yaml:"dind_gpu,omitempty"`
-	GPU         *bool              `yaml:"gpu,omitempty"`
-	DINDMirrors []string           `yaml:"dind_mirrors,omitempty"` // registry mirror URLs
-	DINDCache   *bool              `yaml:"dind_cache,omitempty"`   // enable pull-through cache
-	DINDTLS     *bool              `yaml:"dind_tls,omitempty"`     // enable TLS for DIND socket
-	AllowAgents []string           `yaml:"allow_agents,omitempty"`
-	Isolated    *bool              `yaml:"isolated,omitempty"`
-	MCPServers    map[string]MCPServerDef `yaml:"mcp_servers,omitempty"`
-	Tools         map[string]ToolDef     `yaml:"tools,omitempty"`
-	Resources     *ResourceLimits    `yaml:"resources,omitempty"`      // agent container limits
-	DINDResources *ResourceLimits    `yaml:"dind_resources,omitempty"` // DIND container limits
-	Git           *GitConfig         `yaml:"git,omitempty"`            // git user config for container
-	NetworkRules  *NetworkRules      `yaml:"network_rules,omitempty"`  // egress firewall rules
-	SecurityProfile string           `yaml:"security_profile,omitempty"` // seccomp/apparmor profile: default, strict, none
+	Variables       map[string]string        `yaml:"variables,omitempty" json:"variables,omitempty"`
+	Env             map[string]string        `yaml:"env,omitempty" json:"env,omitempty"`
+	Image           string                   `yaml:"image,omitempty" json:"image,omitempty"`
+	Hostname        string                   `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Version         string                   `yaml:"version,omitempty" json:"version,omitempty"`
+	Args            []string                 `yaml:"args,omitempty" json:"args,omitempty"`
+	Volumes         []string                 `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Ports           []string                 `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Packages        []string                 `yaml:"packages,omitempty" json:"packages,omitempty"`
+	NetworkScope    string                   `yaml:"network_scope,omitempty" json:"network_scope,omitempty"`
+	DINDHostname    string                   `yaml:"dind_hostname,omitempty" json:"dind_hostname,omitempty"`
+	DIND            *bool                    `yaml:"dind,omitempty" json:"dind,omitempty"`
+	DINDGpu         *bool                    `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
+	GPU             *bool                    `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+	DINDMirrors     []string                 `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
+	DINDCache       *bool                    `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
+	DINDTLS         *bool                    `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
+	AllowAgents     []string                 `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
+	Isolated        *bool                    `yaml:"isolated,omitempty" json:"isolated,omitempty"`
+	MCPServers      map[string]MCPServerDef  `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+	Tools           map[string]ToolDef       `yaml:"tools,omitempty" json:"tools,omitempty"`
+	Resources       *ResourceLimits          `yaml:"resources,omitempty" json:"resources,omitempty"`
+	DINDResources   *ResourceLimits          `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
+	Git             *GitConfig               `yaml:"git,omitempty" json:"git,omitempty"`
+	NetworkRules    *NetworkRules            `yaml:"network_rules,omitempty" json:"network_rules,omitempty"`
+	SecurityProfile string                   `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
 }
 
 // NetworkRules defines egress firewall rules for the container.
 type NetworkRules struct {
-	AllowedHosts []string `yaml:"allowed_hosts,omitempty"` // allowlist mode: block all except these hosts
-	BlockedHosts []string `yaml:"blocked_hosts,omitempty"` // blocklist mode: allow all except these hosts
-	AllowedPorts []string `yaml:"allowed_ports,omitempty"` // restrict egress to these ports only
+	AllowedHosts []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
+	BlockedHosts []string `yaml:"blocked_hosts,omitempty" json:"blocked_hosts,omitempty"`
+	AllowedPorts []string `yaml:"allowed_ports,omitempty" json:"allowed_ports,omitempty"`
 }
 
 // GitConfig defines git user identity for commits inside the container.
 type GitConfig struct {
-	Name  string `yaml:"name,omitempty"`
-	Email string `yaml:"email,omitempty"`
+	Name  string `yaml:"name,omitempty" json:"name,omitempty"`
+	Email string `yaml:"email,omitempty" json:"email,omitempty"`
 }
 
 // IsDINDEnabled returns true if DIND is explicitly enabled.
@@ -97,11 +97,11 @@ type MCPServerDef struct {
 
 // ToolDef defines a tool to provision in the container.
 type ToolDef struct {
-	Type     string   `yaml:"type"`
-	URL      string   `yaml:"url,omitempty"`
-	Binary   string   `yaml:"binary,omitempty"`
-	Files    []string `yaml:"files,omitempty"`
-	Package  string   `yaml:"package,omitempty"`
-	Install  string   `yaml:"install,omitempty"`
-	Checksum string   `yaml:"checksum,omitempty"`
+	Type     string   `yaml:"type" json:"type"`
+	URL      string   `yaml:"url,omitempty" json:"url,omitempty"`
+	Binary   string   `yaml:"binary,omitempty" json:"binary,omitempty"`
+	Files    []string `yaml:"files,omitempty" json:"files,omitempty"`
+	Package  string   `yaml:"package,omitempty" json:"package,omitempty"`
+	Install  string   `yaml:"install,omitempty" json:"install,omitempty"`
+	Checksum string   `yaml:"checksum,omitempty" json:"checksum,omitempty"`
 }
