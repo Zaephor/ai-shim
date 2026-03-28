@@ -26,6 +26,11 @@
 # Pin agent version. Empty string means latest.
 # version: ""
 
+# How often to re-install the agent to check for updates.
+# Options: "always" (every launch), "never", or a duration ("1d", "7d", "24h")
+# Default: "1d" (daily). Ignored when version is pinned.
+# update_interval: "1d"
+
 # Default arguments passed to the agent CLI before any passthrough args.
 # args:
 #   - "--no-telemetry"

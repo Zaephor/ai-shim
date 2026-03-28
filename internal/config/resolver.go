@@ -76,6 +76,7 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 //   - AI_SHIM_GIT_NAME      — git user.name for container commits
 //   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
 //   - AI_SHIM_SECURITY_PROFILE — container security profile (default/strict/none)
+//   - AI_SHIM_UPDATE_INTERVAL  — agent update interval (always/never/1d/7d/24h)
 //   - AI_SHIM_JSON          — enable JSON output for management commands (0/1)
 //   - AI_SHIM_NO_COLOR      — disable colored output (0/1)
 func loadEnvOverrides() Config {
@@ -116,6 +117,9 @@ func loadEnvOverrides() Config {
 
 	if v := os.Getenv("AI_SHIM_SECURITY_PROFILE"); v != "" {
 		cfg.SecurityProfile = v
+	}
+	if v := os.Getenv("AI_SHIM_UPDATE_INTERVAL"); v != "" {
+		cfg.UpdateInterval = v
 	}
 
 	gitName := os.Getenv("AI_SHIM_GIT_NAME")

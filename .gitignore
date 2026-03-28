@@ -13,5 +13,4 @@ coverage.out
 
 # OS
 .DS_Store
-ai-shim-linux-amd64
-ai-shim
+/ai-shim-linux-amd64

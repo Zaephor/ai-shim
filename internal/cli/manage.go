@@ -78,6 +78,9 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	if cfg.Version != "" {
 		b.WriteString(fmt.Sprintf("  version:  %s%s\n", cfg.Version, src("version")))
 	}
+	if cfg.UpdateInterval != "" {
+		b.WriteString(fmt.Sprintf("  update_interval: %s%s\n", cfg.UpdateInterval, src("update_interval")))
+	}
 
 	if len(cfg.Variables) > 0 {
 		b.WriteString("  variables:\n")

@@ -84,6 +84,7 @@ Commands:
 Environment Variables:
   AI_SHIM_IMAGE         Override container image
   AI_SHIM_VERSION       Pin agent version
+  AI_SHIM_UPDATE_INTERVAL Agent update interval (always/never/1d/7d)
   AI_SHIM_DIND          Enable/disable DIND (0/1)
   AI_SHIM_DIND_GPU      Enable/disable GPU for DIND (0/1)
   AI_SHIM_GPU           Enable/disable GPU (0/1)

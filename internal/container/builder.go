@@ -96,13 +96,16 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	// Merge config args with passthrough args
 	allArgs := append(p.Config.Args, p.Args...)
 
+	updateInterval, _ := config.ParseUpdateInterval(p.Config.UpdateInterval)
+
 	entrypoint := install.GenerateEntrypoint(install.EntrypointParams{
-		InstallType: p.Agent.InstallType,
-		Package:     p.Agent.Package,
-		Binary:      p.Agent.Binary,
-		Version:     p.Config.Version,
-		AgentArgs:   allArgs,
-		AgentName:   p.Agent.Name,
+		InstallType:    p.Agent.InstallType,
+		Package:        p.Agent.Package,
+		Binary:         p.Agent.Binary,
+		Version:        p.Config.Version,
+		AgentArgs:      allArgs,
+		AgentName:      p.Agent.Name,
+		UpdateInterval: updateInterval,
 	})
 
 	// Git config setup (global, so it doesn't leak into bind-mounted repos)

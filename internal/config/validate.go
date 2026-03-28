@@ -46,6 +46,7 @@ func (c Config) Validate() []string {
 	warnings = append(warnings, validateResourceLimits("resources", c.Resources)...)
 	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
 	warnings = append(warnings, validateSecurityProfile(c.SecurityProfile)...)
+	warnings = append(warnings, validateUpdateInterval(c.UpdateInterval)...)
 
 	return warnings
 }
@@ -66,6 +67,16 @@ func ValidateSecurityProfile(profile string) error {
 
 func validateSecurityProfile(profile string) []string {
 	if err := ValidateSecurityProfile(profile); err != nil {
+		return []string{err.Error()}
+	}
+	return nil
+}
+
+func validateUpdateInterval(interval string) []string {
+	if interval == "" {
+		return nil
+	}
+	if _, err := ParseUpdateInterval(interval); err != nil {
 		return []string{err.Error()}
 	}
 	return nil

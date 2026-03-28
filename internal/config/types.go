@@ -38,6 +38,7 @@ type Config struct {
 	DINDResources   *ResourceLimits         `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
 	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`
 	SecurityProfile string                  `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
+	UpdateInterval  string                  `yaml:"update_interval,omitempty" json:"update_interval,omitempty"`
 }
 
 // GitConfig defines git user identity for commits inside the container.
