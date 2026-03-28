@@ -120,6 +120,24 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	env := buildEnv(p.Config.Env)
 
+	// Pass through host terminal type so container apps render correctly.
+	// Without this, Docker defaults to TERM=xterm which lacks 256-color
+	// support and causes rendering issues.
+	// Normalize screen/tmux TERM values (e.g. screen.xterm-256color →
+	// xterm-256color) because the multiplexer-prefixed terminfo entries
+	// rarely exist inside container images.
+	if term := os.Getenv("TERM"); term != "" {
+		if after, ok := strings.CutPrefix(term, "screen."); ok {
+			term = after
+		} else if after, ok := strings.CutPrefix(term, "tmux."); ok {
+			term = after
+		}
+		env = append(env, "TERM="+term)
+	}
+	if val := os.Getenv("COLORTERM"); val != "" {
+		env = append(env, "COLORTERM="+val)
+	}
+
 	// MCP server config as env var (JSON format for agent consumption)
 	if len(p.Config.MCPServers) > 0 {
 		env = append(env, "MCP_SERVERS="+mcpServersJSON(p.Config.MCPServers))
