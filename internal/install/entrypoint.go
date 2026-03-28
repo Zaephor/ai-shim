@@ -141,6 +141,12 @@ func generateUVInstall(p EntrypointParams) string {
 	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 
 	var b strings.Builder
+	// Bootstrap uv if not already installed
+	b.WriteString("if ! command -v uv >/dev/null 2>&1; then\n")
+	b.WriteString("  echo \"Installing uv...\"\n")
+	b.WriteString("  curl -LsSf https://astral.sh/uv/install.sh | sh\n")
+	b.WriteString("  export PATH=\"$HOME/.local/bin:$PATH\"\n")
+	b.WriteString("fi\n")
 	fmt.Fprintf(&b, "export UV_TOOL_DIR=%s/bin/tools\n", agentDir)
 	fmt.Fprintf(&b, "export UV_TOOL_BIN_DIR=%s/bin/bin\n", agentDir)
 	b.WriteString("export PATH=\"$UV_TOOL_BIN_DIR:$PATH\"\n")
@@ -157,5 +163,14 @@ func generateUVInstall(p EntrypointParams) string {
 }
 
 func generateCustomInstall(p EntrypointParams) string {
-	return p.Package + "\n"
+	var b strings.Builder
+	// Custom installers often put binaries in user-local paths.
+	// Extend PATH so the exec line can find them.
+	b.WriteString("export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"\n")
+	// Use set +e during install so post-install steps (config, telemetry)
+	// can fail without preventing the binary from being installed.
+	b.WriteString("set +e\n")
+	b.WriteString(p.Package + "\n")
+	b.WriteString("set -e\n")
+	return b.String()
 }
