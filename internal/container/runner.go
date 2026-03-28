@@ -185,6 +185,30 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		close(sigCh)
 	}()
 
+	if spec.TTY {
+		// Put host terminal into raw mode so keystrokes and control
+		// sequences pass through to the container uninterpreted.
+		if restore := makeRaw(); restore != nil {
+			defer restore()
+		}
+
+		// Set initial container terminal size to match host.
+		r.resizeContainer(ctx, containerID)
+
+		// Forward SIGWINCH so the container tracks host terminal resizes.
+		winchCh := make(chan os.Signal, 1)
+		signal.Notify(winchCh, syscall.SIGWINCH)
+		go func() {
+			for range winchCh {
+				r.resizeContainer(ctx, containerID)
+			}
+		}()
+		defer func() {
+			signal.Stop(winchCh)
+			close(winchCh)
+		}()
+	}
+
 	if spec.Stdin {
 		go func() {
 			if _, err := io.Copy(attachResp.Conn, os.Stdin); err != nil {
@@ -220,6 +244,18 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		}
 		return exitCode, nil
 	}
+}
+
+// resizeContainer sets the container's TTY size to match the host terminal.
+func (r *Runner) resizeContainer(ctx context.Context, containerID string) {
+	width, height := getTerminalSize()
+	if width == 0 || height == 0 {
+		return
+	}
+	_ = r.client.ContainerResize(ctx, containerID, container.ResizeOptions{
+		Height: height,
+		Width:  width,
+	})
 }
 
 // ImageUser represents user information extracted from a Docker image.
