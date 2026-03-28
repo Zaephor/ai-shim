@@ -25,6 +25,17 @@ func getClient(t *testing.T) *client.Client {
 	if err != nil {
 		t.Fatal("failed to create docker client:", err)
 	}
+	// Ensure DIND image is available
+	ctx := context.Background()
+	_, err = cli.ImageInspect(ctx, DefaultImage)
+	if err != nil {
+		reader, pullErr := cli.ImagePull(ctx, DefaultImage, image.PullOptions{})
+		if pullErr != nil {
+			t.Fatal("failed to pull DIND image:", pullErr)
+		}
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+	}
 	return cli
 }
 

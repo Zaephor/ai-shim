@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testImage = "alpine:latest"
+
+// newTestRunner creates a Runner and ensures the test image is pulled.
+func newTestRunner(t *testing.T, ctx context.Context) *Runner {
+	t.Helper()
+	testutil.SkipIfNoDocker(t)
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	require.NoError(t, runner.EnsureImage(ctx, testImage))
+	return runner
+}
+
 func TestNewRunner(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
@@ -19,14 +31,12 @@ func TestNewRunner(t *testing.T) {
 }
 
 func TestRun_SimpleCommand(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:  "alpine:latest",
+		Image:  testImage,
 		Cmd:    []string{"echo", "hello"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
@@ -35,14 +45,12 @@ func TestRun_SimpleCommand(t *testing.T) {
 }
 
 func TestRun_ExitCode(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:  "alpine:latest",
+		Image:  testImage,
 		Cmd:    []string{"sh", "-c", "exit 42"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
@@ -51,14 +59,12 @@ func TestRun_ExitCode(t *testing.T) {
 }
 
 func TestRun_WithEnv(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:  "alpine:latest",
+		Image:  testImage,
 		Env:    []string{"TEST_VAR=hello"},
 		Cmd:    []string{"sh", "-c", "test \"$TEST_VAR\" = hello"},
 		Labels: map[string]string{"ai-shim": "test"},
@@ -68,14 +74,12 @@ func TestRun_WithEnv(t *testing.T) {
 }
 
 func TestRun_WithWorkdir(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:      "alpine:latest",
+		Image:      testImage,
 		WorkingDir: "/tmp",
 		Cmd:        []string{"sh", "-c", "test \"$(pwd)\" = /tmp"},
 		Labels:     map[string]string{"ai-shim": "test"},
@@ -85,14 +89,12 @@ func TestRun_WithWorkdir(t *testing.T) {
 }
 
 func TestRun_WithHostname(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:    "alpine:latest",
+		Image:    testImage,
 		Hostname: "test-shim",
 		Cmd:      []string{"sh", "-c", "test \"$(hostname)\" = test-shim"},
 		Labels:   map[string]string{"ai-shim": "test"},
@@ -102,28 +104,24 @@ func TestRun_WithHostname(t *testing.T) {
 }
 
 func TestInspectImageUser_Alpine(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	user, err := runner.InspectImageUser(ctx, "alpine:latest")
+	user, err := runner.InspectImageUser(ctx, testImage)
 	require.NoError(t, err)
 	assert.NotEmpty(t, user.HomeDir)
 }
 
 func TestRun_WithMount(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	// Use a volume mount instead of bind mount to avoid issues in DinD
 	// environments where the host filesystem differs from the test runner.
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image: "alpine:latest",
+		Image: testImage,
 		Mounts: []mount.Mount{
 			{Type: mount.TypeVolume, Target: "/testmount"},
 		},
@@ -135,19 +133,16 @@ func TestRun_WithMount(t *testing.T) {
 }
 
 func TestEnsureImage_AlreadyLocal(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	// alpine:latest should already be cached from other tests
-	err = runner.EnsureImage(ctx, "alpine:latest")
+	// alpine:latest should already be cached from newTestRunner
+	err := runner.EnsureImage(ctx, testImage)
 	assert.NoError(t, err)
 }
 
 func TestNewRunner_ErrorMessage(t *testing.T) {
-	// Can't easily test Docker-not-running, but verify the runner works when Docker IS available
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
 	runner, err := NewRunner(ctx)
@@ -156,14 +151,12 @@ func TestNewRunner_ErrorMessage(t *testing.T) {
 }
 
 func TestRun_NonZeroExitShowsMessage(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:  "alpine:latest",
+		Image:  testImage,
 		Cmd:    []string{"sh", "-c", "exit 42"},
 		Labels: map[string]string{"ai-shim": "test"},
 		Name:   "test-exit-msg",
@@ -171,20 +164,15 @@ func TestRun_NonZeroExitShowsMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 42, exitCode)
-	// The stderr message is printed directly; we verify exit code is returned correctly
-	// and that the log file was created
 }
 
 func TestRun_CompletesWithSignalHandler(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	runner, err := NewRunner(ctx)
-	require.NoError(t, err)
+	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	// Verify container runs and exits normally with signal handler active
 	exitCode, err := runner.Run(ctx, ContainerSpec{
-		Image:  "alpine:latest",
+		Image:  testImage,
 		Cmd:    []string{"echo", "signal handler active"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
