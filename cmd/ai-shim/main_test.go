@@ -12,6 +12,9 @@ import (
 
 func skipIfNoDocker(t *testing.T) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping Docker test in short mode")
+	}
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("Docker not available:", err)
 	}
