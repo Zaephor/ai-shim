@@ -41,6 +41,7 @@ func TestE2E_AllAgents_InstallAndLaunch(t *testing.T) {
 				InstallType: def.InstallType,
 				Package:     def.Package,
 				Binary:      def.Binary,
+				AgentName:   name,
 			})
 
 			// Replace "exec <binary>" at the end with verification logic.

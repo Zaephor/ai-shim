@@ -102,6 +102,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		Binary:      p.Agent.Binary,
 		Version:     p.Config.Version,
 		AgentArgs:   allArgs,
+		AgentName:   p.Agent.Name,
 	})
 
 	// Git config setup (global, so it doesn't leak into bind-mounted repos)
