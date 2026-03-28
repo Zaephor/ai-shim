@@ -40,10 +40,26 @@ func Merge(base, over Config) Config {
 		result.DINDTLS = over.DINDTLS
 	}
 	if over.Resources != nil {
-		result.Resources = over.Resources
+		if result.Resources == nil {
+			result.Resources = &ResourceLimits{}
+		}
+		if over.Resources.Memory != "" {
+			result.Resources.Memory = over.Resources.Memory
+		}
+		if over.Resources.CPUs != "" {
+			result.Resources.CPUs = over.Resources.CPUs
+		}
 	}
 	if over.DINDResources != nil {
-		result.DINDResources = over.DINDResources
+		if result.DINDResources == nil {
+			result.DINDResources = &ResourceLimits{}
+		}
+		if over.DINDResources.Memory != "" {
+			result.DINDResources.Memory = over.DINDResources.Memory
+		}
+		if over.DINDResources.CPUs != "" {
+			result.DINDResources.CPUs = over.DINDResources.CPUs
+		}
 	}
 	if over.SecurityProfile != "" {
 		result.SecurityProfile = over.SecurityProfile

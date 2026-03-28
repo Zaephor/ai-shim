@@ -52,6 +52,22 @@ jobs:
           name: coverage
           path: coverage.out
 
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.6'
+      - name: Unit tests
+        run: go test -short ./... -v -race -count=1
+      - name: Build native binary
+        run: |
+          VERSION="dev-$(git rev-parse --short HEAD)"
+          go build -ldflags "-X main.version=$VERSION" -o ai-shim ./cmd/ai-shim
+      - name: Verify binary runs
+        run: ./ai-shim version
+
   e2e:
     needs: [test]
     runs-on: ubuntu-latest

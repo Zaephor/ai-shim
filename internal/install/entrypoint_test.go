@@ -1,6 +1,7 @@
 package install
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,4 +82,122 @@ func TestGenerateEntrypoint_StartsWithShebang(t *testing.T) {
 		Binary:      "test",
 	})
 	assert.True(t, len(script) >= 11 && script[:11] == "#!/bin/sh\ns")
+}
+
+func TestGenerateEntrypoint_PinnedVersion(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "npm",
+		Package:     "test-pkg",
+		Binary:      "test",
+		Version:     "2.0.0",
+		AgentName:   "test-agent",
+	})
+	assert.True(t, strings.Contains(script, "INSTALLED_VERSION="))
+	assert.True(t, strings.Contains(script, "cat \"$INSTALLED_VERSION\""))
+	assert.True(t, strings.Contains(script, "2.0.0"))
+}
+
+func TestGenerateEntrypoint_UpdateIntervalAlways(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType:    "npm",
+		Package:        "test-pkg",
+		Binary:         "test",
+		AgentName:      "test-agent",
+		UpdateInterval: 0,
+	})
+	assert.True(t, strings.Contains(script, "reinstall every launch"))
+}
+
+func TestGenerateEntrypoint_UpdateIntervalNever(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType:    "npm",
+		Package:        "test-pkg",
+		Binary:         "test",
+		AgentName:      "test-agent",
+		UpdateInterval: -1,
+	})
+	assert.True(t, strings.Contains(script, "update_interval=never"))
+}
+
+func TestGenerateEntrypoint_UpdateIntervalTimed(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType:    "npm",
+		Package:        "test-pkg",
+		Binary:         "test",
+		AgentName:      "test-agent",
+		UpdateInterval: 86400,
+	})
+	assert.True(t, strings.Contains(script, "elapsed"))
+	assert.True(t, strings.Contains(script, "86400"))
+}
+
+func TestGenerateEntrypoint_NPMCaching(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "npm",
+		Package:     "test-pkg",
+		Binary:      "test",
+		AgentName:   "test-agent",
+	})
+	assert.True(t, strings.Contains(script, "NPM_CONFIG_PREFIX="))
+	assert.True(t, strings.Contains(script, "NPM_CONFIG_CACHE="))
+	assert.True(t, strings.Contains(script, "/usr/local/share/ai-shim/agents/test-agent"))
+}
+
+func TestGenerateEntrypoint_UVBootstrap(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "uv",
+		Package:     "aider-chat",
+		Binary:      "aider",
+		AgentName:   "test-agent",
+	})
+	assert.True(t, strings.Contains(script, "curl -LsSf https://astral.sh/uv/install.sh | sh"))
+}
+
+func TestGenerateEntrypoint_UVCaching(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "uv",
+		Package:     "aider-chat",
+		Binary:      "aider",
+		AgentName:   "test-agent",
+	})
+	assert.True(t, strings.Contains(script, "UV_TOOL_DIR="))
+	assert.True(t, strings.Contains(script, "UV_TOOL_BIN_DIR="))
+	assert.True(t, strings.Contains(script, "/usr/local/share/ai-shim/agents/test-agent"))
+}
+
+func TestGenerateEntrypoint_CustomPATH(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "custom",
+		Package:     "curl -fsSL https://example.com/install.sh | bash",
+		Binary:      "example",
+	})
+	assert.True(t, strings.Contains(script, "$HOME/.local/bin"))
+	assert.True(t, strings.Contains(script, "$HOME/.cargo/bin"))
+}
+
+func TestGenerateEntrypoint_CustomSetPlusE(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "custom",
+		Package:     "curl -fsSL https://example.com/install.sh | bash",
+		Binary:      "example",
+	})
+	assert.True(t, strings.Contains(script, "set +e"))
+	// Verify set -e comes after the install command
+	setPlusE := strings.Index(script, "set +e")
+	installCmd := strings.Index(script, "curl -fsSL https://example.com/install.sh | bash")
+	setMinusE := strings.LastIndex(script, "set -e")
+	assert.True(t, setPlusE < installCmd, "set +e should come before install command")
+	assert.True(t, installCmd < setMinusE, "set -e should come after install command")
+}
+
+func TestGenerateEntrypoint_PostInstall(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "npm",
+		Package:     "test-pkg",
+		Binary:      "test",
+		AgentName:   "test-agent",
+	})
+	assert.True(t, strings.Contains(script, "$LAST_UPDATE"))
+	assert.True(t, strings.Contains(script, "$INSTALLED_VERSION"))
+	assert.True(t, strings.Contains(script, "date +%s"))
 }

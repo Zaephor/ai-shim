@@ -43,7 +43,7 @@ func GenerateEntrypoint(p EntrypointParams) string {
 // install/reinstall an agent based on version pinning and update intervals.
 // It sets need_install=true if installation should proceed.
 func generateInstallCheck(p EntrypointParams) string {
-	agentDir := fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName)
+	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 	binary := shell.Quote(p.Binary)
 	pkg := shell.Quote(p.Package)
 

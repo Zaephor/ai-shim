@@ -196,6 +196,33 @@ func TestMerge_GitConfigFromNil(t *testing.T) {
 	assert.Equal(t, "test@example.com", result.Git.Email)
 }
 
+func TestMerge_ResourcesFieldByField(t *testing.T) {
+	base := Config{Resources: &ResourceLimits{Memory: "4g"}}
+	over := Config{Resources: &ResourceLimits{CPUs: "2.0"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.Resources)
+	assert.Equal(t, "4g", result.Resources.Memory, "memory from base preserved")
+	assert.Equal(t, "2.0", result.Resources.CPUs, "cpus from over applied")
+}
+
+func TestMerge_GitFieldByField(t *testing.T) {
+	base := Config{Git: &GitConfig{Name: "Alice"}}
+	over := Config{Git: &GitConfig{Email: "alice@example.com"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.Git)
+	assert.Equal(t, "Alice", result.Git.Name, "name from base preserved")
+	assert.Equal(t, "alice@example.com", result.Git.Email, "email from over applied")
+}
+
+func TestMerge_ResourcesOverrideWins(t *testing.T) {
+	base := Config{Resources: &ResourceLimits{Memory: "2g", CPUs: "1.0"}}
+	over := Config{Resources: &ResourceLimits{Memory: "8g", CPUs: "4.0"}}
+	result := Merge(base, over)
+	require.NotNil(t, result.Resources)
+	assert.Equal(t, "8g", result.Resources.Memory, "higher tier memory wins")
+	assert.Equal(t, "4.0", result.Resources.CPUs, "higher tier cpus wins")
+}
+
 func TestMerge_MCPServersPerKeyReplace(t *testing.T) {
 	base := Config{
 		MCPServers: map[string]MCPServerDef{

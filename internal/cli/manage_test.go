@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -644,6 +645,64 @@ security_profile: strict
 	for _, sub := range expectedSubstrings {
 		assert.Contains(t, output, sub, "DryRun should display: %s", sub)
 	}
+}
+
+func TestListAgents_ContainsAllBuiltins(t *testing.T) {
+	output := ListAgents()
+	agents := []string{
+		"claude-code", "gemini-cli", "qwen-code", "codex",
+		"pi", "gsd", "aider", "goose", "opencode",
+	}
+	for _, name := range agents {
+		assert.Contains(t, output, name, "ListAgents should contain %s", name)
+	}
+}
+
+func TestListAgents_ShowsInstallType(t *testing.T) {
+	output := ListAgents()
+	assert.Contains(t, output, "npm")
+	assert.Contains(t, output, "uv")
+	assert.Contains(t, output, "custom")
+}
+
+func TestDiskUsage_ReturnsOutput(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	output, err := DiskUsage(layout)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+}
+
+func TestDiskUsageJSON_ValidJSON(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	output, err := DiskUsageJSON(layout)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+
+	// Verify it's valid JSON
+	var result map[string]interface{}
+	err = json.Unmarshal([]byte(output), &result)
+	assert.NoError(t, err, "DiskUsageJSON should return valid JSON")
+}
+
+func TestDoctor_ContainsChecks(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	output := Doctor()
+	assert.Contains(t, output, "Docker")
+}
+
+func TestDryRun_ShowsUpdateInterval(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte("update_interval: \"7d\"\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "work", nil)
+	require.NoError(t, err)
+	assert.Contains(t, output, "7d")
 }
 
 func TestShowConfig_SecurityProfile(t *testing.T) {
