@@ -38,7 +38,7 @@ func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
 	b.WriteString("# Tool provisioning\n")
 
 	for name, tool := range tools {
-		b.WriteString(fmt.Sprintf("\n# Install: %s\n", name))
+		fmt.Fprintf(&b, "\n# Install: %s\n", name)
 		b.WriteString(generateToolInstall(tool, targetDir))
 	}
 
@@ -54,43 +54,42 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 
 	switch tool.Type {
 	case "binary-download":
-		// Check if binary already exists
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
-		b.WriteString(fmt.Sprintf("  curl -fsSL -o \"%s\"/%s %s\n", targetDir, bin, url))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
+		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
+		fmt.Fprintf(&b, "  curl -fsSL -o \"%s\"/%s %s\n", targetDir, bin, url)
+		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		if tool.Checksum != "" && isValidChecksum(tool.Checksum) {
-			b.WriteString(fmt.Sprintf("  echo '%s  %s/%s' | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; exit 1; }\n", tool.Checksum, targetDir, bin, bin))
+			fmt.Fprintf(&b, "  echo '%s  %s/%s' | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; exit 1; }\n", tool.Checksum, targetDir, bin, bin)
 		}
 		b.WriteString("fi\n")
 
 	case "tar-extract":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
-		b.WriteString(fmt.Sprintf("  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin))
-		b.WriteString(fmt.Sprintf("  { echo \"Fallback: extracting %s via find...\"; curl -fsSL %s | tar xz -C /tmp && find /tmp -name %s -exec mv {} \"%s/\" \\; ; } || \\\n", bin, url, bin, targetDir))
-		b.WriteString(fmt.Sprintf("  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
+		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
+		fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin)
+		fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; curl -fsSL %s | tar xz -C /tmp && find /tmp -name %s -exec mv {} \"%s/\" \\; ; } || \\\n", bin, url, bin, targetDir)
+		fmt.Fprintf(&b, "  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin)
+		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")
 
 	case "tar-extract-selective":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
+		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
 		files := append([]string{tool.Binary}, tool.Files...)
 		wildcards := make([]string, len(files))
 		for i, f := range files {
 			wildcards[i] = fmt.Sprintf("'*/'%s", shell.Quote(f))
 		}
-		b.WriteString(fmt.Sprintf("  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
-			url, targetDir, strings.Join(wildcards, " "), bin))
-		b.WriteString(fmt.Sprintf("  chmod +x \"%s\"/%s\n", targetDir, bin))
+		fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
+			url, targetDir, strings.Join(wildcards, " "), bin)
+		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")
 
 	case "apt":
-		b.WriteString(fmt.Sprintf("if ! command -v %s >/dev/null 2>&1; then\n", bin))
-		b.WriteString(fmt.Sprintf("  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: apt install failed for %s\"; exit 1; }\n", pkg, pkg))
+		fmt.Fprintf(&b, "if ! command -v %s >/dev/null 2>&1; then\n", bin)
+		fmt.Fprintf(&b, "  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: apt install failed for %s\"; exit 1; }\n", pkg, pkg)
 		b.WriteString("fi\n")
 
 	case "go-install":
-		b.WriteString(fmt.Sprintf("if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin))
-		b.WriteString(fmt.Sprintf("  GOBIN=\"%s\" go install %s@latest\n", targetDir, pkg))
+		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
+		fmt.Fprintf(&b, "  GOBIN=\"%s\" go install %s@latest\n", targetDir, pkg)
 		b.WriteString("fi\n")
 
 	case "custom":

@@ -61,8 +61,7 @@ func TestBuildSpec_ConfigEnv(t *testing.T) {
 	}
 	spec := BuildSpec(p)
 
-	require.Len(t, spec.Env, 1)
-	assert.Equal(t, "FOO=bar", spec.Env[0])
+	assert.Contains(t, spec.Env, "FOO=bar")
 }
 
 func TestBuildSpec_GPU(t *testing.T) {

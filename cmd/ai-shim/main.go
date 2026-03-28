@@ -681,7 +681,7 @@ func runAgent(name string, args []string) (int, error) {
 	if err != nil {
 		return 1, fmt.Errorf("creating container runner: %w", err)
 	}
-	defer runner.Close()
+	defer func() { _ = runner.Close() }()
 
 	// 6.5 Ensure container image is available
 	image := cfg.GetImage()
@@ -806,7 +806,7 @@ func runAgent(name string, args []string) (int, error) {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
 		defer func() {
-			sidecar.Stop(ctx)
+			_ = sidecar.Stop(ctx)
 			if cfg.IsCacheEnabled() {
 				dind.MaybeStopCache(ctx, runner.Client())
 			}

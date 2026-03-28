@@ -161,7 +161,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", cfg.Resources.Memory, err)
 			} else {
-				hostCfg.Resources.Memory = memBytes
+				hostCfg.Memory = memBytes
 			}
 		}
 		if cfg.Resources.CPUs != "" {
@@ -169,7 +169,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", cfg.Resources.CPUs, err)
 			} else {
-				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
+				hostCfg.NanoCPUs = int64(cpus * 1e9)
 			}
 		}
 	}
@@ -204,7 +204,7 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 	healthCtx, cancel := context.WithTimeout(ctx, HealthTimeout)
 	defer cancel()
 	if err := sidecar.WaitForReady(healthCtx); err != nil {
-		sidecar.Stop(ctx)
+		_ = sidecar.Stop(ctx)
 		return nil, fmt.Errorf("waiting for DIND daemon: %w", err)
 	}
 

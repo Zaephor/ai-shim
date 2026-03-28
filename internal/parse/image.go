@@ -22,7 +22,7 @@ func ImageDigest(image string) error {
 
 	hash := image[idx+len("@sha256:"):]
 	if hash == "" {
-		return fmt.Errorf("invalid image digest %q: empty hash after sha256:", image)
+		return fmt.Errorf("invalid image digest %q: empty hash after sha256 prefix", image)
 	}
 	if !hexPattern.MatchString(hash) {
 		return fmt.Errorf("invalid image digest %q: sha256 hash must be exactly 64 hex characters", image)

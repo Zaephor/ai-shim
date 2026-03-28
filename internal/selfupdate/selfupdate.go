@@ -36,7 +36,7 @@ func CheckLatest() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("checking for updates: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("github API returned status %d", resp.StatusCode)
@@ -90,7 +90,7 @@ func DownloadAndReplace(url, currentPath string) error {
 	if err != nil {
 		return fmt.Errorf("downloading update: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed with status %d", resp.StatusCode)
@@ -101,13 +101,13 @@ func DownloadAndReplace(url, currentPath string) error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath) // cleanup on error
+	defer func() { _ = os.Remove(tmpPath) }() // cleanup on error
 
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("writing update: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Make executable
 	if err := os.Chmod(tmpPath, 0755); err != nil {
@@ -123,7 +123,7 @@ func DownloadAndReplace(url, currentPath string) error {
 	// Replace with new binary
 	if err := os.Rename(tmpPath, currentPath); err != nil {
 		// Restore backup on failure
-		os.Rename(backupPath, currentPath)
+		_ = os.Rename(backupPath, currentPath)
 		return fmt.Errorf("replacing binary: %w", err)
 	}
 
@@ -137,7 +137,7 @@ func FetchRelease() (Release, error) {
 	if err != nil {
 		return Release{}, fmt.Errorf("fetching release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return Release{}, fmt.Errorf("github API returned status %d", resp.StatusCode)

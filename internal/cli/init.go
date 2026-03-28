@@ -78,7 +78,7 @@ func Init(layout storage.Layout) error {
 	// Seed example agent config
 	agentExample := filepath.Join(layout.ConfigDir, "agents", "claude-code.yaml")
 	if _, err := os.Stat(agentExample); os.IsNotExist(err) {
-		os.WriteFile(agentExample, []byte(`# Claude Code agent configuration
+		_ = os.WriteFile(agentExample, []byte(`# Claude Code agent configuration
 # Uncomment and customize as needed
 # env:
 #   ANTHROPIC_API_KEY: "your-key-here"
@@ -97,7 +97,7 @@ func Init(layout storage.Layout) error {
 	// Seed example profile config
 	profileExample := filepath.Join(layout.ConfigDir, "profiles", "work.yaml")
 	if _, err := os.Stat(profileExample); os.IsNotExist(err) {
-		os.WriteFile(profileExample, []byte(`# Work profile configuration
+		_ = os.WriteFile(profileExample, []byte(`# Work profile configuration
 # This profile's home directory is mounted as the container's home
 # Uncomment and customize as needed
 # env:

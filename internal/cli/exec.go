@@ -24,7 +24,7 @@ func Exec(containerName string, cmd []string) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	containerID, err := findContainerByName(ctx, cli, containerName)
 	if err != nil {
@@ -56,15 +56,15 @@ func Exec(containerName string, cmd []string) (int, error) {
 
 	// Stream stdin
 	go func() {
-		io.Copy(attachResp.Conn, os.Stdin)
-		attachResp.CloseWrite()
+		_, _ = io.Copy(attachResp.Conn, os.Stdin)
+		_ = attachResp.CloseWrite()
 	}()
 
 	// Stream stdout/stderr
 	if isTTY {
-		io.Copy(os.Stdout, attachResp.Reader)
+		_, _ = io.Copy(os.Stdout, attachResp.Reader)
 	} else {
-		stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
+		_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
 	}
 
 	// Get exit code

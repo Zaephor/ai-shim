@@ -14,7 +14,7 @@ func NewClient(ctx context.Context) (*client.Client, error) {
 		return nil, fmt.Errorf("creating docker client: %w\n\nIs Docker installed? Check: https://docs.docker.com/get-docker/", err)
 	}
 	if _, err := cli.Ping(ctx); err != nil {
-		cli.Close()
+		_ = cli.Close()
 		return nil, fmt.Errorf("cannot connect to docker daemon: %w\n\nIs Docker running? Try:\n  Linux: sudo systemctl start docker\n  macOS: open -a Docker\n  Check: docker info", err)
 	}
 	return cli, nil

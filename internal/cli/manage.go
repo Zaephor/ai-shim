@@ -30,7 +30,7 @@ func ListAgents() string {
 	b.WriteString("Built-in agents:\n")
 	for _, name := range agent.Names() {
 		def, _ := agent.Lookup(name)
-		b.WriteString(fmt.Sprintf("  %-15s  %-8s  %s\n", name, def.InstallType, def.Binary))
+		fmt.Fprintf(&b, "  %-15s  %-8s  %s\n", name, def.InstallType, def.Binary)
 	}
 	return b.String()
 }
@@ -50,7 +50,7 @@ func ListProfiles(layout storage.Layout) (string, error) {
 	var b strings.Builder
 	b.WriteString("Profiles:\n")
 	for _, name := range entries {
-		b.WriteString(fmt.Sprintf("  %s\n", name))
+		fmt.Fprintf(&b, "  %s\n", name)
 	}
 	return b.String(), nil
 }
@@ -67,57 +67,57 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Resolved config for %s_%s:\n\n", agentName, profile))
+	fmt.Fprintf(&b, "Resolved config for %s_%s:\n\n", agentName, profile)
 
 	if cfg.Image != "" {
-		b.WriteString(fmt.Sprintf("  image:    %s%s\n", cfg.GetImage(), src("image")))
+		fmt.Fprintf(&b, "  image:    %s%s\n", cfg.GetImage(), src("image"))
 	}
 	if cfg.Hostname != "" {
-		b.WriteString(fmt.Sprintf("  hostname: %s%s\n", cfg.GetHostname(), src("hostname")))
+		fmt.Fprintf(&b, "  hostname: %s%s\n", cfg.GetHostname(), src("hostname"))
 	}
 	if cfg.Version != "" {
-		b.WriteString(fmt.Sprintf("  version:  %s%s\n", cfg.Version, src("version")))
+		fmt.Fprintf(&b, "  version:  %s%s\n", cfg.Version, src("version"))
 	}
 	if cfg.UpdateInterval != "" {
-		b.WriteString(fmt.Sprintf("  update_interval: %s%s\n", cfg.UpdateInterval, src("update_interval")))
+		fmt.Fprintf(&b, "  update_interval: %s%s\n", cfg.UpdateInterval, src("update_interval"))
 	}
 
 	if len(cfg.Variables) > 0 {
 		b.WriteString("  variables:\n")
 		for k, v := range cfg.Variables {
-			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+			fmt.Fprintf(&b, "    %s=%s\n", k, v)
 		}
 	}
 
 	if len(cfg.Env) > 0 {
-		b.WriteString(fmt.Sprintf("  env:%s\n", src("env")))
+		fmt.Fprintf(&b, "  env:%s\n", src("env"))
 		for k, v := range cfg.Env {
-			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+			fmt.Fprintf(&b, "    %s=%s\n", k, v)
 		}
 	}
 
 	if len(cfg.Args) > 0 {
-		b.WriteString(fmt.Sprintf("  args:     %s%s\n", strings.Join(cfg.Args, " "), src("args")))
+		fmt.Fprintf(&b, "  args:     %s%s\n", strings.Join(cfg.Args, " "), src("args"))
 	}
 
 	if len(cfg.Volumes) > 0 {
-		b.WriteString(fmt.Sprintf("  volumes:%s\n", src("volumes")))
+		fmt.Fprintf(&b, "  volumes:%s\n", src("volumes"))
 		for _, v := range cfg.Volumes {
-			b.WriteString(fmt.Sprintf("    %s\n", v))
+			fmt.Fprintf(&b, "    %s\n", v)
 		}
 	}
 
 	if len(cfg.Ports) > 0 {
-		b.WriteString(fmt.Sprintf("  ports:%s\n", src("ports")))
+		fmt.Fprintf(&b, "  ports:%s\n", src("ports"))
 		for _, p := range cfg.Ports {
-			b.WriteString(fmt.Sprintf("    %s\n", p))
+			fmt.Fprintf(&b, "    %s\n", p)
 		}
 	}
 
 	if len(cfg.Packages) > 0 {
-		b.WriteString(fmt.Sprintf("  packages:%s\n", src("packages")))
+		fmt.Fprintf(&b, "  packages:%s\n", src("packages"))
 		for _, p := range cfg.Packages {
-			b.WriteString(fmt.Sprintf("    - %s\n", p))
+			fmt.Fprintf(&b, "    - %s\n", p)
 		}
 	}
 
@@ -126,35 +126,35 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	b.WriteString(formatBoolFieldSrc("dind_gpu", cfg.DINDGpu, false, src("dind_gpu")))
 
 	if cfg.NetworkScope != "" {
-		b.WriteString(fmt.Sprintf("  network_scope: %s%s\n", cfg.NetworkScope, src("network_scope")))
+		fmt.Fprintf(&b, "  network_scope: %s%s\n", cfg.NetworkScope, src("network_scope"))
 	}
 	if cfg.DINDHostname != "" {
-		b.WriteString(fmt.Sprintf("  dind_hostname: %s%s\n", cfg.DINDHostname, src("dind_hostname")))
+		fmt.Fprintf(&b, "  dind_hostname: %s%s\n", cfg.DINDHostname, src("dind_hostname"))
 	}
 
 	if cfg.Resources != nil {
-		b.WriteString(fmt.Sprintf("  resources:%s\n", src("resources")))
+		fmt.Fprintf(&b, "  resources:%s\n", src("resources"))
 		if cfg.Resources.Memory != "" {
-			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.Resources.Memory))
+			fmt.Fprintf(&b, "    memory: %s\n", cfg.Resources.Memory)
 		}
 		if cfg.Resources.CPUs != "" {
-			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.Resources.CPUs))
+			fmt.Fprintf(&b, "    cpus:   %s\n", cfg.Resources.CPUs)
 		}
 	}
 	if cfg.DINDResources != nil {
-		b.WriteString(fmt.Sprintf("  dind_resources:%s\n", src("dind_resources")))
+		fmt.Fprintf(&b, "  dind_resources:%s\n", src("dind_resources"))
 		if cfg.DINDResources.Memory != "" {
-			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.DINDResources.Memory))
+			fmt.Fprintf(&b, "    memory: %s\n", cfg.DINDResources.Memory)
 		}
 		if cfg.DINDResources.CPUs != "" {
-			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.DINDResources.CPUs))
+			fmt.Fprintf(&b, "    cpus:   %s\n", cfg.DINDResources.CPUs)
 		}
 	}
 
 	if len(cfg.DINDMirrors) > 0 {
-		b.WriteString(fmt.Sprintf("  dind_mirrors:%s\n", src("dind_mirrors")))
+		fmt.Fprintf(&b, "  dind_mirrors:%s\n", src("dind_mirrors"))
 		for _, m := range cfg.DINDMirrors {
-			b.WriteString(fmt.Sprintf("    - %s\n", m))
+			fmt.Fprintf(&b, "    - %s\n", m)
 		}
 	}
 
@@ -163,37 +163,37 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	b.WriteString(formatBoolFieldSrc("isolated", cfg.Isolated, true, src("isolated")))
 
 	if len(cfg.AllowAgents) > 0 {
-		b.WriteString(fmt.Sprintf("  allow_agents:%s\n", src("allow_agents")))
+		fmt.Fprintf(&b, "  allow_agents:%s\n", src("allow_agents"))
 		for _, a := range cfg.AllowAgents {
-			b.WriteString(fmt.Sprintf("    - %s\n", a))
+			fmt.Fprintf(&b, "    - %s\n", a)
 		}
 	}
 
 	if len(cfg.MCPServers) > 0 {
-		b.WriteString(fmt.Sprintf("  mcp_servers:%s\n", src("mcp_servers")))
+		fmt.Fprintf(&b, "  mcp_servers:%s\n", src("mcp_servers"))
 		for name, srv := range cfg.MCPServers {
-			b.WriteString(fmt.Sprintf("    %s: %s\n", name, srv.Command))
+			fmt.Fprintf(&b, "    %s: %s\n", name, srv.Command)
 		}
 	}
 
 	if len(cfg.Tools) > 0 {
-		b.WriteString(fmt.Sprintf("  tools:%s\n", src("tools")))
+		fmt.Fprintf(&b, "  tools:%s\n", src("tools"))
 		for name, tool := range cfg.Tools {
-			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
+			fmt.Fprintf(&b, "    %s: (type=%s)\n", name, tool.Type)
 		}
 	}
 
 	if cfg.SecurityProfile != "" {
-		b.WriteString(fmt.Sprintf("  security_profile: %s%s\n", cfg.SecurityProfile, src("security_profile")))
+		fmt.Fprintf(&b, "  security_profile: %s%s\n", cfg.SecurityProfile, src("security_profile"))
 	}
 
 	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {
-		b.WriteString(fmt.Sprintf("  git:%s\n", src("git")))
+		fmt.Fprintf(&b, "  git:%s\n", src("git"))
 		if cfg.Git.Name != "" {
-			b.WriteString(fmt.Sprintf("    name:  %s\n", cfg.Git.Name))
+			fmt.Fprintf(&b, "    name:  %s\n", cfg.Git.Name)
 		}
 		if cfg.Git.Email != "" {
-			b.WriteString(fmt.Sprintf("    email: %s\n", cfg.Git.Email))
+			fmt.Fprintf(&b, "    email: %s\n", cfg.Git.Email)
 		}
 	}
 
@@ -215,37 +215,37 @@ func DoctorWithColor(useColor bool) string {
 	ctx := context.Background()
 	cli, err := docker.NewClientNoPing()
 	if err != nil {
-		b.WriteString(fmt.Sprintf("  Docker client:  %s (%s)\n", c.Red("FAIL"), err.Error()))
+		fmt.Fprintf(&b, "  Docker client:  %s (%s)\n", c.Red("FAIL"), err.Error())
 	} else {
-		defer cli.Close()
+		defer func() { _ = cli.Close() }()
 		if _, err := cli.Ping(ctx); err != nil {
-			b.WriteString(fmt.Sprintf("  Docker daemon:  %s (%s)\n", c.Red("FAIL"), err.Error()))
+			fmt.Fprintf(&b, "  Docker daemon:  %s (%s)\n", c.Red("FAIL"), err.Error())
 		} else {
 			info, _ := cli.Info(ctx)
-			b.WriteString(fmt.Sprintf("  Docker daemon:  %s (server %s)\n", c.Green("OK"), info.ServerVersion))
+			fmt.Fprintf(&b, "  Docker daemon:  %s (server %s)\n", c.Green("OK"), info.ServerVersion)
 		}
 
 		// Check default image
-		_, _, imgErr := cli.ImageInspectWithRaw(ctx, container.DefaultImage)
+		_, imgErr := cli.ImageInspect(ctx, container.DefaultImage)
 		if imgErr != nil {
-			b.WriteString(fmt.Sprintf("  Default image:  %s (%s) — will be pulled on first use\n", c.Yellow("NOT CACHED"), container.DefaultImage))
+			fmt.Fprintf(&b, "  Default image:  %s (%s) — will be pulled on first use\n", c.Yellow("NOT CACHED"), container.DefaultImage)
 		} else {
-			b.WriteString(fmt.Sprintf("  Default image:  %s (%s)\n", c.Green("OK"), container.DefaultImage))
+			fmt.Fprintf(&b, "  Default image:  %s (%s)\n", c.Green("OK"), container.DefaultImage)
 		}
 	}
 
 	// Check storage root
 	layout := storage.NewLayout(storage.DefaultRoot())
-	b.WriteString(fmt.Sprintf("  Storage root:   %s\n", layout.Root))
+	fmt.Fprintf(&b, "  Storage root:   %s\n", layout.Root)
 
 	// Check config dir
-	b.WriteString(fmt.Sprintf("  Config dir:     %s\n", layout.ConfigDir))
+	fmt.Fprintf(&b, "  Config dir:     %s\n", layout.ConfigDir)
 
 	// Image pinning status
 	b.WriteString("\n  Image pinning:\n")
-	b.WriteString(fmt.Sprintf("    agent image: %s (%s)\n", container.DefaultImage, imagePinLabel(container.DefaultImage, true)))
-	b.WriteString(fmt.Sprintf("    dind image:  %s (%s)\n", dind.DefaultImage, imagePinLabel(dind.DefaultImage, true)))
-	b.WriteString(fmt.Sprintf("    cache image: %s (%s)\n", dind.CacheImage, imagePinLabel(dind.CacheImage, true)))
+	fmt.Fprintf(&b, "    agent image: %s (%s)\n", container.DefaultImage, imagePinLabel(container.DefaultImage, true))
+	fmt.Fprintf(&b, "    dind image:  %s (%s)\n", dind.DefaultImage, imagePinLabel(dind.DefaultImage, true))
+	fmt.Fprintf(&b, "    cache image: %s (%s)\n", dind.CacheImage, imagePinLabel(dind.CacheImage, true))
 
 	return b.String()
 }
@@ -306,16 +306,16 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Dry run for %s_%s:\n\n", agentName, profile))
+	fmt.Fprintf(&b, "Dry run for %s_%s:\n\n", agentName, profile)
 
-	b.WriteString(fmt.Sprintf("  Image:     %s\n", cfg.GetImage()))
-	b.WriteString(fmt.Sprintf("  Hostname:  %s\n", cfg.GetHostname()))
+	fmt.Fprintf(&b, "  Image:     %s\n", cfg.GetImage())
+	fmt.Fprintf(&b, "  Hostname:  %s\n", cfg.GetHostname())
 
 	if cfg.Version != "" {
-		b.WriteString(fmt.Sprintf("  Version:   %s\n", cfg.Version))
+		fmt.Fprintf(&b, "  Version:   %s\n", cfg.Version)
 	}
 	if cfg.UpdateInterval != "" {
-		b.WriteString(fmt.Sprintf("  Update:    %s\n", cfg.UpdateInterval))
+		fmt.Fprintf(&b, "  Update:    %s\n", cfg.UpdateInterval)
 	} else {
 		b.WriteString("  Update:    1d (default)\n")
 	}
@@ -323,42 +323,42 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	if len(cfg.Variables) > 0 {
 		b.WriteString("  Variables:\n")
 		for k, v := range cfg.Variables {
-			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+			fmt.Fprintf(&b, "    %s=%s\n", k, v)
 		}
 	}
 
 	if len(cfg.Env) > 0 {
 		b.WriteString("  Env:\n")
 		for k, v := range cfg.Env {
-			b.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+			fmt.Fprintf(&b, "    %s=%s\n", k, v)
 		}
 	}
 
 	if len(cfg.Volumes) > 0 {
 		b.WriteString("  Volumes:\n")
 		for _, v := range cfg.Volumes {
-			b.WriteString(fmt.Sprintf("    %s\n", v))
+			fmt.Fprintf(&b, "    %s\n", v)
 		}
 	}
 
 	if len(cfg.Ports) > 0 {
 		b.WriteString("  Ports:\n")
 		for _, p := range cfg.Ports {
-			b.WriteString(fmt.Sprintf("    %s\n", p))
+			fmt.Fprintf(&b, "    %s\n", p)
 		}
 	}
 
 	if len(cfg.Args) > 0 {
-		b.WriteString(fmt.Sprintf("  Default args: %s\n", strings.Join(cfg.Args, " ")))
+		fmt.Fprintf(&b, "  Default args: %s\n", strings.Join(cfg.Args, " "))
 	}
 	if len(args) > 0 {
-		b.WriteString(fmt.Sprintf("  Passthrough:  %s\n", strings.Join(args, " ")))
+		fmt.Fprintf(&b, "  Passthrough:  %s\n", strings.Join(args, " "))
 	}
 
 	if len(cfg.Packages) > 0 {
 		b.WriteString("  Packages:\n")
 		for _, p := range cfg.Packages {
-			b.WriteString(fmt.Sprintf("    - %s\n", p))
+			fmt.Fprintf(&b, "    - %s\n", p)
 		}
 	}
 
@@ -367,35 +367,35 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	b.WriteString(formatEnabledField("DIND GPU", cfg.DINDGpu))
 
 	if cfg.NetworkScope != "" {
-		b.WriteString(fmt.Sprintf("  Network:   %s\n", cfg.NetworkScope))
+		fmt.Fprintf(&b, "  Network:   %s\n", cfg.NetworkScope)
 	}
 	if cfg.DINDHostname != "" {
-		b.WriteString(fmt.Sprintf("  DIND Host: %s\n", cfg.DINDHostname))
+		fmt.Fprintf(&b, "  DIND Host: %s\n", cfg.DINDHostname)
 	}
 
 	if cfg.Resources != nil {
 		b.WriteString("  Resources:\n")
 		if cfg.Resources.Memory != "" {
-			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.Resources.Memory))
+			fmt.Fprintf(&b, "    memory: %s\n", cfg.Resources.Memory)
 		}
 		if cfg.Resources.CPUs != "" {
-			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.Resources.CPUs))
+			fmt.Fprintf(&b, "    cpus:   %s\n", cfg.Resources.CPUs)
 		}
 	}
 	if cfg.DINDResources != nil {
 		b.WriteString("  DIND Resources:\n")
 		if cfg.DINDResources.Memory != "" {
-			b.WriteString(fmt.Sprintf("    memory: %s\n", cfg.DINDResources.Memory))
+			fmt.Fprintf(&b, "    memory: %s\n", cfg.DINDResources.Memory)
 		}
 		if cfg.DINDResources.CPUs != "" {
-			b.WriteString(fmt.Sprintf("    cpus:   %s\n", cfg.DINDResources.CPUs))
+			fmt.Fprintf(&b, "    cpus:   %s\n", cfg.DINDResources.CPUs)
 		}
 	}
 
 	if len(cfg.DINDMirrors) > 0 {
 		b.WriteString("  DIND Mirrors:\n")
 		for _, m := range cfg.DINDMirrors {
-			b.WriteString(fmt.Sprintf("    - %s\n", m))
+			fmt.Fprintf(&b, "    - %s\n", m)
 		}
 	}
 
@@ -406,36 +406,36 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	if len(cfg.AllowAgents) > 0 {
 		b.WriteString("  Allow Agents:\n")
 		for _, a := range cfg.AllowAgents {
-			b.WriteString(fmt.Sprintf("    - %s\n", a))
+			fmt.Fprintf(&b, "    - %s\n", a)
 		}
 	}
 
 	if len(cfg.MCPServers) > 0 {
 		b.WriteString("  MCP Servers:\n")
 		for name, srv := range cfg.MCPServers {
-			b.WriteString(fmt.Sprintf("    %s: %s\n", name, srv.Command))
+			fmt.Fprintf(&b, "    %s: %s\n", name, srv.Command)
 		}
 	}
 
 	if len(cfg.Tools) > 0 {
 		b.WriteString("  Tools:\n")
 		for name, tool := range cfg.Tools {
-			b.WriteString(fmt.Sprintf("    %s: (type=%s)\n", name, tool.Type))
+			fmt.Fprintf(&b, "    %s: (type=%s)\n", name, tool.Type)
 		}
 	}
 
 	if cfg.Git != nil && (cfg.Git.Name != "" || cfg.Git.Email != "") {
 		b.WriteString("  Git:\n")
 		if cfg.Git.Name != "" {
-			b.WriteString(fmt.Sprintf("    name:  %s\n", cfg.Git.Name))
+			fmt.Fprintf(&b, "    name:  %s\n", cfg.Git.Name)
 		}
 		if cfg.Git.Email != "" {
-			b.WriteString(fmt.Sprintf("    email: %s\n", cfg.Git.Email))
+			fmt.Fprintf(&b, "    email: %s\n", cfg.Git.Email)
 		}
 	}
 
 	if cfg.SecurityProfile != "" {
-		b.WriteString(fmt.Sprintf("  Security:  %s\n", cfg.SecurityProfile))
+		fmt.Fprintf(&b, "  Security:  %s\n", cfg.SecurityProfile)
 	}
 
 	return b.String(), nil
@@ -456,7 +456,7 @@ func Cleanup() (CleanupResult, error) {
 	if err != nil {
 		return CleanupResult{}, err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	var result CleanupResult
 
@@ -523,7 +523,7 @@ func StatusWithColor(useColor bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
@@ -538,8 +538,8 @@ func StatusWithColor(useColor bool) (string, error) {
 
 	var b strings.Builder
 	b.WriteString("Running ai-shim containers:\n\n")
-	b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", "NAME", "AGENT", "PROFILE", "IMAGE", "STATUS"))
-	b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", "----", "-----", "-------", "-----", "------"))
+	fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", "NAME", "AGENT", "PROFILE", "IMAGE", "STATUS")
+	fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", "----", "-----", "-------", "-----", "------")
 
 	for _, c := range containers {
 		name := containerDisplayName(c)
@@ -560,7 +560,7 @@ func StatusWithColor(useColor bool) (string, error) {
 		}
 
 		status := colorizeStatus(col, c.Status)
-		b.WriteString(fmt.Sprintf("  %-35s %-15s %-10s %-25s %s\n", name, agentLabel, profile, image, status))
+		fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", name, agentLabel, profile, image, status)
 	}
 	return b.String(), nil
 }
@@ -634,13 +634,13 @@ func DiskUsage(layout storage.Layout) (string, error) {
 	for _, dir := range dirs {
 		size, err := dirSize(dir.path)
 		if err != nil {
-			b.WriteString(fmt.Sprintf("  %-12s  (not found)\n", dir.name))
+			fmt.Fprintf(&b, "  %-12s  (not found)\n", dir.name)
 			continue
 		}
 		total += size
-		b.WriteString(fmt.Sprintf("  %-12s  %s\n", dir.name, formatBytes(size)))
+		fmt.Fprintf(&b, "  %-12s  %s\n", dir.name, formatBytes(size))
 	}
-	b.WriteString(fmt.Sprintf("\n  %-12s  %s\n", "Total", formatBytes(total)))
+	fmt.Fprintf(&b, "\n  %-12s  %s\n", "Total", formatBytes(total))
 
 	// Per-profile breakdown
 	profilesDir := filepath.Join(layout.Root, "profiles")
@@ -650,7 +650,7 @@ func DiskUsage(layout storage.Layout) (string, error) {
 		for _, e := range entries {
 			if e.IsDir() {
 				size, _ := dirSize(filepath.Join(profilesDir, e.Name()))
-				b.WriteString(fmt.Sprintf("  %-20s  %s\n", e.Name(), formatBytes(size)))
+				fmt.Fprintf(&b, "  %-20s  %s\n", e.Name(), formatBytes(size))
 			}
 		}
 	}
@@ -689,7 +689,15 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
-// formatBoolFieldSrc is like formatBoolField but appends a source annotation.
+// formatEnabledField formats a *bool config field as enabled/disabled for DryRun output.
+func formatEnabledField(name string, val *bool) string {
+	enabled := "disabled"
+	if val != nil && *val {
+		enabled = "enabled"
+	}
+	return fmt.Sprintf("  %-12s %s\n", name+":", enabled)
+}
+
 func formatBoolFieldSrc(name string, val *bool, defaultVal bool, srcAnnotation string) string {
 	if val != nil {
 		if *val {
@@ -700,30 +708,7 @@ func formatBoolFieldSrc(name string, val *bool, defaultVal bool, srcAnnotation s
 	if defaultVal {
 		return fmt.Sprintf("  %-15s true (default)\n", name+":")
 	}
-	return fmt.Sprintf("  %-15s false (default)\n", name+":")
-}
-
-// formatBoolField formats a *bool config field with default annotation for ShowConfig output.
-func formatBoolField(name string, val *bool, defaultVal bool) string {
-	if val != nil {
-		if *val {
-			return fmt.Sprintf("  %-15s true\n", name+":")
-		}
-		return fmt.Sprintf("  %-15s false\n", name+":")
-	}
-	if defaultVal {
-		return fmt.Sprintf("  %-15s true (default)\n", name+":")
-	}
-	return fmt.Sprintf("  %-15s false (default)\n", name+":")
-}
-
-// formatEnabledField formats a *bool config field as enabled/disabled for DryRun output.
-func formatEnabledField(name string, val *bool) string {
-	enabled := "disabled"
-	if val != nil && *val {
-		enabled = "enabled"
-	}
-	return fmt.Sprintf("  %-12s %s\n", name+":", enabled)
+	return ""
 }
 
 // imagePinLabel returns a display label for an image's pinning status.
@@ -780,7 +765,7 @@ func AgentVersions(layout storage.Layout) string {
 			}
 		}
 
-		b.WriteString(fmt.Sprintf("  %-15s  %s\n", name, status))
+		fmt.Fprintf(&b, "  %-15s  %s\n", name, status)
 	}
 
 	return b.String()
@@ -859,7 +844,7 @@ func DoctorJSON() (string, error) {
 	if err != nil {
 		result.Docker = DoctorCheck{Status: "fail", Detail: err.Error()}
 	} else {
-		defer cli.Close()
+		defer func() { _ = cli.Close() }()
 		if _, err := cli.Ping(ctx); err != nil {
 			result.Docker = DoctorCheck{Status: "fail", Detail: err.Error()}
 		} else {
@@ -867,7 +852,7 @@ func DoctorJSON() (string, error) {
 			result.Docker = DoctorCheck{Status: "ok", Detail: "server " + info.ServerVersion}
 		}
 
-		_, _, imgErr := cli.ImageInspectWithRaw(ctx, container.DefaultImage)
+		_, imgErr := cli.ImageInspect(ctx, container.DefaultImage)
 		if imgErr != nil {
 			result.DefaultImage = DoctorCheck{Status: "not_cached", Detail: container.DefaultImage}
 		} else {
@@ -895,7 +880,7 @@ func StatusJSON() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),

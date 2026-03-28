@@ -72,7 +72,7 @@ func NewRunner(ctx context.Context) (*Runner, error) {
 // Provides progress output to stderr.
 func (r *Runner) EnsureImage(ctx context.Context, image string) error {
 	// Check if image exists locally
-	_, _, err := r.client.ImageInspectWithRaw(ctx, image)
+	_, err := r.client.ImageInspect(ctx, image)
 	if err == nil {
 		return nil // already available
 	}
@@ -82,7 +82,7 @@ func (r *Runner) EnsureImage(ctx context.Context, image string) error {
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", image, err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	// Consume the reader to complete the pull
 	if _, err := io.Copy(io.Discard, reader); err != nil {
 		logging.Debug("image pull stream: %v", err)
@@ -130,7 +130,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", spec.Resources.Memory, err)
 			} else {
-				hostCfg.Resources.Memory = memBytes
+				hostCfg.Memory = memBytes
 			}
 		}
 		if spec.Resources.CPUs != "" {
@@ -138,7 +138,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", spec.Resources.CPUs, err)
 			} else {
-				hostCfg.Resources.NanoCPUs = int64(cpus * 1e9)
+				hostCfg.NanoCPUs = int64(cpus * 1e9)
 			}
 		}
 	}
@@ -214,7 +214,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 			if _, err := io.Copy(attachResp.Conn, os.Stdin); err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: stdin copy error: %v\n", err)
 			}
-			attachResp.CloseWrite()
+			_ = attachResp.CloseWrite()
 		}()
 	}
 
@@ -223,7 +223,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 			fmt.Fprintf(os.Stderr, "ai-shim: warning: stdout copy error: %v\n", err)
 		}
 	} else {
-		stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
+		_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
 	}
 
 	statusCh, errCh := r.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
@@ -268,7 +268,7 @@ type ImageUser struct {
 // InspectImageUser extracts the default user and home directory from an image.
 // Falls back to the platform user info if image doesn't specify.
 func (r *Runner) InspectImageUser(ctx context.Context, image string) (ImageUser, error) {
-	inspect, _, err := r.client.ImageInspectWithRaw(ctx, image)
+	inspect, err := r.client.ImageInspect(ctx, image)
 	if err != nil {
 		return ImageUser{}, fmt.Errorf("inspecting image %s: %w", image, err)
 	}
@@ -312,8 +312,8 @@ func (r *Runner) saveExitLog(logDir, name string, exitCode int) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	f.WriteString(entry)
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(entry)
 }
 
 // Client returns the underlying Docker client for DIND integration.

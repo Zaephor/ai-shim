@@ -30,9 +30,9 @@ func GenerateEntrypoint(p EntrypointParams) string {
 		b.WriteString(generateCustomInstall(p))
 	}
 
-	b.WriteString(fmt.Sprintf("\nexec %s", shell.Quote(p.Binary)))
+	fmt.Fprintf(&b, "\nexec %s", shell.Quote(p.Binary))
 	for _, arg := range p.AgentArgs {
-		b.WriteString(fmt.Sprintf(" %s", shell.Quote(arg)))
+		fmt.Fprintf(&b, " %s", shell.Quote(arg))
 	}
 	b.WriteString("\n")
 
@@ -49,58 +49,48 @@ func generateInstallCheck(p EntrypointParams) string {
 
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`LAST_UPDATE="%s/cache/.last-update"
-INSTALLED_VERSION="%s/cache/.installed-version"
-need_install=false
-
-`, agentDir, agentDir))
+	fmt.Fprintf(&b, "LAST_UPDATE=\"%s/cache/.last-update\"\n", agentDir)
+	fmt.Fprintf(&b, "INSTALLED_VERSION=\"%s/cache/.installed-version\"\n", agentDir)
+	b.WriteString("need_install=false\n\n")
 
 	if p.Version != "" {
 		// Pinned version: compare installed version to requested
-		b.WriteString(fmt.Sprintf(`# Pinned version check
-if [ -f "$INSTALLED_VERSION" ] && [ "$(cat "$INSTALLED_VERSION")" = %s ]; then
-  echo "%s pinned at %s, already installed"
-else
-  need_install=true
-fi
-`, shell.Quote(p.Version), pkg, shell.Quote(p.Version)))
+		fmt.Fprintf(&b, "# Pinned version check\n")
+		fmt.Fprintf(&b, "if [ -f \"$INSTALLED_VERSION\" ] && [ \"$(cat \"$INSTALLED_VERSION\")\" = %s ]; then\n", shell.Quote(p.Version))
+		fmt.Fprintf(&b, "  echo \"%s pinned at %s, already installed\"\n", pkg, shell.Quote(p.Version))
+		b.WriteString("else\n")
+		b.WriteString("  need_install=true\n")
+		b.WriteString("fi\n")
 	} else {
 		// Unpinned: use update interval logic
-		b.WriteString(fmt.Sprintf(`# Check if binary exists
-if ! command -v %s >/dev/null 2>&1; then
-  need_install=true
-`, binary))
+		b.WriteString("# Check if binary exists\n")
+		fmt.Fprintf(&b, "if ! command -v %s >/dev/null 2>&1; then\n", binary)
+		b.WriteString("  need_install=true\n")
 
 		switch {
 		case p.UpdateInterval == 0:
-			// Always reinstall
-			b.WriteString(`else
-  # update_interval=always: reinstall every launch
-  need_install=true
-fi
-`)
+			b.WriteString("else\n")
+			b.WriteString("  # update_interval=always: reinstall every launch\n")
+			b.WriteString("  need_install=true\n")
+			b.WriteString("fi\n")
 		case p.UpdateInterval < 0:
-			// Never reinstall
-			b.WriteString(fmt.Sprintf(`else
-  echo "%s already installed, skipping (update_interval=never)"
-fi
-`, pkg))
+			b.WriteString("else\n")
+			fmt.Fprintf(&b, "  echo \"%s already installed, skipping (update_interval=never)\"\n", pkg)
+			b.WriteString("fi\n")
 		default:
-			// Interval-based
-			b.WriteString(fmt.Sprintf(`elif [ ! -f "$LAST_UPDATE" ]; then
-  need_install=true
-else
-  last=$(cat "$LAST_UPDATE")
-  now=$(date +%%s)
-  elapsed=$((now - last))
-  if [ "$elapsed" -ge %d ]; then
-    echo "Update interval elapsed, reinstalling %s..."
-    need_install=true
-  else
-    echo "%s is up to date (checked $((elapsed / 60))m ago)"
-  fi
-fi
-`, p.UpdateInterval, pkg, pkg))
+			b.WriteString("elif [ ! -f \"$LAST_UPDATE\" ]; then\n")
+			b.WriteString("  need_install=true\n")
+			b.WriteString("else\n")
+			b.WriteString("  last=$(cat \"$LAST_UPDATE\")\n")
+			b.WriteString("  now=$(date +%s)\n")
+			b.WriteString("  elapsed=$((now - last))\n")
+			fmt.Fprintf(&b, "  if [ \"$elapsed\" -ge %d ]; then\n", p.UpdateInterval)
+			fmt.Fprintf(&b, "    echo \"Update interval elapsed, reinstalling %s...\"\n", pkg)
+			b.WriteString("    need_install=true\n")
+			b.WriteString("  else\n")
+			fmt.Fprintf(&b, "    echo \"%s is up to date (checked $((elapsed / 60))m ago)\"\n", pkg)
+			b.WriteString("  fi\n")
+			b.WriteString("fi\n")
 		}
 	}
 
@@ -113,9 +103,10 @@ func generatePostInstall(p EntrypointParams) string {
 	if p.Version != "" {
 		version = p.Version
 	}
-	return fmt.Sprintf(`  date +%%s > "$LAST_UPDATE"
-  echo %s > "$INSTALLED_VERSION"
-`, shell.Quote(version))
+	var b strings.Builder
+	b.WriteString("  date +%s > \"$LAST_UPDATE\"\n")
+	fmt.Fprintf(&b, "  echo %s > \"$INSTALLED_VERSION\"\n", shell.Quote(version))
+	return b.String()
 }
 
 func generateNPMInstall(p EntrypointParams) string {
@@ -126,18 +117,17 @@ func generateNPMInstall(p EntrypointParams) string {
 	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(`export NPM_CONFIG_PREFIX=%s/bin
-export NPM_CONFIG_CACHE=%s/cache
-export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
-`, agentDir, agentDir))
+	fmt.Fprintf(&b, "export NPM_CONFIG_PREFIX=%s/bin\n", agentDir)
+	fmt.Fprintf(&b, "export NPM_CONFIG_CACHE=%s/cache\n", agentDir)
+	b.WriteString("export PATH=\"$NPM_CONFIG_PREFIX/bin:$PATH\"\n")
 
 	b.WriteString(generateInstallCheck(p))
 
-	b.WriteString(fmt.Sprintf(`if [ "$need_install" = true ]; then
-  echo "Installing %s via npm..."
-  npm install -g %s || { echo "ERROR: npm install failed for %s"; exit 1; }
-%sfi
-`, pkg, pkg, pkg, generatePostInstall(p)))
+	b.WriteString("if [ \"$need_install\" = true ]; then\n")
+	fmt.Fprintf(&b, "  echo \"Installing %s via npm...\"\n", pkg)
+	fmt.Fprintf(&b, "  npm install -g %s || { echo \"ERROR: npm install failed for %s\"; exit 1; }\n", pkg, pkg)
+	b.WriteString(generatePostInstall(p))
+	b.WriteString("fi\n")
 
 	return b.String()
 }
@@ -151,18 +141,17 @@ func generateUVInstall(p EntrypointParams) string {
 	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(`export UV_TOOL_DIR=%s/bin/tools
-export UV_TOOL_BIN_DIR=%s/bin/bin
-export PATH="$UV_TOOL_BIN_DIR:$PATH"
-`, agentDir, agentDir))
+	fmt.Fprintf(&b, "export UV_TOOL_DIR=%s/bin/tools\n", agentDir)
+	fmt.Fprintf(&b, "export UV_TOOL_BIN_DIR=%s/bin/bin\n", agentDir)
+	b.WriteString("export PATH=\"$UV_TOOL_BIN_DIR:$PATH\"\n")
 
 	b.WriteString(generateInstallCheck(p))
 
-	b.WriteString(fmt.Sprintf(`if [ "$need_install" = true ]; then
-  echo "Installing %s via uv..."
-  uv tool install %s || uv tool upgrade %s || { echo "ERROR: uv install failed for %s"; exit 1; }
-%sfi
-`, pkg, pkg, basePkg, basePkg, generatePostInstall(p)))
+	b.WriteString("if [ \"$need_install\" = true ]; then\n")
+	fmt.Fprintf(&b, "  echo \"Installing %s via uv...\"\n", pkg)
+	fmt.Fprintf(&b, "  uv tool install %s || uv tool upgrade %s || { echo \"ERROR: uv install failed for %s\"; exit 1; }\n", pkg, basePkg, basePkg)
+	b.WriteString(generatePostInstall(p))
+	b.WriteString("fi\n")
 
 	return b.String()
 }

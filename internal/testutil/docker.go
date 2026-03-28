@@ -20,5 +20,5 @@ func SkipIfNoDocker(t *testing.T) {
 		}
 		t.Skip("Docker not available:", err)
 	}
-	cli.Close()
+	_ = cli.Close()
 }
