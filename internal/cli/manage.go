@@ -314,6 +314,11 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	if cfg.Version != "" {
 		b.WriteString(fmt.Sprintf("  Version:   %s\n", cfg.Version))
 	}
+	if cfg.UpdateInterval != "" {
+		b.WriteString(fmt.Sprintf("  Update:    %s\n", cfg.UpdateInterval))
+	} else {
+		b.WriteString("  Update:    1d (default)\n")
+	}
 
 	if len(cfg.Variables) > 0 {
 		b.WriteString("  Variables:\n")

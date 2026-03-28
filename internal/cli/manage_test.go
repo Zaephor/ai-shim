@@ -12,6 +12,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/color"
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/testutil"
 )
 
 func TestListAgents(t *testing.T) {
@@ -115,6 +116,7 @@ func TestImagePinLabel(t *testing.T) {
 }
 
 func TestCleanup_ReturnsResult(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
 	result, err := Cleanup()
 	require.NoError(t, err)
 	// Verify the result type has container, network, and volume fields.
@@ -206,6 +208,7 @@ func TestDryRun_UsesDefaultImage(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
 	output, err := Status()
 	require.NoError(t, err)
 	// May have 0 containers or some - just verify it doesn't error
@@ -213,6 +216,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestStatus_Format(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
 	output, err := Status()
 	require.NoError(t, err)
 	// Output should have headers or "No running" message

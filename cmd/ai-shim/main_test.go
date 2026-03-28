@@ -2,12 +2,20 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func skipIfNoDocker(t *testing.T) {
+	t.Helper()
+	if err := exec.Command("docker", "info").Run(); err != nil {
+		t.Skip("Docker not available:", err)
+	}
+}
 
 func TestRunManage_Version(t *testing.T) {
 	// Capture stdout would be complex, just verify no error
@@ -62,6 +70,7 @@ func TestRunManage_ManageDryRun(t *testing.T) {
 }
 
 func TestRunManage_ManageCleanup(t *testing.T) {
+	skipIfNoDocker(t)
 	err := runManage([]string{"manage", "cleanup"})
 	assert.NoError(t, err, "cleanup should work (may find 0 containers)")
 }

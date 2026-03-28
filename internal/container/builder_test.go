@@ -16,7 +16,7 @@ import (
 func defaultBuildParams() BuildParams {
 	return BuildParams{
 		Config:  config.Config{},
-		Agent:   agent.Definition{Name: "claude-code", InstallType: "custom", Package: "curl -fsSL https://claude.ai/install.sh | bash", Binary: "claude"},
+		Agent:   agent.Definition{Name: "claude-code", InstallType: "custom", Package: "curl -fsSL https://claude.ai/install.sh | bash", Binary: "claude", DataDirs: []string{".claude"}, DataFiles: []string{".claude.json"}},
 		Profile: "default",
 		Layout:  storage.NewLayout("/tmp/ai-shim-test"),
 		Platform: platform.Info{

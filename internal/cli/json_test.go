@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/ai-shim/ai-shim/internal/testutil"
 )
 
 func TestIsJSONMode(t *testing.T) {
@@ -119,6 +120,7 @@ func TestDoctorJSON(t *testing.T) {
 }
 
 func TestStatusJSON(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
 	output, err := StatusJSON()
 	require.NoError(t, err)
 

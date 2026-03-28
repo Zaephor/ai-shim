@@ -24,11 +24,11 @@ func TestGenerateInstallScript_BinaryDownload(t *testing.T) {
 
 func TestGenerateInstallScript_BinaryDownloadWithChecksum(t *testing.T) {
 	tools := map[string]ToolDef{
-		"mybin": {Type: "binary-download", URL: "https://example.com/bin", Binary: "mybin", Checksum: "abc123"},
+		"mybin": {Type: "binary-download", URL: "https://example.com/bin", Binary: "mybin", Checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 	}
 	script := GenerateInstallScript(tools, "/opt/bin")
 	assert.Contains(t, script, "sha256sum")
-	assert.Contains(t, script, "abc123")
+	assert.Contains(t, script, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 }
 
 func TestGenerateInstallScript_TarExtract(t *testing.T) {
