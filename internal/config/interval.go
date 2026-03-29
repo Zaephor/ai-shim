@@ -38,6 +38,9 @@ func ParseUpdateInterval(s string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("invalid day interval %q: %w", s, err)
 		}
+		if days < 0 {
+			return 0, fmt.Errorf("invalid day interval %q: must be non-negative", s)
+		}
 		return int64(days * 86400), nil
 	}
 
@@ -45,6 +48,9 @@ func ParseUpdateInterval(s string) (int64, error) {
 	d, err := time.ParseDuration(s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid update interval %q: %w", s, err)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("invalid update interval %q: must be non-negative", s)
 	}
 	return int64(d.Seconds()), nil
 }

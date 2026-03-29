@@ -38,6 +38,30 @@ func TestMarshalJSON(t *testing.T) {
 	assert.True(t, result[len(result)-1] == '\n')
 }
 
+func TestMarshalJSON_EmptyMap(t *testing.T) {
+	result, err := MarshalJSON(map[string]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "{}\n", result)
+}
+
+func TestMarshalJSON_EmptySlice(t *testing.T) {
+	result, err := MarshalJSON([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "[]\n", result)
+}
+
+func TestMarshalJSON_NilInput(t *testing.T) {
+	result, err := MarshalJSON(nil)
+	require.NoError(t, err)
+	assert.Equal(t, "null\n", result)
+}
+
+func TestMarshalJSON_ErrorHandling(t *testing.T) {
+	// Channels cannot be marshaled to JSON
+	_, err := MarshalJSON(make(chan int))
+	assert.Error(t, err)
+}
+
 func TestListAgentsJSON(t *testing.T) {
 	output, err := ListAgentsJSON()
 	require.NoError(t, err)

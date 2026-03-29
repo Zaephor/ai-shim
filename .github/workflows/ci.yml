@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: Check formatting
         run: |
           bad=$(gofmt -l .)
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: Unit + integration tests (no Docker)
         run: go test -short ./... -v -race -count=1
       - name: Build native binary
@@ -148,16 +148,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: Install Docker via Colima
         run: |
           brew install docker colima
-          colima start --cpu 2 --memory 4 --disk 20
-          # Wait for Docker to be ready
-          for i in $(seq 1 30); do
-            docker info >/dev/null 2>&1 && break
-            echo "Waiting for Docker... ($i/30)"
-            sleep 2
+          # Use QEMU backend (more reliable than VZ on CI runners)
+          # Retry up to 3 times if VM fails to start
+          for attempt in 1 2 3; do
+            echo "Starting Colima (attempt $attempt/3)..."
+            colima start --cpu 2 --memory 4 --disk 20 --vm-type qemu && break
+            echo "Colima start failed, retrying..."
+            colima delete -f 2>/dev/null || true
+            sleep 5
+          done
+          # Wait for Docker daemon to be fully ready (not just socket open)
+          for i in $(seq 1 60); do
+            if docker info 2>/dev/null | grep -q "Server Version"; then
+              echo "Docker is ready"
+              break
+            fi
+            echo "Waiting for Docker daemon... ($i/60)"
+            sleep 3
           done
           docker info
       - name: E2E and integration tests
@@ -175,7 +186,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: E2E and integration tests
         run: AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s -race
         timeout-minutes: 15
@@ -190,7 +201,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.6'
+          go-version: '1.25.8'
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}

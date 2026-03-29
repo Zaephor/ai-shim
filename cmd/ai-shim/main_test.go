@@ -171,3 +171,229 @@ func TestRunManage_ManageReinstallUnknownAgent(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown agent")
 }
+
+func TestRunManage_Help(t *testing.T) {
+	err := runManage([]string{"help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_DashH(t *testing.T) {
+	err := runManage([]string{"-h"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_DashDashHelp(t *testing.T) {
+	err := runManage([]string{"--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_NoArgs(t *testing.T) {
+	err := runManage(nil)
+	assert.NoError(t, err)
+}
+
+func TestRunManage_Init(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	err := runManage([]string{"init"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageConfigMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "config"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageConfigOneArg(t *testing.T) {
+	err := runManage([]string{"manage", "config", "claude-code"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageExecMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "exec"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageExecOneArg(t *testing.T) {
+	err := runManage([]string{"manage", "exec", "mycontainer"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageWatchMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "watch"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageSwitchProfileMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "switch-profile"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageBackupMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "backup"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageRestoreMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "restore"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageRestoreOneArg(t *testing.T) {
+	err := runManage([]string{"manage", "restore", "myprofile"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageUnknownSubcommand(t *testing.T) {
+	err := runManage([]string{"manage", "nonexistent"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown manage subcommand")
+}
+
+func TestRunManage_ManageSymlinksUnknownSubcommand(t *testing.T) {
+	err := runManage([]string{"manage", "symlinks", "nonexistent"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown symlinks subcommand")
+}
+
+func TestRunManage_ManageSymlinksCreateMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "symlinks", "create"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageSymlinksRemoveMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "symlinks", "remove"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageSubcommandHelps(t *testing.T) {
+	subcommands := []string{
+		"agents", "profiles", "config", "doctor", "symlinks",
+		"dry-run", "cleanup", "status", "backup", "restore",
+		"disk-usage", "agent-versions", "reinstall", "exec",
+		"watch", "switch-profile",
+	}
+	for _, sub := range subcommands {
+		t.Run(sub, func(t *testing.T) {
+			err := runManage([]string{"manage", sub, "--help"})
+			assert.NoError(t, err, "manage %s --help should succeed", sub)
+		})
+	}
+}
+
+func TestRunManage_ManageDiskUsage(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	err := runManage([]string{"manage", "disk-usage"})
+	assert.NoError(t, err)
+}
+
+func TestPrintHelp(t *testing.T) {
+	// Just verify it doesn't panic
+	printHelp()
+}
+
+func TestFormatAgentList(t *testing.T) {
+	output := formatAgentList()
+	assert.Contains(t, output, "claude-code")
+	assert.Contains(t, output, "aider")
+}
+
+func TestRunManage_ManageSymlinksList(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Change to tmpDir so "." resolves to it
+	origDir, _ := os.Getwd()
+	require.NoError(t, os.Chdir(tmpDir))
+	defer os.Chdir(origDir)
+
+	err := runManage([]string{"manage", "symlinks", "list"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageBackupNonexistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	err := runManage([]string{"manage", "backup", "nonexistent"})
+	assert.Error(t, err)
+}
+
+func TestRunManage_ManageConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	// Initialize so config dirs exist
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "config", "claude-code", "default"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageDryRunValidArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "dry-run", "claude-code", "default"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageAgentsJSON(t *testing.T) {
+	t.Setenv("AI_SHIM_JSON", "1")
+	err := runManage([]string{"manage", "agents"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageProfilesJSON(t *testing.T) {
+	t.Setenv("AI_SHIM_JSON", "1")
+	err := runManage([]string{"manage", "profiles"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageConfigJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("AI_SHIM_JSON", "1")
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "config", "claude-code", "default"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageDoctorJSON(t *testing.T) {
+	t.Setenv("AI_SHIM_JSON", "1")
+	err := runManage([]string{"manage", "doctor"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageDiskUsageJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("AI_SHIM_JSON", "1")
+	err := runManage([]string{"manage", "disk-usage"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageSwitchProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "switch-profile", "work"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageSymlinksListDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := runManage([]string{"manage", "symlinks", "list", tmpDir})
+	assert.NoError(t, err)
+}

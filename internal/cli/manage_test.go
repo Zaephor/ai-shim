@@ -191,6 +191,21 @@ func TestRemoveSymlink(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestRemoveSymlink_NonexistentPath(t *testing.T) {
+	err := RemoveSymlink(filepath.Join(t.TempDir(), "does-not-exist"))
+	assert.Error(t, err)
+}
+
+func TestRemoveSymlink_NotASymlink(t *testing.T) {
+	dir := t.TempDir()
+	regularFile := filepath.Join(dir, "regular-file")
+	require.NoError(t, os.WriteFile(regularFile, []byte("data"), 0644))
+
+	err := RemoveSymlink(regularFile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a symlink")
+}
+
 func TestDryRun_UsesDefaultImage(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "config")

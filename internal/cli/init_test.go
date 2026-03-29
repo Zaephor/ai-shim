@@ -80,3 +80,9 @@ func TestInit_DoesNotOverwriteExistingConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, existingContent, string(data), "Init should not overwrite existing config")
 }
+
+func TestPrintFirstRunHelp(t *testing.T) {
+	layout := storage.NewLayout(filepath.Join(t.TempDir(), ".ai-shim"))
+	// Just verify it doesn't panic; output goes to stderr
+	PrintFirstRunHelp(layout)
+}
