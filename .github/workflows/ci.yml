@@ -161,7 +161,10 @@ jobs:
             colima delete -f 2>/dev/null || true
             sleep 5
           done
-          # Wait for Docker daemon to be fully ready (not just socket open)
+          # Colima uses its own socket path, not /var/run/docker.sock
+          export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+          echo "DOCKER_HOST=$DOCKER_HOST" >> "$GITHUB_ENV"
+          # Wait for Docker daemon to be fully ready
           for i in $(seq 1 60); do
             if docker info 2>/dev/null | grep -q "Server Version"; then
               echo "Docker is ready"

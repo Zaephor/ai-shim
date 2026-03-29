@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +42,11 @@ func ParseUpdateInterval(s string) (int64, error) {
 		if days < 0 {
 			return 0, fmt.Errorf("invalid day interval %q: must be non-negative", s)
 		}
-		return int64(days * 86400), nil
+		seconds := days * 86400
+		if seconds > float64(math.MaxInt64) {
+			return 0, fmt.Errorf("invalid day interval %q: value too large", s)
+		}
+		return int64(seconds), nil
 	}
 
 	// Fall through to Go duration parser ("24h", "1h30m", "30m")
