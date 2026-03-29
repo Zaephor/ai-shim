@@ -1,10 +1,10 @@
-.PHONY: build test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures
+.PHONY: build test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures test-journey
 
 BINARY := ai-shim
 MODULE := github.com/ai-shim/ai-shim
 
 build:
-	go build -o $(BINARY) ./cmd/ai-shim
+	go build -trimpath -ldflags "-s -w" -o $(BINARY) ./cmd/ai-shim
 
 test:
 	go test ./... -v
@@ -29,7 +29,7 @@ e2e:
 	go test ./test/e2e/ -v -count=1
 
 e2e-ci:
-	AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s
+	AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s -race
 
 check-silent-failures:
 	@echo "Checking for silent failure patterns in production code..."
@@ -38,6 +38,9 @@ check-silent-failures:
 		exit 1; \
 	fi
 	@echo "No silent failure patterns found."
+
+test-journey:
+	go test ./test/integration/ ./test/e2e/ -v -count=1 -run "Journey" -timeout 300s
 
 verify: fmt vet lint test check-silent-failures
 
