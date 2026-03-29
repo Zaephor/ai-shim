@@ -18,6 +18,20 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11
+      - name: Check for vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: Check dependency licenses
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses check ./... --disallowed_types=restricted,reciprocal 2>&1 || true
+          # List all licenses for visibility
+          go-licenses csv ./... 2>/dev/null | head -30
+      - name: Validate goreleaser config
+        run: |
+          curl -sSfL https://github.com/goreleaser/goreleaser/releases/download/v2.6.1/goreleaser_Linux_x86_64.tar.gz | tar xz -C /tmp goreleaser
+          /tmp/goreleaser check
 
   test:
     runs-on: ubuntu-latest
@@ -46,11 +60,50 @@ jobs:
         run: make check-silent-failures
       - name: Unit tests
         run: go test -short ./... -v -race -coverprofile=coverage.out
+      - name: Run fuzz tests (quick)
+        run: |
+          go test ./internal/shell/ -fuzz=FuzzQuote -fuzztime=10s
+          go test ./internal/config/ -fuzz=FuzzParseUpdateInterval -fuzztime=10s
+          go test ./internal/invocation/ -fuzz=FuzzParseName -fuzztime=10s
+          go test ./internal/parse/ -fuzz=FuzzImageDigest -fuzztime=10s
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage.out
+      - name: Check coverage threshold
+        run: |
+          total=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | sed 's/%//')
+          echo "Total coverage: ${total}%"
+          threshold=60
+          if [ "$(echo "$total < $threshold" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${total}% is below threshold ${threshold}%"
+            exit 1
+          fi
+      - name: Build native binary
+        run: |
+          VERSION="dev-$(git rev-parse --short HEAD)"
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o ai-shim ./cmd/ai-shim
+      - name: Smoke test - version
+        run: ./ai-shim version
+      - name: Smoke test - help
+        run: ./ai-shim help
+      - name: Smoke test - init
+        run: |
+          export HOME=$(mktemp -d)
+          ./ai-shim init
+          test -f "$HOME/.ai-shim/config/default.yaml"
+      - name: Smoke test - manage agents
+        run: ./ai-shim manage agents
+      - name: Smoke test - manage doctor
+        run: ./ai-shim manage doctor || true
+      - name: Smoke test - dry-run
+        run: |
+          export HOME=$(mktemp -d)
+          ./ai-shim init
+          ./ai-shim manage dry-run claude-code default
+      - name: Smoke test - completion
+        run: ./ai-shim completion bash > /dev/null
 
   test-macos:
     runs-on: macos-latest
@@ -59,14 +112,59 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.6'
-      - name: Unit tests
+      - name: Unit + integration tests (no Docker)
         run: go test -short ./... -v -race -count=1
       - name: Build native binary
         run: |
           VERSION="dev-$(git rev-parse --short HEAD)"
-          go build -ldflags "-X main.version=$VERSION" -o ai-shim ./cmd/ai-shim
-      - name: Verify binary runs
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o ai-shim ./cmd/ai-shim
+      - name: Smoke test - version
         run: ./ai-shim version
+      - name: Smoke test - help
+        run: ./ai-shim help
+      - name: Smoke test - init
+        run: |
+          export HOME=$(mktemp -d)
+          ./ai-shim init
+          test -f "$HOME/.ai-shim/config/default.yaml"
+      - name: Smoke test - manage agents
+        run: ./ai-shim manage agents
+      - name: Smoke test - manage doctor
+        run: ./ai-shim manage doctor || true
+      - name: Smoke test - dry-run
+        run: |
+          export HOME=$(mktemp -d)
+          ./ai-shim init
+          ./ai-shim manage dry-run claude-code default
+      - name: Smoke test - completion
+        run: ./ai-shim completion bash > /dev/null
+
+  e2e-macos:
+    needs: [test-macos]
+    runs-on: macos-latest
+    env:
+      AI_SHIM_CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.6'
+      - name: Install Docker via Colima
+        run: |
+          brew install docker colima
+          colima start --cpu 2 --memory 4 --disk 20
+          # Wait for Docker to be ready
+          for i in $(seq 1 30); do
+            docker info >/dev/null 2>&1 && break
+            echo "Waiting for Docker... ($i/30)"
+            sleep 2
+          done
+          docker info
+      - name: E2E and integration tests
+        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 600s
+      - name: Stop Colima
+        if: always()
+        run: colima stop
 
   e2e:
     needs: [test]
@@ -79,7 +177,7 @@ jobs:
         with:
           go-version: '1.25.6'
       - name: E2E and integration tests
-        run: make e2e-ci
+        run: AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s -race
         timeout-minutes: 15
 
   build:
@@ -99,9 +197,20 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           VERSION="dev-$(git rev-parse --short HEAD)"
-          go build -ldflags "-X main.version=$VERSION" -o ai-shim-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ai-shim
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o ai-shim-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ai-shim
       - name: Verify binary exists
         run: test -f ai-shim-${{ matrix.goos }}-${{ matrix.goarch }} || (echo "Binary not found!" && exit 1)
+      - name: Check binary size
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          size=$(stat --format=%s ai-shim-${{ matrix.goos }}-${{ matrix.goarch }})
+          size_mb=$((size / 1048576))
+          echo "Binary size: ${size_mb}MB (${size} bytes)"
+          max_mb=20
+          if [ "$size_mb" -gt "$max_mb" ]; then
+            echo "::error::Binary size ${size_mb}MB exceeds ${max_mb}MB limit"
+            exit 1
+          fi
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
