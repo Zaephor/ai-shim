@@ -1,0 +1,44 @@
+# ai-shim profile: Container Registry / Image Management
+#
+# Tools for inspecting, copying, signing, and managing container
+# images and OCI artifacts across registries.
+# Place at: ~/.ai-shim/config/profiles/container-registry.yaml
+#
+# Usage: claude-code_container-registry  (or any agent_container-registry)
+
+packages:
+  - git
+  - skopeo
+
+# DIND for local image builds.
+dind: true
+
+tools:
+  # crane -- interact with container registries (copy, push, pull, list)
+  crane:
+    type: tar-extract
+    url: "https://github.com/google/go-containerregistry/releases/download/v0.21.3/go-containerregistry_Linux_x86_64.tar.gz"
+    binary: crane
+
+  # cosign -- sign and verify container images
+  cosign:
+    type: binary-download
+    url: "https://github.com/sigstore/cosign/releases/download/v3.0.5/cosign-linux-amd64"
+    binary: cosign
+
+  # oras -- push/pull OCI artifacts to/from registries
+  oras:
+    type: tar-extract
+    url: "https://github.com/oras-project/oras/releases/download/v1.3.1/oras_1.3.1_linux_amd64.tar.gz"
+    binary: oras
+
+  # trivy -- scan images for vulnerabilities
+  trivy:
+    type: tar-extract
+    url: "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz"
+    binary: trivy
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq

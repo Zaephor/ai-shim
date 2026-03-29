@@ -1,0 +1,36 @@
+# ai-shim profile: Java / JVM Development
+#
+# JDK management via SDKMAN, Gradle, and Maven for Java,
+# Kotlin, Scala, and Clojure projects.
+# Place at: ~/.ai-shim/config/profiles/jvm.yaml
+#
+# Usage: claude-code_jvm  (or any agent_jvm)
+
+packages:
+  - git
+  - curl
+  - unzip
+  - zip
+
+tools:
+  # sdkman -- JDK and JVM tool version manager (installs Java, Gradle, Maven)
+  sdkman:
+    type: custom
+    install: |
+      if [ ! -d "$HOME/.sdkman" ]; then
+        curl -s "https://get.sdkman.io" | bash
+        source "$HOME/.sdkman/bin/sdkman-init.sh"
+        sdk install java
+        sdk install gradle
+        sdk install maven
+      fi
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

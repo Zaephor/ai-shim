@@ -1,0 +1,57 @@
+# ai-shim profile: API & gRPC Development
+#
+# Tools for building and testing REST and gRPC APIs,
+# including protocol buffer tooling.
+# Place at: ~/.ai-shim/config/profiles/api-dev.yaml
+#
+# Usage: claude-code_api-dev  (or any agent_api-dev)
+
+packages:
+  - git
+  - curl
+  - unzip
+
+# Forward common API server ports.
+ports:
+  - "3000:3000"
+  - "8080:8080"
+  - "50051:50051"
+
+tools:
+  # grpcurl -- curl for gRPC services
+  grpcurl:
+    type: tar-extract
+    url: "https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_x86_64.tar.gz"
+    binary: grpcurl
+
+  # buf -- modern protocol buffer tooling (lint, format, generate, breaking change detection)
+  buf:
+    type: binary-download
+    url: "https://github.com/bufbuild/buf/releases/download/v1.66.1/buf-Linux-x86_64"
+    binary: buf
+
+  # protoc -- protocol buffer compiler
+  protoc:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v34.1/protoc-34.1-linux-x86_64.zip" -o /tmp/protoc.zip
+      unzip -o /tmp/protoc.zip -d /tmp/protoc
+      mv /tmp/protoc/bin/protoc /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/protoc
+      rm -rf /tmp/protoc /tmp/protoc.zip
+
+  # curlie -- curl with httpie-style output
+  curlie:
+    type: tar-extract
+    url: "https://github.com/rs/curlie/releases/download/v1.8.2/curlie_1.8.2_linux_amd64.tar.gz"
+    binary: curlie
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

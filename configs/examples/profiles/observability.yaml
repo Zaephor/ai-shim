@@ -1,0 +1,65 @@
+# ai-shim profile: Observability / Load Testing / Monitoring
+#
+# Prometheus, Loki, Grafana, and load testing tools for
+# performance engineering and observability development.
+# Place at: ~/.ai-shim/config/profiles/observability.yaml
+#
+# Usage: claude-code_observability  (or any agent_observability)
+
+packages:
+  - git
+  - unzip
+
+# Forward Prometheus/Grafana/app ports.
+ports:
+  - "3000:3000"
+  - "9090:9090"
+  - "9093:9093"
+
+tools:
+  # promtool -- Prometheus config and rule validation
+  promtool:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v3.10.0/prometheus-3.10.0.linux-amd64.tar.gz" | tar xz -C /tmp
+      mv /tmp/prometheus-3.10.0.linux-amd64/promtool /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/promtool
+      rm -rf /tmp/prometheus-3.10.0.linux-amd64
+
+  # logcli -- query Loki logs from the command line
+  logcli:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/grafana/loki/releases/download/v3.7.1/logcli-linux-amd64.zip" -o /tmp/logcli.zip
+      unzip -o /tmp/logcli.zip -d /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/logcli-linux-amd64
+      mv /usr/local/share/ai-shim/bin/logcli-linux-amd64 /usr/local/share/ai-shim/bin/logcli
+      rm /tmp/logcli.zip
+
+  # k6 -- modern load testing (JavaScript scripted)
+  k6:
+    type: tar-extract
+    url: "https://github.com/grafana/k6/releases/download/v1.7.0/k6-v1.7.0-linux-amd64.tar.gz"
+    binary: k6
+
+  # vegeta -- HTTP load testing and attack tool
+  vegeta:
+    type: tar-extract
+    url: "https://github.com/tsenart/vegeta/releases/download/v12.13.0/vegeta_12.13.0_linux_amd64.tar.gz"
+    binary: vegeta
+
+  # oha -- HTTP load generator with TUI (Rust)
+  oha:
+    type: binary-download
+    url: "https://github.com/hatoo/oha/releases/download/v1.14.0/oha-linux-amd64"
+    binary: oha
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

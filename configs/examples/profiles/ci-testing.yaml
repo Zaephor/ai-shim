@@ -1,0 +1,48 @@
+# ai-shim profile: CI Testing & GitHub Actions Development
+#
+# For developing and testing CI pipelines locally using act.
+# Enables DIND so act can run containerized GitHub Actions.
+# Place at: ~/.ai-shim/config/profiles/ci-testing.yaml
+#
+# Usage: claude-code_ci-testing  (or any agent_ci-testing)
+
+packages:
+  - git
+  - make
+  - curl
+
+# DIND required for act to run container-based actions.
+dind: true
+dind_cache: true
+
+# Resource limits -- CI runs can be memory-hungry.
+resources:
+  memory: "8g"
+  cpus: "4.0"
+
+dind_resources:
+  memory: "4g"
+  cpus: "2.0"
+
+tools:
+  # act -- run GitHub Actions locally
+  act:
+    type: tar-extract
+    url: "https://github.com/nektos/act/releases/download/v0.2.86/act_Linux_x86_64.tar.gz"
+    binary: act
+
+  # gh CLI for GitHub API access
+  gh:
+    type: tar-extract
+    url: "https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_amd64.tar.gz"
+    binary: gh
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

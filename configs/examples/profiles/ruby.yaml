@@ -1,0 +1,22 @@
+# ai-shim profile: Ruby / Rails Development
+#
+# Ruby runtime with Bundler and Rails tooling.
+# Place at: ~/.ai-shim/config/profiles/ruby.yaml
+#
+# Usage: claude-code_ruby  (or any agent_ruby)
+
+packages:
+  - git
+  - ruby
+  - ruby-dev
+  - build-essential
+  - libsqlite3-dev
+
+# Forward Rails dev server ports.
+ports:
+  - "3000:3000"
+  - "3035:3035"
+
+env:
+  GEM_HOME: /home/user/.gems
+  PATH: /home/user/.gems/bin:$PATH

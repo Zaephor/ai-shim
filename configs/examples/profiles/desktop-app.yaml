@@ -1,0 +1,33 @@
+# ai-shim profile: Desktop App Development (Tauri / Electron)
+#
+# Build cross-platform desktop applications with Tauri (Rust)
+# or Electron (Node.js).
+# Place at: ~/.ai-shim/config/profiles/desktop-app.yaml
+#
+# Usage: claude-code_desktop-app  (or any agent_desktop-app)
+
+packages:
+  - git
+  - build-essential
+  - curl
+  - libwebkit2gtk-4.1-dev
+  - libappindicator3-dev
+  - librsvg2-dev
+
+tools:
+  # tauri-cli -- build Tauri desktop apps
+  tauri:
+    type: custom
+    install: |
+      npm install -g @tauri-apps/cli
+
+  # electron -- build Electron desktop apps
+  electron:
+    type: custom
+    install: |
+      npm install -g electron
+
+  ripgrep:
+    type: tar-extract
+    url: "https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-unknown-linux-musl.tar.gz"
+    binary: rg

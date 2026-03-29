@@ -1,0 +1,67 @@
+# ai-shim profile: Data Analytics / CSV & JSON Processing
+#
+# Fast CLI tools for slicing, querying, and transforming
+# structured data (CSV, JSON, YAML, TOML).
+# Place at: ~/.ai-shim/config/profiles/data-analytics.yaml
+#
+# Usage: claude-code_data-analytics  (or any agent_data-analytics)
+
+packages:
+  - git
+  - python3
+  - python3-venv
+  - sqlite3
+  - unzip
+
+tools:
+  # miller -- awk/sed for structured data (CSV, JSON, etc.)
+  miller:
+    type: tar-extract
+    url: "https://github.com/johnkerl/miller/releases/download/v6.17.0/miller-6.17.0-linux-amd64.tar.gz"
+    binary: mlr
+
+  # dasel -- query and modify data structures (JSON, YAML, TOML, XML, CSV)
+  dasel:
+    type: binary-download
+    url: "https://github.com/TomWright/dasel/releases/download/v3.4.0/dasel_linux_amd64"
+    binary: dasel
+
+  # csvkit -- CSV conversion, slicing, SQL queries (pip)
+  csvkit:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install csvkit
+
+  # visidata -- terminal spreadsheet for exploring large datasets (pip)
+  visidata:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install visidata
+
+  # datasette -- explore and publish SQLite databases in the browser (pip)
+  datasette:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install datasette
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

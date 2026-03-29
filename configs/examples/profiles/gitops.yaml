@@ -1,0 +1,56 @@
+# ai-shim profile: GitOps / ArgoCD / Flux
+#
+# Tools for GitOps-style Kubernetes deployment workflows.
+# Place at: ~/.ai-shim/config/profiles/gitops.yaml
+#
+# Usage: claude-code_gitops  (or any agent_gitops)
+
+packages:
+  - git
+
+# Mount kubeconfig for cluster access.
+volumes:
+  - "/home/user/.kube:/home/user/.kube"
+
+env:
+  KUBECONFIG: /home/user/.kube/config
+
+tools:
+  # argocd -- ArgoCD CLI for GitOps deployments
+  argocd:
+    type: binary-download
+    url: "https://github.com/argoproj/argo-cd/releases/download/v3.3.6/argocd-linux-amd64"
+    binary: argocd
+
+  # flux -- Flux CD CLI for GitOps continuous deployment
+  flux:
+    type: tar-extract
+    url: "https://github.com/fluxcd/flux2/releases/download/v2.8.3/flux_2.8.3_linux_amd64.tar.gz"
+    binary: flux
+
+  # kustomize -- Kubernetes manifest customization
+  kustomize:
+    type: tar-extract
+    url: "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz"
+    binary: kustomize
+
+  # kubeseal -- encrypt Kubernetes secrets for Git storage
+  kubeseal:
+    type: tar-extract
+    url: "https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.36.1/kubeseal-0.36.1-linux-amd64.tar.gz"
+    binary: kubeseal
+
+  kubectl:
+    type: binary-download
+    url: "https://dl.k8s.io/release/v1.35.3/bin/linux/amd64/kubectl"
+    binary: kubectl
+
+  helm:
+    type: tar-extract
+    url: "https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz"
+    binary: helm
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

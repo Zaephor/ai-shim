@@ -1,0 +1,46 @@
+# ai-shim profile: Kubernetes & Helm Development
+#
+# Preconfigures the container for working with Kubernetes clusters
+# and Helm charts. Includes kubectl, helm, k9s, and yq.
+# Place at: ~/.ai-shim/config/profiles/kubernetes.yaml
+#
+# Usage: claude-code_kubernetes  (or any agent_kubernetes)
+#
+# Note: Mount your kubeconfig so agents can access your cluster.
+
+packages:
+  - git
+  - curl
+
+# Mount kubeconfig (read-only recommended).
+volumes:
+  - "/home/user/.kube:/home/user/.kube"
+
+env:
+  KUBECONFIG: /home/user/.kube/config
+
+tools:
+  kubectl:
+    type: binary-download
+    url: "https://dl.k8s.io/release/v1.35.3/bin/linux/amd64/kubectl"
+    binary: kubectl
+
+  helm:
+    type: tar-extract
+    url: "https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz"
+    binary: helm
+
+  k9s:
+    type: tar-extract
+    url: "https://github.com/derailed/k9s/releases/download/v0.50.18/k9s_linux_amd64.tar.gz"
+    binary: k9s
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq

@@ -1,0 +1,63 @@
+# ai-shim profile: AWS Development
+#
+# AWS CLI, EKS management, serverless, and credential tools.
+# Place at: ~/.ai-shim/config/profiles/aws.yaml
+#
+# Usage: claude-code_aws  (or any agent_aws)
+#
+# Tip: Mount your AWS credentials directory for CLI access.
+
+packages:
+  - git
+  - curl
+  - unzip
+  - groff
+
+# Mount AWS credentials (read-only recommended).
+volumes:
+  - "/home/user/.aws:/home/user/.aws"
+
+tools:
+  # aws-cli v2 -- official AWS CLI
+  aws-cli:
+    type: custom
+    install: |
+      if ! command -v aws >/dev/null 2>&1; then
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscli.zip
+        unzip -q /tmp/awscli.zip -d /tmp/awscli
+        /tmp/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/share/ai-shim/bin
+        rm -rf /tmp/awscli /tmp/awscli.zip
+      fi
+
+  # eksctl -- EKS cluster lifecycle management
+  eksctl:
+    type: tar-extract
+    url: "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_linux_amd64.tar.gz"
+    binary: eksctl
+
+  # aws-vault -- secure credential management
+  aws-vault:
+    type: binary-download
+    url: "https://github.com/99designs/aws-vault/releases/download/v7.2.0/aws-vault-linux-amd64"
+    binary: aws-vault
+
+  # sam-cli -- serverless application model
+  sam-cli:
+    type: custom
+    install: |
+      if ! command -v sam >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -o /tmp/sam.zip
+        unzip -q /tmp/sam.zip -d /tmp/sam
+        /tmp/sam/install --install-dir /usr/local/sam-cli --bin-dir /usr/local/share/ai-shim/bin
+        rm -rf /tmp/sam /tmp/sam.zip
+      fi
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

@@ -1,0 +1,53 @@
+# ai-shim profile: Jupyter / Interactive Notebooks
+#
+# JupyterLab, marimo reactive notebooks, and git-friendly
+# notebook tooling.
+# Place at: ~/.ai-shim/config/profiles/notebooks.yaml
+#
+# Usage: claude-code_notebooks  (or any agent_notebooks)
+
+packages:
+  - git
+  - python3
+  - python3-venv
+
+# Forward Jupyter/marimo server ports.
+ports:
+  - "8888:8888"
+  - "2718:2718"
+
+tools:
+  # jupyterlab -- interactive notebook environment
+  jupyterlab:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install jupyterlab
+
+  # marimo -- reactive Python notebook (modern Jupyter alternative)
+  marimo:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install marimo
+
+  # nbstripout -- strip notebook outputs for clean git diffs
+  nbstripout:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install nbstripout
+
+  ruff:
+    type: tar-extract
+    url: "https://github.com/astral-sh/ruff/releases/download/0.15.8/ruff-x86_64-unknown-linux-gnu.tar.gz"
+    binary: ruff

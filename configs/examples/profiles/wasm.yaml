@@ -1,0 +1,30 @@
+# ai-shim profile: WebAssembly Development
+#
+# Wasmtime and Wasmer runtimes for building and testing
+# WebAssembly modules.
+# Place at: ~/.ai-shim/config/profiles/wasm.yaml
+#
+# Usage: claude-code_wasm  (or any agent_wasm)
+
+packages:
+  - git
+  - curl
+
+tools:
+  # wasmtime -- standalone WebAssembly runtime
+  wasmtime:
+    type: custom
+    install: |
+      if ! command -v wasmtime >/dev/null 2>&1; then
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        export PATH="$HOME/.wasmtime/bin:$PATH"
+      fi
+
+  # wasmer -- universal WebAssembly runtime
+  wasmer:
+    type: custom
+    install: |
+      if ! command -v wasmer >/dev/null 2>&1; then
+        curl https://get.wasmer.io -sSfL | sh
+        export PATH="$HOME/.wasmer/bin:$PATH"
+      fi

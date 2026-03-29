@@ -1,0 +1,51 @@
+# ai-shim profile: Azure Development
+#
+# Azure CLI, AKS authentication, and Kubernetes tooling.
+# Place at: ~/.ai-shim/config/profiles/azure.yaml
+#
+# Usage: claude-code_azure  (or any agent_azure)
+#
+# Tip: Mount your Azure config for pre-authenticated access.
+
+packages:
+  - git
+  - curl
+  - unzip
+
+# Mount Azure config (read-only recommended).
+volumes:
+  - "/home/user/.azure:/home/user/.azure"
+
+tools:
+  # azure-cli -- official Azure CLI
+  azure-cli:
+    type: custom
+    install: |
+      if ! command -v az >/dev/null 2>&1; then
+        curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+      fi
+
+  # kubelogin -- Azure AD authentication for AKS
+  kubelogin:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/Azure/kubelogin/releases/download/v0.2.16/kubelogin-linux-amd64.zip" -o /tmp/kubelogin.zip
+      unzip -o /tmp/kubelogin.zip -d /tmp/kubelogin
+      mv /tmp/kubelogin/bin/linux_amd64/kubelogin /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/kubelogin
+      rm -rf /tmp/kubelogin /tmp/kubelogin.zip
+
+  kubectl:
+    type: binary-download
+    url: "https://dl.k8s.io/release/v1.35.3/bin/linux/amd64/kubectl"
+    binary: kubectl
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

@@ -1,0 +1,31 @@
+# ai-shim profile: Blockchain / Web3 / Smart Contracts
+#
+# Foundry (forge/cast/anvil) for Solidity development and
+# Hardhat for JavaScript-based Ethereum development.
+# Place at: ~/.ai-shim/config/profiles/web3.yaml
+#
+# Usage: claude-code_web3  (or any agent_web3)
+
+packages:
+  - git
+  - curl
+
+# Forward local blockchain node ports.
+ports:
+  - "8545:8545"
+  - "3000:3000"
+
+tools:
+  # foundry -- Solidity development toolkit (forge, cast, anvil, chisel)
+  foundry:
+    type: custom
+    install: |
+      curl -L https://foundry.paradigm.xyz | bash
+      export PATH="$HOME/.foundry/bin:$PATH"
+      foundryup
+
+  # hardhat -- Ethereum development environment (npm)
+  hardhat:
+    type: custom
+    install: |
+      npm install -g hardhat

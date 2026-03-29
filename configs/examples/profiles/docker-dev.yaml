@@ -1,0 +1,40 @@
+# ai-shim profile: Docker Container Development
+#
+# For building, testing, and debugging Docker containers.
+# Enables DIND so the agent can build and run containers inside the sandbox.
+# Place at: ~/.ai-shim/config/profiles/docker-dev.yaml
+#
+# Usage: claude-code_docker-dev  (or any agent_docker-dev)
+
+packages:
+  - git
+  - make
+
+# Enable Docker-in-Docker sidecar.
+dind: true
+
+# Enable pull-through cache to speed up repeated image pulls.
+dind_cache: true
+
+# Forward common service ports for container testing.
+ports:
+  - "8080:8080"
+  - "5432:5432"
+  - "6379:6379"
+
+tools:
+  # Lazydocker for interactive container management
+  lazydocker:
+    type: tar-extract
+    url: "https://github.com/jesseduffield/lazydocker/releases/download/v0.25.0/lazydocker_0.25.0_Linux_x86_64.tar.gz"
+    binary: lazydocker
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

@@ -1,0 +1,30 @@
+# ai-shim profile: .NET / C# Development
+#
+# .NET SDK for C#, F#, and VB.NET projects.
+# Place at: ~/.ai-shim/config/profiles/dotnet.yaml
+#
+# Usage: claude-code_dotnet  (or any agent_dotnet)
+
+packages:
+  - git
+  - curl
+
+# Forward common .NET app ports.
+ports:
+  - "5000:5000"
+  - "5001:5001"
+  - "8080:8080"
+
+tools:
+  # dotnet SDK -- .NET development tools (build, run, test, publish)
+  dotnet:
+    type: custom
+    install: |
+      if ! command -v dotnet >/dev/null 2>&1; then
+        curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS --install-dir /usr/local/share/ai-shim/bin/dotnet
+        ln -sf /usr/local/share/ai-shim/bin/dotnet/dotnet /usr/local/share/ai-shim/bin/dotnet-cli
+      fi
+
+env:
+  DOTNET_ROOT: /usr/local/share/ai-shim/bin/dotnet
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"

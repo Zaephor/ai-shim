@@ -1,0 +1,46 @@
+# ai-shim profile: Documentation & Technical Writing
+#
+# Static site generators, markdown linting, prose checking,
+# and diagram generation.
+# Place at: ~/.ai-shim/config/profiles/docs.yaml
+#
+# Usage: claude-code_docs  (or any agent_docs)
+
+packages:
+  - git
+
+# Preview server port.
+ports:
+  - "1313:1313"
+  - "3000:3000"
+
+tools:
+  # hugo -- fast static site generator
+  hugo:
+    type: tar-extract
+    url: "https://github.com/gohugoio/hugo/releases/download/v0.159.1/hugo_0.159.1_Linux-64bit.tar.gz"
+    binary: hugo
+
+  # mdbook -- Rust book/documentation builder
+  mdbook:
+    type: tar-extract
+    url: "https://github.com/rust-lang/mdBook/releases/download/v0.5.2/mdbook-v0.5.2-x86_64-unknown-linux-gnu.tar.gz"
+    binary: mdbook
+
+  # vale -- prose linter for technical writing style
+  vale:
+    type: tar-extract
+    url: "https://github.com/errata-ai/vale/releases/download/v3.14.1/vale_3.14.1_Linux_64-bit.tar.gz"
+    binary: vale
+
+  # markdownlint-cli -- markdown style checker (npm)
+  markdownlint:
+    type: custom
+    install: |
+      npm install -g markdownlint-cli
+
+  # mermaid-cli -- generate diagrams from markdown (npm)
+  mermaid:
+    type: custom
+    install: |
+      npm install -g @mermaid-js/mermaid-cli

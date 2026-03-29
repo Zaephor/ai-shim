@@ -1,0 +1,53 @@
+# ai-shim profile: Google Cloud Platform Development
+#
+# Google Cloud SDK, Cloud SQL proxy, and GKE tooling.
+# Place at: ~/.ai-shim/config/profiles/gcp.yaml
+#
+# Usage: claude-code_gcp  (or any agent_gcp)
+#
+# Tip: Mount your gcloud config for pre-authenticated access.
+
+packages:
+  - git
+  - curl
+  - python3
+
+# Mount gcloud config (read-only recommended).
+volumes:
+  - "/home/user/.config/gcloud:/home/user/.config/gcloud"
+
+tools:
+  # gcloud -- Google Cloud SDK
+  gcloud:
+    type: custom
+    install: |
+      if ! command -v gcloud >/dev/null 2>&1; then
+        curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz" -o /tmp/gcloud.tar.gz
+        tar xzf /tmp/gcloud.tar.gz -C /opt/
+        /opt/google-cloud-sdk/install.sh --quiet --path-update=true
+        ln -sf /opt/google-cloud-sdk/bin/gcloud /usr/local/share/ai-shim/bin/gcloud
+        ln -sf /opt/google-cloud-sdk/bin/gsutil /usr/local/share/ai-shim/bin/gsutil
+        ln -sf /opt/google-cloud-sdk/bin/bq /usr/local/share/ai-shim/bin/bq
+        rm /tmp/gcloud.tar.gz
+      fi
+
+  # cloud-sql-proxy -- secure access to Cloud SQL instances
+  cloud-sql-proxy:
+    type: binary-download
+    url: "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.21.2/cloud-sql-proxy.linux.amd64"
+    binary: cloud-sql-proxy
+
+  kubectl:
+    type: binary-download
+    url: "https://dl.k8s.io/release/v1.35.3/bin/linux/amd64/kubectl"
+    binary: kubectl
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

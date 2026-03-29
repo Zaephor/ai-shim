@@ -1,0 +1,18 @@
+# ai-shim profile: Elixir / Erlang Development
+#
+# Elixir runtime with Mix build system for distributed
+# and fault-tolerant applications.
+# Place at: ~/.ai-shim/config/profiles/elixir.yaml
+#
+# Usage: claude-code_elixir  (or any agent_elixir)
+
+packages:
+  - git
+  - erlang
+  - elixir
+  - build-essential
+
+# Forward Phoenix dev server and LiveView ports.
+ports:
+  - "4000:4000"
+  - "4001:4001"

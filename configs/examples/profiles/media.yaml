@@ -1,0 +1,35 @@
+# ai-shim profile: Media / Audio / Video Processing
+#
+# FFmpeg, ImageMagick, and yt-dlp for media manipulation.
+# Place at: ~/.ai-shim/config/profiles/media.yaml
+#
+# Usage: claude-code_media  (or any agent_media)
+
+packages:
+  - git
+  - imagemagick
+
+tools:
+  # ffmpeg -- audio/video encoding, transcoding, streaming
+  ffmpeg:
+    type: custom
+    install: |
+      if ! command -v ffmpeg >/dev/null 2>&1; then
+        curl -fsSL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" -o /tmp/ffmpeg.tar.xz
+        tar xJf /tmp/ffmpeg.tar.xz -C /tmp
+        mv /tmp/ffmpeg-*-amd64-static/ffmpeg /usr/local/share/ai-shim/bin/
+        mv /tmp/ffmpeg-*-amd64-static/ffprobe /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/ffmpeg /usr/local/share/ai-shim/bin/ffprobe
+        rm -rf /tmp/ffmpeg*
+      fi
+
+  # yt-dlp -- download video/audio from streaming sites
+  yt-dlp:
+    type: binary-download
+    url: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.03.17/yt-dlp_linux"
+    binary: yt-dlp
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq

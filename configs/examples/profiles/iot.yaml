@@ -1,0 +1,59 @@
+# ai-shim profile: IoT / Smart Home Development
+#
+# Tools for home automation, MQTT messaging, ESP32/ESP8266
+# development, and embedded systems.
+# Place at: ~/.ai-shim/config/profiles/iot.yaml
+#
+# Usage: claude-code_iot  (or any agent_iot)
+
+packages:
+  - git
+  - python3
+  - python3-venv
+  - mosquitto-clients
+  - picocom
+  - socat
+
+# Forward MQTT and common IoT service ports.
+ports:
+  - "1883:1883"
+  - "8883:8883"
+  - "8123:8123"
+  - "9090:9090"
+
+tools:
+  # esptool -- ESP32/ESP8266 flashing and debugging (pip package)
+  esptool:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install esptool
+
+  # platformio -- embedded development platform (pip package)
+  platformio:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      uv tool install platformio
+
+  # mkcert -- generate local TLS certs for MQTT TLS testing
+  mkcert:
+    type: binary-download
+    url: "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
+    binary: mkcert
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

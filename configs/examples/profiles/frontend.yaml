@@ -1,0 +1,48 @@
+# ai-shim profile: Frontend / Web Development
+#
+# Alternative JavaScript runtimes (Bun, Deno) and frontend tooling.
+# Node.js and npm are available in the default image.
+# Place at: ~/.ai-shim/config/profiles/frontend.yaml
+#
+# Usage: claude-code_frontend  (or any agent_frontend)
+
+packages:
+  - git
+  - unzip
+
+# Forward dev server ports.
+ports:
+  - "3000:3000"
+  - "4321:4321"
+  - "5173:5173"
+  - "8080:8080"
+
+tools:
+  # bun -- fast JavaScript runtime, bundler, and test runner
+  bun:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip" -o /tmp/bun.zip
+      unzip -o /tmp/bun.zip -d /tmp/bun
+      mv /tmp/bun/bun-linux-x64/bun /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/bun
+      rm -rf /tmp/bun /tmp/bun.zip
+
+  # deno -- secure TypeScript/JavaScript runtime
+  deno:
+    type: custom
+    install: |
+      curl -fsSL "https://github.com/denoland/deno/releases/download/v2.7.9/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+      unzip -o /tmp/deno.zip -d /usr/local/share/ai-shim/bin/
+      chmod +x /usr/local/share/ai-shim/bin/deno
+      rm /tmp/deno.zip
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  fzf:
+    type: tar-extract
+    url: "https://github.com/junegunn/fzf/releases/download/v0.70.0/fzf-0.70.0-linux_amd64.tar.gz"
+    binary: fzf

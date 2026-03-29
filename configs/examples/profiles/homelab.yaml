@@ -1,0 +1,66 @@
+# ai-shim profile: Homelab / Self-Hosted Infrastructure
+#
+# Tools for managing self-hosted services, TLS certificates,
+# tunnels, encryption, and reverse proxies.
+# Place at: ~/.ai-shim/config/profiles/homelab.yaml
+#
+# Usage: claude-code_homelab  (or any agent_homelab)
+
+packages:
+  - git
+  - curl
+  - wireguard-tools
+  - mosquitto-clients
+
+# DIND for testing container deployments locally.
+dind: true
+dind_cache: true
+
+# Forward common self-hosted service ports.
+ports:
+  - "80:80"
+  - "443:443"
+  - "8080:8080"
+  - "1883:1883"
+  - "8883:8883"
+
+tools:
+  # mkcert -- generate locally-trusted TLS certificates
+  mkcert:
+    type: binary-download
+    url: "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
+    binary: mkcert
+
+  # caddy -- web server with automatic HTTPS
+  caddy:
+    type: tar-extract
+    url: "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz"
+    binary: caddy
+
+  # cloudflared -- Cloudflare Tunnel for exposing local services
+  cloudflared:
+    type: binary-download
+    url: "https://github.com/cloudflare/cloudflared/releases/download/2026.3.0/cloudflared-linux-amd64"
+    binary: cloudflared
+
+  # step -- certificate authority toolkit (create and manage CAs)
+  step:
+    type: tar-extract
+    url: "https://github.com/smallstep/cli/releases/download/v0.29.0/step_linux_0.29.0_amd64.tar.gz"
+    binary: step
+
+  # age -- simple file encryption
+  age:
+    type: tar-extract
+    url: "https://github.com/FiloSottile/age/releases/download/v1.3.1/age-v1.3.1-linux-amd64.tar.gz"
+    binary: age
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

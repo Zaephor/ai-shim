@@ -1,0 +1,45 @@
+# ai-shim profile: Python Development
+#
+# Preconfigures the container for Python projects with fast, Rust-based
+# linting and formatting via ruff. UV is bootstrapped automatically for
+# uv-based agents; this profile adds it for all agents.
+# Place at: ~/.ai-shim/config/profiles/python.yaml
+#
+# Usage: claude-code_python  (or any agent_python)
+
+packages:
+  - git
+  - python3
+  - python3-venv
+
+tools:
+  # ruff -- extremely fast Python linter and formatter (replaces flake8, black, isort)
+  ruff:
+    type: tar-extract
+    url: "https://github.com/astral-sh/ruff/releases/download/0.15.8/ruff-x86_64-unknown-linux-gnu.tar.gz"
+    binary: ruff
+
+  # uv -- fast Python package manager
+  uv:
+    type: custom
+    install: |
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+
+  # pyright -- Python type checker (npm package, no binary release)
+  pyright:
+    type: custom
+    install: |
+      npm install -g pyright
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq

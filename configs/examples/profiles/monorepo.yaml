@@ -1,0 +1,40 @@
+# ai-shim profile: Monorepo Tooling
+#
+# Build orchestration and task management for large
+# polyglot monorepos.
+# Place at: ~/.ai-shim/config/profiles/monorepo.yaml
+#
+# Usage: claude-code_monorepo  (or any agent_monorepo)
+
+packages:
+  - git
+  - build-essential
+
+# Monorepo builds can be resource-hungry.
+resources:
+  memory: "8g"
+  cpus: "4.0"
+
+tools:
+  # nx -- smart monorepo build system (npm)
+  nx:
+    type: custom
+    install: |
+      npm install -g nx
+
+  # turborepo -- high-performance monorepo build system (npm)
+  turborepo:
+    type: custom
+    install: |
+      npm install -g turbo
+
+  # just -- simple task runner (Make alternative)
+  just:
+    type: tar-extract
+    url: "https://github.com/casey/just/releases/download/1.48.1/just-1.48.1-x86_64-unknown-linux-musl.tar.gz"
+    binary: just
+
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq

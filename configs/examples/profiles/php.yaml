@@ -1,0 +1,29 @@
+# ai-shim profile: PHP / Laravel Development
+#
+# PHP runtime, Composer, and Laravel tooling.
+# Place at: ~/.ai-shim/config/profiles/php.yaml
+#
+# Usage: claude-code_php  (or any agent_php)
+
+packages:
+  - git
+  - php-cli
+  - php-mbstring
+  - php-xml
+  - php-curl
+  - php-zip
+  - unzip
+
+# Forward Laravel dev server port.
+ports:
+  - "8000:8000"
+  - "5173:5173"
+
+tools:
+  # composer -- PHP dependency manager
+  composer:
+    type: custom
+    install: |
+      if ! command -v composer >/dev/null 2>&1; then
+        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/share/ai-shim/bin --filename=composer
+      fi

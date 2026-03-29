@@ -1,0 +1,35 @@
+# ai-shim profile: Node.js Development
+#
+# Preconfigures the container for Node.js/TypeScript projects.
+# Place at: ~/.ai-shim/config/profiles/nodejs.yaml
+#
+# Usage: claude-code_nodejs  (or any agent_nodejs)
+
+packages:
+  - git
+  - curl
+  - build-essential
+
+env:
+  NODE_ENV: development
+
+# Forward common dev server ports.
+ports:
+  - "3000:3000"
+  - "5173:5173"
+  - "8080:8080"
+
+# Useful CLI tools for Node.js development.
+tools:
+  jq:
+    type: binary-download
+    url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+    binary: jq
+  yq:
+    type: binary-download
+    url: "https://github.com/mikefarah/yq/releases/download/v4.52.5/yq_linux_amd64"
+    binary: yq
+  fzf:
+    type: tar-extract
+    url: "https://github.com/junegunn/fzf/releases/download/v0.70.0/fzf-0.70.0-linux_amd64.tar.gz"
+    binary: fzf
