@@ -141,7 +141,10 @@ jobs:
 
   e2e-macos:
     needs: [test-macos]
-    runs-on: macos-latest
+    # ARM macOS runners (macos-latest = M-series) lack nested virtualization,
+    # so Docker/Colima cannot start a Linux VM. Intel runners work.
+    # When GitHub enables nested virt on M3+ runners, switch back to macos-latest.
+    runs-on: macos-15-intel
     env:
       AI_SHIM_CI: "1"
     steps:
@@ -152,11 +155,11 @@ jobs:
       - name: Install Docker via Colima
         run: |
           brew install docker colima
-          # Use QEMU backend (more reliable than VZ on CI runners)
-          # Retry up to 3 times if VM fails to start
+          # VZ is the default backend on macOS 13+ and works on Intel runners.
+          # Retry up to 3 times if VM fails to start.
           for attempt in 1 2 3; do
             echo "Starting Colima (attempt $attempt/3)..."
-            colima start --cpu 2 --memory 4 --disk 20 --vm-type qemu && break
+            colima start --cpu 2 --memory 4 --disk 20 && break
             echo "Colima start failed, retrying..."
             colima delete -f 2>/dev/null || true
             sleep 5

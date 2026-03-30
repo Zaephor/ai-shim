@@ -171,6 +171,16 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		return -1, fmt.Errorf("starting container: %w", err)
 	}
 
+	// Stop container when context is cancelled (e.g. programmatic shutdown).
+	// Uses a background context for the stop call since the original ctx is done.
+	go func() {
+		<-ctx.Done()
+		stopTimeout := 10 // seconds
+		_ = r.client.ContainerStop(context.Background(), containerID, container.StopOptions{
+			Timeout: &stopTimeout,
+		})
+	}()
+
 	// Forward signals to container (critical for non-TTY mode;
 	// in TTY mode signals pass through the PTY naturally)
 	sigCh := make(chan os.Signal, 1)

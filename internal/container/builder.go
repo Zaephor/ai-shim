@@ -124,6 +124,9 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	env := buildEnv(p.Config.Env)
 
+	// Set HOME so git config --global and other tools find the right home.
+	env = append(env, "HOME="+homeDir)
+
 	// Pass through host terminal type so container apps render correctly.
 	// Without this, Docker defaults to TERM=xterm which lacks 256-color
 	// support and causes rendering issues.
