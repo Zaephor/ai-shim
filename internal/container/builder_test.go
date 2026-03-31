@@ -9,6 +9,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -214,7 +215,8 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 		targets[m.Target] = true
 	}
 	assert.True(t, targets["/usr/local/share/ai-shim/agents/gemini-cli/bin"], "allowed agent bin should be mounted")
-	assert.True(t, targets["/home/user/.gemini"], "allowed agent data dir should be mounted")
+	// Agent data dirs are accessible via the profile home mount
+	assert.True(t, targets["/home/user"], "profile home should be mounted")
 }
 
 func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
@@ -232,31 +234,34 @@ func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
 	assert.True(t, hasOtherAgentBin, "non-isolated mode should mount other agent bins")
 }
 
-func TestBuildSpec_IsolatedMountsOnlyAgentData(t *testing.T) {
-	p := defaultBuildParams()
-	// Default is isolated=true
-	spec := BuildSpec(p)
+// TestBuildSpec_ProfileHomeMountedInAllModes verifies that the profile home
+// directory is always bind-mounted at homeDir, regardless of isolation mode.
+// Without this, the home directory inside the container would be unwritable
+// (image default), breaking git config, npm cache, and other tools.
+func TestBuildSpec_ProfileHomeMountedInAllModes(t *testing.T) {
+	for _, isolated := range []bool{true, false} {
+		name := "shared"
+		if isolated {
+			name = "isolated"
+		}
+		t.Run(name, func(t *testing.T) {
+			p := defaultBuildParams()
+			p.Config.Isolated = testutil.BoolPtr(isolated)
+			spec := BuildSpec(p)
 
-	targets := map[string]bool{}
-	for _, m := range spec.Mounts {
-		targets[m.Target] = true
+			var homeMount *mount.Mount
+			for i, m := range spec.Mounts {
+				if m.Target == "/home/user" {
+					homeMount = &spec.Mounts[i]
+					break
+				}
+			}
+			require.NotNil(t, homeMount, "profile home must be mounted at /home/user in %s mode", name)
+			assert.Equal(t, mount.TypeBind, homeMount.Type)
+			assert.Contains(t, homeMount.Source, "profiles/",
+				"mount source should be the profile home directory")
+		})
 	}
-	// Should have claude's data dir, not the full home
-	assert.True(t, targets["/home/user/.claude"], "primary agent data dir should be mounted")
-	assert.True(t, targets["/home/user/.claude.json"], "primary agent data file should be mounted")
-	assert.False(t, targets["/home/user"], "full home should NOT be mounted in isolated mode")
-}
-
-func TestBuildSpec_SharedModeMountsFullHome(t *testing.T) {
-	p := defaultBuildParams()
-	p.Config.Isolated = testutil.BoolPtr(false)
-	spec := BuildSpec(p)
-
-	targets := map[string]bool{}
-	for _, m := range spec.Mounts {
-		targets[m.Target] = true
-	}
-	assert.True(t, targets["/home/user"], "full home should be mounted in shared mode")
 }
 
 func TestBuildSpec_IsolatedExcludesOtherAgentData(t *testing.T) {
@@ -302,14 +307,14 @@ func TestBuildSpec_CustomHomeDir_Isolated(t *testing.T) {
 	// Default isolated mode
 	spec := BuildSpec(p)
 
-	// Data dirs should be under custom home
-	hasCustomHomeData := false
+	// Profile home should mount at custom home dir
+	hasCustomHome := false
 	for _, m := range spec.Mounts {
-		if strings.HasPrefix(m.Target, "/home/runner/.") {
-			hasCustomHomeData = true
+		if m.Target == "/home/runner" {
+			hasCustomHome = true
 		}
 	}
-	assert.True(t, hasCustomHomeData, "isolated data dirs should use custom home dir")
+	assert.True(t, hasCustomHome, "profile home should mount to custom home dir in isolated mode")
 }
 
 func TestBuildSpec_DefaultHomeDir(t *testing.T) {
@@ -431,6 +436,28 @@ func TestBuildSpec_ContainerNameUnder63Chars(t *testing.T) {
 	assert.True(t, len(spec.Name) <= 63, "container name should not exceed Docker's 63-char limit, got %d: %s", len(spec.Name), spec.Name)
 }
 
+func TestBuildSpec_ContainerNameLongInputs(t *testing.T) {
+	p := defaultBuildParams()
+	p.Agent.Name = "my-extremely-long-custom-agent-name-that-is-ridiculous"
+	p.Profile = "production-with-extra-context-for-no-reason"
+	spec := BuildSpec(p)
+	// Name must stay within Docker's limits regardless of input length
+	assert.True(t, len(spec.Name) <= 128,
+		"container name should fit Docker's 128-char limit even with long inputs, got %d: %s",
+		len(spec.Name), spec.Name)
+	// Name should still contain agent and profile for identification
+	assert.Contains(t, spec.Name, p.Agent.Name[:10],
+		"container name should contain at least part of agent name")
+}
+
+func TestGenerateContainerName_Format(t *testing.T) {
+	name := generateContainerName("agent", "profile", "abc12345")
+	parts := strings.Split(name, "-")
+	// Should have at least agent-profile-hash-suffix
+	assert.True(t, len(parts) >= 4, "name should have multiple segments: %s", name)
+	assert.True(t, strings.HasPrefix(name, "agent-profile-"), "name should start with agent-profile: %s", name)
+}
+
 func TestParsePorts_InvalidFormat(t *testing.T) {
 	portMap, portSet := parsePorts([]string{"invalid-port", "8080:80"})
 	// Valid port should still be parsed
@@ -526,6 +553,31 @@ func TestMCPServersJSON(t *testing.T) {
 	assert.Contains(t, result, `"command":"cmd"`)
 	assert.Contains(t, result, `"args":["arg1"]`)
 	assert.Contains(t, result, `"K":"V"`)
+}
+
+func TestMCPServersJSON_Empty(t *testing.T) {
+	result := mcpServersJSON(map[string]config.MCPServerDef{})
+	assert.Equal(t, "{}", result)
+}
+
+func TestMCPServersJSON_OmitsEmptyFields(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"minimal": {Command: "echo"},
+	}
+	result := mcpServersJSON(servers)
+	assert.Contains(t, result, `"command":"echo"`)
+	assert.NotContains(t, result, `"args"`, "nil args should be omitted")
+	assert.NotContains(t, result, `"env"`, "nil env should be omitted")
+}
+
+func TestMCPServersJSON_MultipleServers(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"fs":  {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem"}},
+		"git": {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-git"}},
+	}
+	result := mcpServersJSON(servers)
+	assert.Contains(t, result, `"fs"`)
+	assert.Contains(t, result, `"git"`)
 }
 
 func TestBuildSpec_SecurityProfileDefault(t *testing.T) {

@@ -64,6 +64,9 @@ func Merge(base, over Config) Config {
 	if over.SecurityProfile != "" {
 		result.SecurityProfile = over.SecurityProfile
 	}
+	if over.UpdateInterval != "" {
+		result.UpdateInterval = over.UpdateInterval
+	}
 	if over.Git != nil {
 		if result.Git == nil {
 			result.Git = &GitConfig{}

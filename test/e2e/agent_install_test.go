@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,9 @@ func TestE2E_AllAgents_InstallAndLaunch(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	if testing.Short() {
 		t.Skip("skipping slow E2E agent install tests")
+	}
+	if runtime.GOOS == "darwin" {
+		t.Skip("skipping all-agent install on macOS — already covered by Linux e2e, too slow via Colima")
 	}
 
 	ctx := context.Background()

@@ -104,8 +104,8 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 	assert.Contains(t, spec.Env, "K=V")
 	assert.True(t, spec.GPU)
 	assert.NotNil(t, spec.Resources)
-	// HomeDir is used: in isolated mode, data dirs mount under /home/custom/
-	assert.Equal(t, "/home/custom/.test-data", findMountTarget(spec.Mounts, ".test-data"))
+	// HomeDir is used: profile home mounts at /home/custom/
+	assert.Equal(t, "/home/custom", findMountTarget(spec.Mounts, "/home/custom"))
 	assert.NotEmpty(t, spec.Name)                                            // container naming
 	assert.Contains(t, spec.Entrypoint[2], "--flag")                         // config args
 	assert.Contains(t, spec.Entrypoint[2], "--extra")                        // passthrough args

@@ -247,6 +247,90 @@ func TestMerge_MCPServersNilPreserved(t *testing.T) {
 	assert.Equal(t, "npx", result.MCPServers["fs"].Command)
 }
 
+func TestMerge_ToolsFromEmpty(t *testing.T) {
+	base := Config{}
+	over := Config{Tools: map[string]ToolDef{"act": {Type: "binary-download", URL: "url"}}}
+	result := Merge(base, over)
+	assert.Equal(t, "url", result.Tools["act"].URL, "tools should be added when base is nil")
+}
+
+func TestMerge_ToolsOverEmpty(t *testing.T) {
+	base := Config{Tools: map[string]ToolDef{"act": {Type: "binary-download", URL: "url"}}}
+	over := Config{}
+	result := Merge(base, over)
+	assert.Equal(t, "url", result.Tools["act"].URL, "tools should be preserved when over is nil")
+}
+
+func TestMerge_MCPServersFromEmpty(t *testing.T) {
+	base := Config{}
+	over := Config{MCPServers: map[string]MCPServerDef{"fs": {Command: "npx"}}}
+	result := Merge(base, over)
+	assert.Equal(t, "npx", result.MCPServers["fs"].Command, "MCP servers should be added when base is nil")
+}
+
+func TestMergeAll_ThreeTierPartialResources(t *testing.T) {
+	tier1 := Config{Resources: &ResourceLimits{Memory: "2g"}}
+	tier2 := Config{Resources: &ResourceLimits{CPUs: "1.0"}}
+	tier3 := Config{Resources: &ResourceLimits{Memory: "8g"}}
+	result := MergeAll(tier1, tier2, tier3)
+	require.NotNil(t, result.Resources)
+	assert.Equal(t, "8g", result.Resources.Memory, "tier3 memory overrides tier1")
+	assert.Equal(t, "1.0", result.Resources.CPUs, "tier2 CPUs preserved through tier3")
+}
+
+func TestMergeAll_ThreeTierPartialGit(t *testing.T) {
+	tier1 := Config{Git: &GitConfig{Name: "Default User"}}
+	tier2 := Config{Git: &GitConfig{Email: "agent@example.com"}}
+	tier3 := Config{Git: &GitConfig{Name: "Profile User"}}
+	result := MergeAll(tier1, tier2, tier3)
+	require.NotNil(t, result.Git)
+	assert.Equal(t, "Profile User", result.Git.Name, "tier3 name overrides tier1")
+	assert.Equal(t, "agent@example.com", result.Git.Email, "tier2 email preserved through tier3")
+}
+
+func TestMergeAll_ThreeTierPartialDINDResources(t *testing.T) {
+	tier1 := Config{DINDResources: &ResourceLimits{Memory: "1g", CPUs: "0.5"}}
+	tier2 := Config{} // no DIND resources
+	tier3 := Config{DINDResources: &ResourceLimits{CPUs: "2.0"}}
+	result := MergeAll(tier1, tier2, tier3)
+	require.NotNil(t, result.DINDResources)
+	assert.Equal(t, "1g", result.DINDResources.Memory, "tier1 memory preserved (tier2 nil, tier3 partial)")
+	assert.Equal(t, "2.0", result.DINDResources.CPUs, "tier3 CPUs overrides tier1")
+}
+
+func TestMergeAll_FiveTierScalarChain(t *testing.T) {
+	// Simulate the actual 5-tier config: default → agent → profile → agent-profile → env
+	result := MergeAll(
+		Config{Image: "default:latest", SecurityProfile: "default", UpdateInterval: "1d"},
+		Config{UpdateInterval: "7d"},      // agent overrides interval
+		Config{SecurityProfile: "strict"}, // profile overrides security
+		Config{},                          // agent-profile: no overrides
+		Config{Image: "env:override"},     // env overrides image
+	)
+	assert.Equal(t, "env:override", result.Image, "env tier wins for image")
+	assert.Equal(t, "strict", result.SecurityProfile, "profile tier wins for security")
+	assert.Equal(t, "7d", result.UpdateInterval, "agent tier wins for interval (no later override)")
+}
+
+func TestMergeAll_Empty(t *testing.T) {
+	result := MergeAll()
+	assert.Equal(t, Config{}, result, "MergeAll with no configs returns zero config")
+}
+
+func TestMerge_UpdateInterval(t *testing.T) {
+	base := Config{UpdateInterval: "1d"}
+	over := Config{UpdateInterval: "7d"}
+	result := Merge(base, over)
+	assert.Equal(t, "7d", result.UpdateInterval)
+}
+
+func TestMerge_UpdateIntervalPreserved(t *testing.T) {
+	base := Config{UpdateInterval: "1d"}
+	over := Config{}
+	result := Merge(base, over)
+	assert.Equal(t, "1d", result.UpdateInterval, "base UpdateInterval should be preserved when over is empty")
+}
+
 func TestMerge_SecurityProfile(t *testing.T) {
 	base := Config{SecurityProfile: "default"}
 	over := Config{SecurityProfile: "strict"}
