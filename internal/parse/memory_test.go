@@ -38,3 +38,47 @@ func TestMemory_CaseInsensitive(t *testing.T) {
 	r2, _ := Memory("2g")
 	assert.Equal(t, r1, r2)
 }
+
+func TestMemory_Whitespace(t *testing.T) {
+	result, err := Memory("  2g  ")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2147483648), result)
+}
+
+func TestMemory_HugeValue(t *testing.T) {
+	// 999999999g exceeds int64 range when converted to bytes.
+	// Should still return a value (float64 → int64 truncation), but
+	// the result won't match the input exactly. At minimum it shouldn't panic.
+	result, err := Memory("999999999g")
+	require.NoError(t, err)
+	assert.True(t, result > 0, "huge memory value should produce a positive result")
+}
+
+func TestMemory_FractionalSmallUnit(t *testing.T) {
+	result, err := Memory("0.5k")
+	require.NoError(t, err)
+	assert.Equal(t, int64(512), result)
+}
+
+func TestMemory_Zero(t *testing.T) {
+	result, err := Memory("0g")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), result)
+}
+
+func TestMemory_JustNumber(t *testing.T) {
+	result, err := Memory("1048576")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1048576), result, "raw bytes without suffix")
+}
+
+func TestMemory_NegativeZero(t *testing.T) {
+	// -0 parses to negative zero in float64, but int64(-0.0) == 0
+	result, err := Memory("-0g")
+	// Could either error (negative check) or return 0
+	if err != nil {
+		assert.Contains(t, err.Error(), "positive")
+	} else {
+		assert.Equal(t, int64(0), result)
+	}
+}

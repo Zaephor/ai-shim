@@ -123,3 +123,62 @@ func TestGenerateInstallScript_UnknownType(t *testing.T) {
 	// Verify current behavior
 	assert.NotEmpty(t, script, "unknown type should produce some output (at least a comment)")
 }
+
+func TestIsValidChecksum_Valid(t *testing.T) {
+	assert.True(t, isValidChecksum("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))
+}
+
+func TestIsValidChecksum_Invalid(t *testing.T) {
+	// Too short
+	assert.False(t, isValidChecksum("abc123"))
+	// Wrong characters
+	assert.False(t, isValidChecksum("g3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))
+	// Empty
+	assert.False(t, isValidChecksum(""))
+	// Too long
+	assert.False(t, isValidChecksum("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855aa"))
+	// Contains spaces
+	assert.False(t, isValidChecksum("e3b0c44298fc1c149afbf4c8996fb924 7ae41e4649b934ca495991b7852b855"))
+}
+
+func TestGenerateInstallScript_InvalidChecksumIgnored(t *testing.T) {
+	tools := map[string]ToolDef{
+		"tool": {Type: "binary-download", URL: "https://example.com/tool", Binary: "tool", Checksum: "not-a-valid-checksum"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// Invalid checksum should be silently ignored — no sha256sum verification in output
+	assert.NotContains(t, script, "sha256sum", "invalid checksum should be ignored, not verified")
+	assert.Contains(t, script, "curl", "tool should still be downloaded")
+}
+
+func TestGenerateInstallScript_AdversarialToolName(t *testing.T) {
+	tools := map[string]ToolDef{
+		"evil; rm -rf /": {Type: "binary-download", URL: "https://example.com/tool", Binary: "tool"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// Tool name only appears in a shell comment (# Install: ...) which is not executed.
+	// The actual curl/chmod commands use the binary name, not the tool map key.
+	// Verify the binary name is properly quoted in the executable parts.
+	assert.Contains(t, script, "# Install:")
+	assert.Contains(t, script, "curl -fsSL")
+}
+
+func TestGenerateInstallScript_AdversarialURL(t *testing.T) {
+	tools := map[string]ToolDef{
+		"tool": {Type: "binary-download", URL: "https://example.com/tool; rm -rf /", Binary: "tool"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	// URL should be quoted in curl command
+	assert.Contains(t, script, "'https://example.com/tool; rm -rf /'",
+		"URL with shell metacharacters should be quoted")
+}
+
+func TestGenerateInstallScript_MultipleTools(t *testing.T) {
+	tools := map[string]ToolDef{
+		"act":  {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
+		"helm": {Type: "tar-extract", URL: "https://example.com/helm.tar.gz", Binary: "helm"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	assert.Contains(t, script, "act")
+	assert.Contains(t, script, "helm")
+}

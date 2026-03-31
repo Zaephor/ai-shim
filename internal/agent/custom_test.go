@@ -211,3 +211,53 @@ func TestLoadCustomAgents_SkipsNonYAML(t *testing.T) {
 	customs := LoadCustomAgents(dir)
 	assert.Nil(t, customs)
 }
+
+func TestLoadCustomAgents_SkipsMalformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0755))
+
+	// Malformed YAML should be silently skipped, not crash
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "bad.yaml"), []byte("invalid: yaml: [unterminated"), 0644))
+
+	customs := LoadCustomAgents(dir)
+	assert.Nil(t, customs)
+}
+
+func TestLoadCustomAgents_MixedValidAndInvalid(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0755))
+
+	// Valid custom agent
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "good.yaml"), []byte(`
+agent_def:
+  install_type: npm
+  package: good-agent
+  binary: good
+  data_dirs: [".good"]
+`), 0644))
+
+	// Malformed YAML — should be skipped
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "bad.yaml"), []byte("invalid: yaml: ["), 0644))
+
+	// Valid YAML but no agent_def — should be skipped
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "config-only.yaml"), []byte("env:\n  KEY: value\n"), 0644))
+
+	// Empty file — should be skipped
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "empty.yaml"), []byte(""), 0644))
+
+	customs := LoadCustomAgents(dir)
+	require.NotNil(t, customs, "should return at least the valid agent")
+	assert.Len(t, customs, 1)
+	assert.Equal(t, "good-agent", customs["good"].Package)
+}
+
+func TestLoadCustomAgents_SkipsDirectories(t *testing.T) {
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, "agents")
+	require.NoError(t, os.MkdirAll(filepath.Join(agentsDir, "subdir.yaml"), 0755)) // directory named like YAML
+
+	customs := LoadCustomAgents(dir)
+	assert.Nil(t, customs)
+}

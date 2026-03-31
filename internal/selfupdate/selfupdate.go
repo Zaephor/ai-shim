@@ -9,12 +9,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
-const (
-	GitHubRepo = "ai-shim/ai-shim"
-	GitHubAPI  = "https://api.github.com"
-)
+// httpClient is the shared HTTP client with a timeout for all GitHub API and
+// download requests. Prevents indefinite hangs on slow/unresponsive servers.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
+const GitHubRepo = "ai-shim/ai-shim"
+
+// GitHubAPI is the base URL for GitHub API requests. It is a var so tests
+// can point it at a local httptest server.
+var GitHubAPI = "https://api.github.com"
 
 // Release represents a GitHub release.
 type Release struct {
@@ -32,7 +38,7 @@ type Asset struct {
 func CheckLatest() (string, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", GitHubAPI, GitHubRepo)
 
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("checking for updates: %w", err)
 	}
@@ -86,7 +92,7 @@ func BackupPath(currentPath string) string {
 // Creates a backup at currentPath.bak before replacing.
 func DownloadAndReplace(url, currentPath string) error {
 	// Download to temp file
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("downloading update: %w", err)
 	}
@@ -133,7 +139,7 @@ func DownloadAndReplace(url, currentPath string) error {
 // FetchRelease fetches the full release info for the latest version.
 func FetchRelease() (Release, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", GitHubAPI, GitHubRepo)
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return Release{}, fmt.Errorf("fetching release: %w", err)
 	}

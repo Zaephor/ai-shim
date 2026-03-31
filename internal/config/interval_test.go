@@ -28,6 +28,15 @@ func TestParseUpdateInterval(t *testing.T) {
 		{name: "invalid", input: "invalid", wantErr: true},
 		{name: "abc", input: "abc", wantErr: true},
 		{name: "d without number", input: "d", wantErr: true},
+		{name: "negative day", input: "-1d", wantErr: true},
+		{name: "negative duration", input: "-24h", wantErr: true},
+		{name: "overflow day value", input: "107000000000000d", wantErr: true},
+		{name: "zero days", input: "0d", want: 0},
+		{name: "zero hours", input: "0h", want: 0},
+		{name: "fractional day", input: "0.25d", want: 21600},
+		{name: "very small duration", input: "1s", want: 1},
+		{name: "negative zero day", input: "-0d", want: 0}, // float64 -0.0 passes < 0 check, int64(-0) == 0
+		{name: "large valid day", input: "365d", want: 31536000},
 	}
 
 	for _, tt := range tests {

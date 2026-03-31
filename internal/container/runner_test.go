@@ -2,7 +2,10 @@ package container
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/mount"
@@ -178,4 +181,67 @@ func TestRun_CompletesWithSignalHandler(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode, "signal handler should not interfere with normal execution")
+}
+
+func TestSaveExitLog_WritesLogFile(t *testing.T) {
+	logDir := t.TempDir()
+	r := &Runner{} // saveExitLog doesn't use the Docker client
+	r.saveExitLog(logDir, "test-container", 42)
+
+	logFile := filepath.Join(logDir, "test-container.log")
+	data, err := os.ReadFile(logFile)
+	require.NoError(t, err, "log file should be created")
+	assert.Contains(t, string(data), "exit_code=42")
+	assert.Contains(t, string(data), "container=test-container")
+}
+
+func TestSaveExitLog_EmptyLogDir(t *testing.T) {
+	r := &Runner{}
+	// Should not panic or error when logDir is empty
+	r.saveExitLog("", "test-container", 1)
+}
+
+func TestSaveExitLog_Appends(t *testing.T) {
+	logDir := t.TempDir()
+	r := &Runner{}
+	r.saveExitLog(logDir, "test-container", 1)
+	r.saveExitLog(logDir, "test-container", 2)
+
+	data, err := os.ReadFile(filepath.Join(logDir, "test-container.log"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "exit_code=1")
+	assert.Contains(t, string(data), "exit_code=2")
+}
+
+func TestRun_ContextCancellationStopsContainer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newTestRunner(t, ctx)
+	defer runner.Close()
+
+	done := make(chan struct{})
+	var exitCode int
+	var runErr error
+
+	go func() {
+		defer close(done)
+		exitCode, runErr = runner.Run(ctx, ContainerSpec{
+			Image:  testImage,
+			Cmd:    []string{"sleep", "60"},
+			Labels: map[string]string{LabelBase: "test"},
+		})
+	}()
+
+	// Give the container time to start
+	time.Sleep(2 * time.Second)
+	cancel()
+
+	select {
+	case <-done:
+		// Container stopped as expected
+	case <-time.After(20 * time.Second):
+		t.Fatal("container did not stop within 20s of context cancellation")
+	}
+
+	_ = exitCode
+	_ = runErr
 }

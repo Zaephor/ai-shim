@@ -49,6 +49,38 @@ func TestResolveTemplates_NoVariables(t *testing.T) {
 	assert.Equal(t, "value", resolved.Env["KEY"])
 }
 
+func TestResolveTemplates_Hostname(t *testing.T) {
+	cfg := Config{
+		Variables: map[string]string{"env": "staging"},
+		Hostname:  "ai-shim-{{ .env }}",
+	}
+	resolved, err := ResolveTemplates(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "ai-shim-staging", resolved.Hostname)
+}
+
+func TestResolveTemplates_Ports(t *testing.T) {
+	cfg := Config{
+		Variables: map[string]string{"port": "8080"},
+		Ports:     []string{"{{ .port }}:80"},
+	}
+	resolved, err := ResolveTemplates(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "8080:80", resolved.Ports[0])
+}
+
+func TestResolveTemplates_ToolURL(t *testing.T) {
+	cfg := Config{
+		Variables: map[string]string{"version": "1.5.0"},
+		Tools: map[string]ToolDef{
+			"act": {Type: "tar-extract", URL: "https://example.com/act-{{ .version }}.tar.gz"},
+		},
+	}
+	resolved, err := ResolveTemplates(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/act-1.5.0.tar.gz", resolved.Tools["act"].URL)
+}
+
 func TestResolveTemplates_UndefinedVariable(t *testing.T) {
 	cfg := Config{
 		Variables: map[string]string{},

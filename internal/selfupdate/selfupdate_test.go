@@ -1,10 +1,16 @@
 package selfupdate
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNeedsUpdate_DifferentVersions(t *testing.T) {
@@ -52,6 +58,150 @@ func TestDownloadAndReplace_InvalidURL(t *testing.T) {
 func TestBackupPath(t *testing.T) {
 	path := BackupPath("/usr/local/bin/ai-shim")
 	assert.Equal(t, "/usr/local/bin/ai-shim.bak", path)
+}
+
+func TestDownloadAndReplace_Success(t *testing.T) {
+	// Serve a fake binary via httptest
+	binaryContent := []byte("#!/bin/sh\necho updated\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(binaryContent)
+	}))
+	defer srv.Close()
+
+	// Create a fake "current" binary
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
+
+	err := DownloadAndReplace(srv.URL+"/ai-shim", currentPath)
+	require.NoError(t, err)
+
+	// Current path should have the new content
+	data, err := os.ReadFile(currentPath)
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, data)
+
+	// Backup should exist
+	backupPath := BackupPath(currentPath)
+	backupData, err := os.ReadFile(backupPath)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("old"), backupData)
+}
+
+func TestDownloadAndReplace_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
+
+	err := DownloadAndReplace(srv.URL+"/ai-shim", currentPath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "status 404")
+}
+
+func TestCheckLatest_WithMockServer(t *testing.T) {
+	// Override the API URL for testing
+	origAPI := GitHubAPI
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"tag_name": "v0.2.0"}`)
+	}))
+	defer srv.Close()
+
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = origAPI }()
+
+	version, err := CheckLatest()
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.0", version)
+}
+
+func TestFetchRelease_WithMockServer(t *testing.T) {
+	origAPI := GitHubAPI
+	assetName := AssetName()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"tag_name": "v0.2.0", "assets": [{"name": "%s", "browser_download_url": "https://example.com/dl"}]}`, assetName)
+	}))
+	defer srv.Close()
+
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = origAPI }()
+
+	release, err := FetchRelease()
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.0", release.TagName)
+	assert.Len(t, release.Assets, 1)
+}
+
+func TestDownloadAndReplace_NonExistentCurrentPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("binary"))
+	}))
+	defer srv.Close()
+
+	// Current path doesn't exist — backup rename should fail
+	err := DownloadAndReplace(srv.URL+"/dl", "/nonexistent/path/ai-shim")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating temp file")
+}
+
+func TestDownloadAndReplace_BackupFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("binary"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	// Don't create currentPath — download succeeds but backup rename fails
+	err := DownloadAndReplace(srv.URL+"/dl", currentPath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "backing up")
+}
+
+func TestCheckLatest_ServerError(t *testing.T) {
+	origAPI := GitHubAPI
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = origAPI }()
+
+	_, err := CheckLatest()
+	assert.Error(t, err)
+}
+
+func TestCheckLatest_InvalidJSON(t *testing.T) {
+	origAPI := GitHubAPI
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = origAPI }()
+
+	_, err := CheckLatest()
+	assert.Error(t, err)
+}
+
+func TestFetchRelease_ServerError(t *testing.T) {
+	origAPI := GitHubAPI
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = origAPI }()
+
+	_, err := FetchRelease()
+	assert.Error(t, err)
 }
 
 func TestFindAssetURL_NotFound(t *testing.T) {

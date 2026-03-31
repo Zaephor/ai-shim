@@ -145,3 +145,50 @@ func TestResolve_GitEnvVarOverrides(t *testing.T) {
 	assert.Equal(t, "Env User", cfg.Git.Name)
 	assert.Equal(t, "env@example.com", cfg.Git.Email)
 }
+
+func TestResolve_AllEnvVarOverrides(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	t.Setenv("AI_SHIM_VERSION", "1.2.3")
+	t.Setenv("AI_SHIM_DIND", "1")
+	t.Setenv("AI_SHIM_DIND_GPU", "true")
+	t.Setenv("AI_SHIM_NETWORK_SCOPE", "profile")
+	t.Setenv("AI_SHIM_DIND_HOSTNAME", "custom-dind")
+	t.Setenv("AI_SHIM_DIND_CACHE", "1")
+	t.Setenv("AI_SHIM_SECURITY_PROFILE", "strict")
+	t.Setenv("AI_SHIM_UPDATE_INTERVAL", "7d")
+
+	cfg, err := Resolve(dir, "test", "test")
+	require.NoError(t, err)
+
+	assert.Equal(t, "1.2.3", cfg.Version)
+	assert.True(t, cfg.IsDINDEnabled())
+	assert.True(t, cfg.IsDINDGPUEnabled())
+	assert.Equal(t, "profile", cfg.NetworkScope)
+	assert.Equal(t, "custom-dind", cfg.DINDHostname)
+	assert.True(t, cfg.IsCacheEnabled())
+	assert.Equal(t, "strict", cfg.SecurityProfile)
+	assert.Equal(t, "7d", cfg.UpdateInterval)
+}
+
+func TestResolve_UnknownKeysStillResolves(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	// Config with a valid field AND an unknown field
+	writeYAML(t, filepath.Join(dir, "default.yaml"), `
+image: "test:latest"
+imagee: "typo"
+`)
+
+	// Resolve should succeed — unknown keys produce warnings, not errors
+	cfg, err := Resolve(dir, "test", "test")
+	require.NoError(t, err)
+	assert.Equal(t, "test:latest", cfg.Image, "valid fields should still be loaded")
+}

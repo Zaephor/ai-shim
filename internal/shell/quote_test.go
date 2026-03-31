@@ -50,6 +50,39 @@ func TestQuote_NoSpecialChars(t *testing.T) {
 	}
 }
 
+func TestQuote_NullByte(t *testing.T) {
+	// Null bytes in shell strings cause truncation. Quote wraps them but
+	// doesn't strip them — the caller should validate input before quoting.
+	q := Quote("hello\x00world")
+	assert.Contains(t, q, "\x00", "null byte is preserved (not stripped)")
+}
+
+func TestQuote_ControlChars(t *testing.T) {
+	// Control characters like BEL, ESC, carriage return
+	for _, c := range []string{"\x07", "\x1b", "\r", "\x01"} {
+		q := Quote("a" + c + "b")
+		// These don't trigger quoting (not in the special char list),
+		// but they're passed through unchanged
+		assert.Contains(t, q, c, "control char should be preserved")
+	}
+}
+
+func TestQuote_Unicode(t *testing.T) {
+	// Unicode should pass through unmodified
+	assert.Equal(t, "héllo", Quote("héllo"))
+	assert.Equal(t, "日本語", Quote("日本語"))
+	// Unicode with spaces should be quoted
+	assert.Equal(t, "'hello 世界'", Quote("hello 世界"))
+}
+
+func TestQuote_MultipleQuotes(t *testing.T) {
+	// Multiple single quotes in a row
+	q := Quote("'''")
+	assert.NotContains(t, q, "'''", "raw triple quotes should be escaped")
+	// The result should be a valid shell expression
+	assert.True(t, len(q) > 3, "escaped quotes should be longer")
+}
+
 func TestQuote_SpecialChars(t *testing.T) {
 	specials := []string{
 		"hello world", "a\tb", "a\nb", `a"b`, "a'b",
