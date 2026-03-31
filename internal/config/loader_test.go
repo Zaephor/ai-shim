@@ -59,3 +59,76 @@ func TestLoadFile_MalformedYAML(t *testing.T) {
 	_, err := LoadFile(path)
 	assert.Error(t, err, "malformed YAML should return error")
 }
+
+func TestLoadFileStrict_ValidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("image: test:latest\nhostname: test\n"), 0644))
+	cfg, warnings, err := LoadFileStrict(path)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, "test:latest", cfg.Image)
+}
+
+func TestLoadFileStrict_UnknownKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("image: test:latest\nimagee: typo\nunknown_field: value\n"), 0644))
+	cfg, warnings, err := LoadFileStrict(path)
+	require.NoError(t, err)
+	assert.Equal(t, "test:latest", cfg.Image, "valid fields should still be loaded")
+	assert.NotEmpty(t, warnings, "unknown keys should produce warnings")
+	found := false
+	for _, w := range warnings {
+		if assert.Contains(t, w, "not found in type") {
+			found = true
+		}
+	}
+	assert.True(t, found, "warnings should mention unknown field")
+}
+
+func TestLoadFileStrict_MissingFile(t *testing.T) {
+	cfg, warnings, err := LoadFileStrict("/nonexistent/path.yaml")
+	assert.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, "", cfg.Image)
+}
+
+func TestLoadFileStrict_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(""), 0644))
+	cfg, warnings, err := LoadFileStrict(path)
+	assert.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, "", cfg.Image)
+}
+
+func TestLoadFileStrict_MalformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("invalid: yaml: [unterminated"), 0644))
+	_, _, err := LoadFileStrict(path)
+	assert.Error(t, err)
+}
+
+func TestLoadFileStrict_CommentOnlyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	// File with only comments — yaml.Decoder returns io.EOF, should be treated as empty
+	require.NoError(t, os.WriteFile(path, []byte("# This is a comment\n# Another comment\n"), 0644))
+	cfg, warnings, err := LoadFileStrict(path)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, "", cfg.Image)
+}
+
+func TestLoadFileStrict_CommentedKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	// Commented-out keys should NOT produce warnings
+	require.NoError(t, os.WriteFile(path, []byte("image: test:latest\n# imagee: typo\n"), 0644))
+	_, warnings, err := LoadFileStrict(path)
+	require.NoError(t, err)
+	assert.Empty(t, warnings, "commented keys should not produce warnings")
+}

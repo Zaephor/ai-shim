@@ -16,24 +16,35 @@ func Resolve(configDir, agent, profile string) (Config, error) {
 // ResolveWithSources is like Resolve but also returns ConfigSources that
 // tracks which tier set each field.
 func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSources, error) {
-	defaultCfg, err := LoadFile(filepath.Join(configDir, "default.yaml"))
+	var allWarnings []string
+
+	defaultCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "default.yaml"))
 	if err != nil {
 		return Config{}, ConfigSources{}, fmt.Errorf("loading default config: %w", err)
 	}
+	allWarnings = append(allWarnings, warnings...)
 
-	agentCfg, err := LoadFile(filepath.Join(configDir, "agents", agentName+".yaml"))
+	agentCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "agents", agentName+".yaml"))
 	if err != nil {
 		return Config{}, ConfigSources{}, fmt.Errorf("loading agent config: %w", err)
 	}
+	allWarnings = append(allWarnings, warnings...)
 
-	profileCfg, err := LoadFile(filepath.Join(configDir, "profiles", profile+".yaml"))
+	profileCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "profiles", profile+".yaml"))
 	if err != nil {
 		return Config{}, ConfigSources{}, fmt.Errorf("loading profile config: %w", err)
 	}
+	allWarnings = append(allWarnings, warnings...)
 
-	agentProfileCfg, err := LoadFile(filepath.Join(configDir, "agent-profiles", agentName+"_"+profile+".yaml"))
+	agentProfileCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "agent-profiles", agentName+"_"+profile+".yaml"))
 	if err != nil {
 		return Config{}, ConfigSources{}, fmt.Errorf("loading agent-profile config: %w", err)
+	}
+	allWarnings = append(allWarnings, warnings...)
+
+	// Print unknown key warnings to stderr
+	for _, w := range allWarnings {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: unknown config key: %s\n", w)
 	}
 
 	envCfg := loadEnvOverrides()
