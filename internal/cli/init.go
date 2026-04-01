@@ -34,14 +34,11 @@ func Init(layout storage.Layout) error {
 
 	// Write default config
 	defaultConfig := `# ai-shim default configuration
+# These settings apply to all agents and profiles.
 # See: https://github.com/ai-shim/ai-shim
 
 # Container image (default: ghcr.io/catthehacker/ubuntu:act-24.04)
-# Supports @sha256: digest pinning for reproducibility.
 # image: "ghcr.io/catthehacker/ubuntu:act-24.04"
-
-# Container hostname (default: ai-shim)
-# hostname: "ai-shim"
 
 # Environment variables injected into the container
 # env:
@@ -52,21 +49,27 @@ func Init(layout storage.Layout) error {
 #   name: "Your Name"
 #   email: "you@example.com"
 
-# Template variables (not injected, used for templating)
-# variables:
-#   llm_host: "my-host:8080"
+# Agent version pinning and update interval
+# version: "1.0.0"          # pin agent to specific version
+# update_interval: "1d"     # how often to check for updates (always/never/1d/7d/24h)
+
+# System packages to install in the container
+# packages:
+#   - tmux
+#   - jq
 
 # Security profile: default, strict, or none
 # security_profile: default
 
-# MCP servers (injected as MCP_SERVERS JSON env var)
-# mcp_servers:
-#   my-server:
-#     command: npx
-#     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
+# Docker-in-Docker sidecar (for agents that need Docker access)
+# dind: false
 
-# Enable TLS for the DIND Docker socket
-# dind_tls: false
+# For more configuration options (tools, MCP servers, volumes, ports,
+# resource limits, network isolation, template variables), see:
+# https://github.com/ai-shim/ai-shim#configuration
+#
+# Example profiles for common development stacks (kubernetes, aws, python,
+# rust, etc.) are available in the repository at configs/examples/profiles/
 `
 	configPath := filepath.Join(layout.ConfigDir, "default.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -116,9 +119,10 @@ func PrintFirstRunHelp(layout storage.Layout) {
 	fmt.Fprintf(os.Stderr, `ai-shim: first run detected
 
 To get started:
-  1. Initialize:     ai-shim init
-  2. Create symlink:  ai-shim manage symlinks create claude-code work
-  3. Launch:          ./claude-code_work
+  1. Initialize:       ai-shim init
+  2. Check Docker:     ai-shim manage doctor
+  3. Create symlink:   ai-shim manage symlinks create claude-code work ~/bin
+  4. Launch:           claude-code_work
 
 Configuration:  %s
 Storage:        %s
@@ -130,5 +134,6 @@ Available agents:
 		def, _ := agent.Lookup(name)
 		fmt.Fprintf(os.Stderr, "  %-15s %s\n", name, def.Binary)
 	}
+	fmt.Fprintf(os.Stderr, "\nRun 'ai-shim manage profiles' to list configured profiles.\n")
 	fmt.Fprintln(os.Stderr)
 }

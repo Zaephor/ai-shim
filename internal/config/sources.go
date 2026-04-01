@@ -55,6 +55,9 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.SecurityProfile != "" {
 			sources.Fields["security_profile"] = name
 		}
+		if cfg.UpdateInterval != "" {
+			sources.Fields["update_interval"] = name
+		}
 
 		if cfg.DIND != nil {
 			sources.Fields["dind"] = name

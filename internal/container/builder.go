@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -163,7 +162,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		}
 	}
 
-	tty := isTTY()
+	tty := IsTTY()
 
 	// Security profile
 	securityOpt, capDrop := resolveSecurityProfile(p.Config.SecurityProfile)
@@ -190,9 +189,14 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	}
 }
 
-// sharedHomeFiles are files in the home directory that are shared across all agents
-// regardless of isolation mode, because they contain cross-agent configuration.
-var sharedHomeFiles = []string{".gitconfig"}
+// IsTTY reports whether stdin is connected to a terminal.
+func IsTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
 
 func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 	profileHome := p.Layout.ProfileHome(p.Profile)
@@ -220,36 +224,34 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		},
 	}
 
-	if p.Config.IsIsolated() {
-		// Isolated mode: mount only this agent's data dirs/files + allowed agents
-		mounts = append(mounts, agentDataMounts(profileHome, homeDir, p.Agent)...)
+	// Always mount the profile home at homeDir so the home directory
+	// is writable (needed for git config, npm, etc). In isolated mode,
+	// agent data dirs overlay on top and only the current agent's bins
+	// are accessible.
+	mounts = append(mounts, mount.Mount{
+		Type:   mount.TypeBind,
+		Source: profileHome,
+		Target: homeDir,
+	})
 
-		// Allowed agents: mount their bins and data
+	if p.Config.IsIsolated() {
+		// Isolated mode: only current agent's bins + allowed agents' bins
 		for _, name := range p.Config.AllowAgents {
 			if name == p.Agent.Name {
 				continue
 			}
-			if def, ok := agent.Lookup(name); ok {
+			if _, ok := agent.Lookup(name); ok {
 				mounts = append(mounts, mount.Mount{
 					Type:   mount.TypeBind,
 					Source: p.Layout.AgentBin(name),
 					Target: "/usr/local/share/ai-shim/agents/" + name + "/bin",
 				})
-				mounts = append(mounts, agentDataMounts(profileHome, homeDir, def)...)
+			} else {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: allow_agents references unknown agent %q (skipped)\n", name)
 			}
 		}
-
-		// Shared home files (e.g. .gitconfig)
-		mounts = append(mounts, sharedFileMounts(profileHome, homeDir)...)
 	} else {
-		// Shared mode: mount the entire profile home
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: profileHome,
-			Target: homeDir,
-		})
-
-		// All agents' bins accessible
+		// Shared mode: all agents' bins accessible
 		for _, name := range agent.Names() {
 			if name == p.Agent.Name {
 				continue
@@ -280,43 +282,6 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		})
 	}
 
-	return mounts
-}
-
-// agentDataMounts creates bind mounts for an agent's data dirs and files.
-func agentDataMounts(profileHome, homeDir string, def agent.Definition) []mount.Mount {
-	var mounts []mount.Mount
-	for _, dir := range def.DataDirs {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: filepath.Join(profileHome, dir),
-			Target: filepath.Join(homeDir, dir),
-		})
-	}
-	for _, file := range def.DataFiles {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: filepath.Join(profileHome, file),
-			Target: filepath.Join(homeDir, file),
-		})
-	}
-	return mounts
-}
-
-// sharedFileMounts creates bind mounts for files shared across all agents.
-func sharedFileMounts(profileHome, homeDir string) []mount.Mount {
-	var mounts []mount.Mount
-	for _, file := range sharedHomeFiles {
-		source := filepath.Join(profileHome, file)
-		// Only mount if the file exists (shared files are optional)
-		if _, err := os.Stat(source); err == nil {
-			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: source,
-				Target: filepath.Join(homeDir, file),
-			})
-		}
-	}
 	return mounts
 }
 

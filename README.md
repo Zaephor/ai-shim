@@ -4,22 +4,59 @@ ai-shim transparently sandboxes AI coding agents inside Docker containers.
 The user experience is identical to running the agent natively -- all arguments,
 stdin/stdout, and exit codes pass through unchanged.
 
+## Requirements
+
+- **Docker** -- the daemon must be running. ai-shim creates containers to
+  run agents. Verify with `docker info`.
+- **Go 1.25+** -- only if building from source.
+
+## Installation
+
+**Download a release** (recommended):
+
+```bash
+# Download the latest binary for your platform
+curl -fsSL https://github.com/ai-shim/ai-shim/releases/latest/download/ai-shim_linux_amd64.tar.gz | tar xz
+sudo mv ai-shim /usr/local/bin/
+```
+
+**Or install with Go:**
+
+```bash
+go install github.com/ai-shim/ai-shim/cmd/ai-shim@latest
+```
+
+**Or build from source:**
+
+```bash
+git clone https://github.com/ai-shim/ai-shim.git
+cd ai-shim
+make build
+sudo cp ai-shim /usr/local/bin/   # or add ./ai-shim to your PATH
+```
+
 ## Quick Start
 
 ```bash
-# Build from source
-make build
+# 1. Initialize config directory
+ai-shim init
 
-# Create a symlink for claude with the "work" profile
+# 2. Check that Docker is working
+ai-shim manage doctor
+
+# 3. Create a symlink for your agent (e.g., claude-code with "work" profile)
 ai-shim manage symlinks create claude-code work ~/bin
+# Make sure ~/bin is in your PATH
 
-# Use it exactly like the native agent
+# 4. Use it exactly like the native agent
 claude-code_work "explain this codebase"
-
-# Or with default profile (no underscore needed)
-ai-shim manage symlinks create claude-code default ~/bin
-claude-code "explain this codebase"
 ```
+
+On first launch, ai-shim pulls the container image (~500MB) and installs the
+agent. This takes 30-60 seconds. Subsequent launches reuse the cached install.
+
+**Profiles** let you maintain separate configurations (work, personal, etc.).
+ai-shim ships with 39 example profiles for common stacks in `configs/examples/profiles/`.
 
 ## Supported Agents
 
@@ -58,7 +95,9 @@ env:
 image: "ghcr.io/catthehacker/ubuntu:act-24.04"
 # image: "ghcr.io/catthehacker/ubuntu@sha256:abcdef1234567890..."
 
-version: ""
+hostname: "ai-shim"         # container hostname
+version: ""                  # pin agent to specific version
+update_interval: "1d"        # how often to check for updates (always/never/1d/7d/24h)
 args:
   - "--no-telemetry"
 
@@ -241,6 +280,7 @@ AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
 AI_SHIM_DIND_TLS=0/1            # toggle TLS for DIND socket
 AI_SHIM_SECURITY_PROFILE=<p>    # security profile (default/strict/none)
+AI_SHIM_UPDATE_INTERVAL=<i>    # agent update interval (always/never/1d/7d/24h)
 AI_SHIM_GIT_NAME=<name>         # git user.name for container commits
 AI_SHIM_GIT_EMAIL=<email>       # git user.email for container commits
 AI_SHIM_VERBOSE=0/1             # enable debug output
@@ -249,17 +289,14 @@ AI_SHIM_NO_COLOR=0/1            # disable colored output
 AI_SHIM_WATCH_RETRIES=<n>       # max restarts for watch mode (default 3)
 ```
 
-## Building from Source
-
-Requires Go 1.25+ and Docker.
+## Development
 
 ```bash
-git clone https://github.com/ai-shim/ai-shim.git
-cd ai-shim
 make build              # produces ./ai-shim binary
-make test               # run all tests
+make test               # run all tests (requires Docker)
 make test-short         # skip integration tests requiring Docker
 make verify             # fmt + vet + lint + test
+make setup              # install lefthook pre-commit hooks
 ```
 
 ## Releases

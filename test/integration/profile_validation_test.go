@@ -150,6 +150,38 @@ func TestProfileExamples_ToolsHaveRequiredFields(t *testing.T) {
 	}
 }
 
+func TestProfileExamples_StrictYAML(t *testing.T) {
+	files := collectExampleFiles(t)
+	for _, f := range files {
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			cfg, warnings, err := config.LoadFileStrict(f)
+			if err != nil {
+				t.Fatalf("strict load error in %s: %v", f, err)
+			}
+			for _, w := range warnings {
+				t.Errorf("unknown key in %s: %s", filepath.Base(f), w)
+			}
+			_ = cfg
+		})
+	}
+}
+
+func TestProfileExamples_PassValidation(t *testing.T) {
+	files := collectExampleFiles(t)
+	for _, f := range files {
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			cfg, err := config.LoadFile(f)
+			if err != nil {
+				t.Fatalf("load error in %s: %v", f, err)
+			}
+			errs := cfg.Validate()
+			for _, e := range errs {
+				t.Errorf("validation error in %s: %s", filepath.Base(f), e)
+			}
+		})
+	}
+}
+
 func TestProfileExamples_NoDuplicateNames(t *testing.T) {
 	files := collectExampleFiles(t)
 

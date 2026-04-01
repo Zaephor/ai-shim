@@ -3,9 +3,20 @@ package config
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/ai-shim/ai-shim/internal/parse"
 )
+
+// validToolTypes are the recognized tool provisioning types.
+var validToolTypes = map[string]bool{
+	"binary-download":       true,
+	"tar-extract":           true,
+	"tar-extract-selective": true,
+	"apt":                   true,
+	"go-install":            true,
+	"custom":                true,
+}
 
 // validateImageDigest checks for valid @sha256: format if present.
 func validateImageDigest(image string) []string {
@@ -47,6 +58,9 @@ func (c Config) Validate() []string {
 	warnings = append(warnings, validateResourceLimits("dind_resources", c.DINDResources)...)
 	warnings = append(warnings, validateSecurityProfile(c.SecurityProfile)...)
 	warnings = append(warnings, validateUpdateInterval(c.UpdateInterval)...)
+	warnings = append(warnings, validatePorts(c.Ports)...)
+	warnings = append(warnings, validateTools(c.Tools)...)
+	warnings = append(warnings, validateMCPServers(c.MCPServers)...)
 
 	return warnings
 }
@@ -80,6 +94,50 @@ func validateUpdateInterval(interval string) []string {
 		return []string{err.Error()}
 	}
 	return nil
+}
+
+// validatePorts checks that port mappings have the expected host:container format.
+func validatePorts(ports []string) []string {
+	var warnings []string
+	for _, p := range ports {
+		parts := strings.SplitN(p, ":", 2)
+		if len(parts) != 2 {
+			warnings = append(warnings, fmt.Sprintf("invalid port mapping %q: expected host:container format", p))
+			continue
+		}
+		if _, err := strconv.Atoi(parts[0]); err != nil {
+			warnings = append(warnings, fmt.Sprintf("invalid host port in %q: %v", p, err))
+		}
+		if _, err := strconv.Atoi(parts[1]); err != nil {
+			warnings = append(warnings, fmt.Sprintf("invalid container port in %q: %v", p, err))
+		}
+	}
+	return warnings
+}
+
+// validateTools checks that tool definitions have valid types and required fields.
+func validateTools(tools map[string]ToolDef) []string {
+	var warnings []string
+	for name, td := range tools {
+		if !validToolTypes[td.Type] {
+			warnings = append(warnings, fmt.Sprintf("tool %q: unknown type %q (valid: binary-download, tar-extract, tar-extract-selective, apt, go-install, custom)", name, td.Type))
+		}
+		if td.Binary == "" && td.Type != "custom" {
+			warnings = append(warnings, fmt.Sprintf("tool %q: missing binary name", name))
+		}
+	}
+	return warnings
+}
+
+// validateMCPServers checks that MCP server definitions have required fields.
+func validateMCPServers(servers map[string]MCPServerDef) []string {
+	var warnings []string
+	for name, srv := range servers {
+		if srv.Command == "" {
+			warnings = append(warnings, fmt.Sprintf("mcp_server %q: missing command", name))
+		}
+	}
+	return warnings
 }
 
 // validateResourceLimits checks that resource limit values are parseable.

@@ -107,4 +107,69 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	assert.Equal(t, "test@example.com", cfg.Git.Email, "AI_SHIM_GIT_EMAIL")
 }
 
+// TestComputeSources_AllFieldsTracked verifies that computeSources tracks every
+// field that Merge handles. Uses the same fully-populated Config as the merge
+// test — if a field is merged but not source-tracked, the annotation will be
+// empty in `ai-shim manage config`.
+func TestComputeSources_AllFieldsTracked(t *testing.T) {
+	over := Config{
+		Variables:       map[string]string{"k": "v"},
+		Env:             map[string]string{"E": "V"},
+		Image:           "test-image",
+		Hostname:        "test-host",
+		Version:         "1.0.0",
+		Args:            []string{"--arg"},
+		Volumes:         []string{"/a:/b"},
+		Ports:           []string{"8080:80"},
+		Packages:        []string{"curl"},
+		NetworkScope:    "profile",
+		DINDHostname:    "dind-host",
+		DIND:            boolPtr(true),
+		DINDGpu:         boolPtr(true),
+		GPU:             boolPtr(true),
+		DINDMirrors:     []string{"mirror"},
+		DINDCache:       boolPtr(true),
+		DINDTLS:         boolPtr(true),
+		AllowAgents:     []string{"agent"},
+		Isolated:        boolPtr(false),
+		MCPServers:      map[string]MCPServerDef{"s": {Command: "cmd"}},
+		Tools:           map[string]ToolDef{"t": {Type: "apt"}},
+		Resources:       &ResourceLimits{Memory: "4g", CPUs: "2.0"},
+		DINDResources:   &ResourceLimits{Memory: "2g", CPUs: "1.0"},
+		Git:             &GitConfig{Name: "User", Email: "u@e.com"},
+		SecurityProfile: "strict",
+		UpdateInterval:  "7d",
+	}
+
+	tiers := []namedConfig{{name: "test-tier", config: over}}
+	sources := computeSources(tiers)
+
+	// Every merged field should be tracked in sources
+	rv := reflect.ValueOf(over)
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		yamlTag := field.Tag.Get("yaml")
+		if yamlTag == "" {
+			continue
+		}
+		// Extract the yaml key name (before comma)
+		key := yamlTag
+		if idx := len(key); idx > 0 {
+			if ci := 0; ci < len(key) {
+				for ci < len(key) && key[ci] != ',' {
+					ci++
+				}
+				key = key[:ci]
+			}
+		}
+		assert.Equal(t, "test-tier", sources.Fields[key],
+			"computeSources does not track field %q (yaml: %q) — add it to computeSources",
+			field.Name, key)
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
