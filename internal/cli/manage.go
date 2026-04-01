@@ -24,6 +24,11 @@ import (
 	volume_types "github.com/docker/docker/api/types/volume"
 )
 
+// dockerTimeout is the deadline for Docker API calls in management commands
+// (status, cleanup, doctor). These should complete quickly — a hung daemon
+// shouldn't block the CLI forever.
+const dockerTimeout = 30 * time.Second
+
 // ListAgents returns a formatted list of all built-in agents.
 func ListAgents() string {
 	var b strings.Builder
@@ -212,7 +217,8 @@ func DoctorWithColor(useColor bool) string {
 	b.WriteString("ai-shim doctor\n\n")
 
 	// Check Docker
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
 	cli, err := docker.NewClientNoPing()
 	if err != nil {
 		fmt.Fprintf(&b, "  Docker client:  %s (%s)\n", c.Red("FAIL"), err.Error())
@@ -240,6 +246,45 @@ func DoctorWithColor(useColor bool) string {
 
 	// Check config dir
 	fmt.Fprintf(&b, "  Config dir:     %s\n", layout.ConfigDir)
+
+	// Config validation
+	b.WriteString("\n  Config files:\n")
+	configFiles := []struct {
+		name string
+		path string
+	}{
+		{"default.yaml", filepath.Join(layout.ConfigDir, "default.yaml")},
+	}
+	// Also check agent and profile configs that exist
+	for _, subdir := range []string{"agents", "profiles", "agent-profiles"} {
+		dirPath := filepath.Join(layout.ConfigDir, subdir)
+		entries, _ := os.ReadDir(dirPath)
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+				configFiles = append(configFiles, struct {
+					name string
+					path string
+				}{subdir + "/" + e.Name(), filepath.Join(dirPath, e.Name())})
+			}
+		}
+	}
+	configOK := true
+	for _, cf := range configFiles {
+		_, warnings, loadErr := config.LoadFileStrict(cf.path)
+		if loadErr != nil {
+			fmt.Fprintf(&b, "    %s: %s (%v)\n", cf.name, c.Red("ERROR"), loadErr)
+			configOK = false
+		} else if len(warnings) > 0 {
+			fmt.Fprintf(&b, "    %s: %s (unknown keys)\n", cf.name, c.Yellow("WARNING"))
+			for _, w := range warnings {
+				fmt.Fprintf(&b, "      %s\n", w)
+			}
+			configOK = false
+		}
+	}
+	if configOK {
+		fmt.Fprintf(&b, "    all configs: %s (%d files checked)\n", c.Green("OK"), len(configFiles))
+	}
 
 	// Image pinning status
 	b.WriteString("\n  Image pinning:\n")
@@ -451,7 +496,8 @@ type CleanupResult struct {
 
 // Cleanup finds and removes orphaned ai-shim containers, networks, and volumes.
 func Cleanup() (CleanupResult, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
 	cli, err := docker.NewClient(ctx)
 	if err != nil {
 		return CleanupResult{}, err
@@ -518,7 +564,8 @@ func Status() (string, error) {
 // with explicit color control.
 func StatusWithColor(useColor bool) (string, error) {
 	col := color.New(useColor)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
 	cli, err := docker.NewClient(ctx)
 	if err != nil {
 		return "", err
@@ -839,7 +886,8 @@ func DoctorJSON() (string, error) {
 		ImagePinning: []PinStatus{},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
 	cli, err := docker.NewClientNoPing()
 	if err != nil {
 		result.Docker = DoctorCheck{Status: "fail", Detail: err.Error()}
@@ -875,7 +923,8 @@ func DoctorJSON() (string, error) {
 
 // StatusJSON returns container status as a JSON string.
 func StatusJSON() (string, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
 	cli, err := docker.NewClient(ctx)
 	if err != nil {
 		return "", err

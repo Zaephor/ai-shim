@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/docker"
@@ -26,12 +27,16 @@ func Exec(containerName string, cmd []string) (int, error) {
 	}
 	defer func() { _ = cli.Close() }()
 
-	containerID, err := findContainerByName(ctx, cli, containerName)
+	// Use a timeout for the container lookup — the exec itself runs
+	// as long as the user's command takes.
+	lookupCtx, lookupCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer lookupCancel()
+	containerID, err := findContainerByName(lookupCtx, cli, containerName)
 	if err != nil {
 		return -1, err
 	}
 
-	isTTY := stdinIsTerminal()
+	isTTY := container.IsTTY()
 
 	execCfg := container_types.ExecOptions{
 		Cmd:          cmd,
@@ -93,13 +98,4 @@ func findContainerByName(ctx context.Context, cli *client.Client, name string) (
 	}
 
 	return containers[0].ID, nil
-}
-
-// stdinIsTerminal reports whether stdin is connected to a terminal.
-func stdinIsTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
 }

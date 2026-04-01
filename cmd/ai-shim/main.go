@@ -355,7 +355,10 @@ func runManageSubcommand(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("usage: ai-shim manage symlinks <list|create|remove> [args...]")
 		}
-		exe, _ := os.Executable()
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("determining executable path: %w", err)
+		}
 		switch args[1] {
 		case "list":
 			dir := "."
