@@ -64,7 +64,7 @@ Commands:
   init                           Initialize ai-shim configuration
   manage agents                  List available agents
   manage profiles                List profiles
-  manage config <agent> <profile> Show resolved config
+  manage config <agent> [profile] Show resolved config (default: "default")
   manage doctor                  Run diagnostics
   manage symlinks <sub> [args]   Manage symlinks (create/list/remove)
   manage dry-run <agent> <profile> Preview container config
@@ -76,6 +76,7 @@ Commands:
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
   manage exec <name> <cmd...>   Execute command in running container
+  manage logs [agent] [profile]  Show launch/exit logs or container logs
   manage watch <agent> [profile] Restart agent on crash with retries
   manage switch-profile <profile> Set the default profile
   completion <bash|zsh>          Generate shell completion script
@@ -259,8 +260,8 @@ Subcommands:
 func printSubcommandHelp(cmd string) error {
 	helps := map[string]string{
 		"agents":         "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.",
-		"profiles":       "Usage: ai-shim manage profiles\n\n  List all profiles in ~/.ai-shim/profiles/.",
-		"config":         "Usage: ai-shim manage config <agent> <profile>\n\n  Show the fully resolved config for an agent+profile combination.",
+		"profiles":       "Usage: ai-shim manage profiles\n\n  List all configured and launched profiles.",
+		"config":         "Usage: ai-shim manage config <agent> [profile]\n\n  Show the fully resolved config for an agent+profile combination.\n  Profile defaults to \"default\" if omitted.",
 		"doctor":         "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
 		"symlinks":       "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink",
 		"dry-run":        "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
@@ -273,6 +274,7 @@ func printSubcommandHelp(cmd string) error {
 		"reinstall":      "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":           "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
 		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
+		"logs":           "Usage: ai-shim manage logs [agent] [profile]\n\n  Without arguments: show the launch/exit log.\n  With agent [profile]: show Docker container logs for the most recent matching container.",
 		"switch-profile": "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
 	}
 	if help, ok := helps[cmd]; ok {
@@ -321,18 +323,27 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "config":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: ai-shim manage config <agent> <profile>")
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: ai-shim manage config <agent> [profile]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Run 'ai-shim manage agents' to see available agents.")
+			fmt.Fprintln(os.Stderr, "Run 'ai-shim manage profiles' to see available profiles.")
+			return fmt.Errorf("missing required argument: agent")
+		}
+		agentName := args[1]
+		profile := "default"
+		if len(args) >= 3 {
+			profile = args[2]
 		}
 		if jsonMode {
-			output, err := cli.ShowConfigJSON(layout, args[1], args[2])
+			output, err := cli.ShowConfigJSON(layout, agentName, profile)
 			if err != nil {
 				return err
 			}
 			fmt.Print(output)
 			return nil
 		}
-		output, err := cli.ShowConfig(layout, args[1], args[2])
+		output, err := cli.ShowConfig(layout, agentName, profile)
 		if err != nil {
 			return err
 		}
@@ -349,6 +360,33 @@ func runManageSubcommand(args []string) error {
 			return nil
 		}
 		fmt.Print(cli.Doctor())
+		return nil
+
+	case "logs":
+		// manage logs — show persistent log
+		// manage logs <agent> [profile] — show Docker container logs
+		if len(args) >= 2 {
+			agent := args[1]
+			profile := ""
+			if len(args) >= 3 {
+				profile = args[2]
+			}
+			output, err := cli.ContainerLogs(agent, profile, 100)
+			if err != nil {
+				// Fall back to persistent log filtered by agent
+				output, err = cli.ShowLogs(layout, agent, profile, 50)
+				if err != nil {
+					return err
+				}
+			}
+			fmt.Print(output)
+		} else {
+			output, err := cli.ShowLogs(layout, "", "", 50)
+			if err != nil {
+				return err
+			}
+			fmt.Print(output)
+		}
 		return nil
 
 	case "symlinks":
@@ -836,7 +874,9 @@ func runAgent(name string, args []string) (int, error) {
 	}
 
 	// 8. Run container, return its exit code
+	logging.LogLaunch(logDir, agentName, profileName, spec.Name, image)
 	exitCode, err := runner.Run(ctx, spec)
+	logging.LogExit(logDir, spec.Name, exitCode)
 	if err != nil {
 		return 1, fmt.Errorf("running container: %w", err)
 	}

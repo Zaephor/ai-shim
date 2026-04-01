@@ -204,13 +204,13 @@ func TestRunManage_Init(t *testing.T) {
 func TestRunManage_ManageConfigMissingArgs(t *testing.T) {
 	err := runManage([]string{"manage", "config"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "usage")
+	assert.Contains(t, err.Error(), "missing required argument")
 }
 
 func TestRunManage_ManageConfigOneArg(t *testing.T) {
+	// With only agent specified, profile defaults to "default" — should succeed
 	err := runManage([]string{"manage", "config", "claude-code"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "usage")
+	assert.NoError(t, err)
 }
 
 func TestRunManage_ManageExecMissingArgs(t *testing.T) {

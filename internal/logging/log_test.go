@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,4 +83,46 @@ func TestDebug_NoOutputWhenNotVerbose(t *testing.T) {
 	// Should not panic when not verbose
 	Debug("test %s", "message")
 	DebugEnv(map[string]string{"FOO": "bar"})
+}
+
+func TestLogLaunch_WritesLogFile(t *testing.T) {
+	logDir := t.TempDir()
+	LogLaunch(logDir, "claude-code", "work", "claude-code-work-abc123", "ubuntu:24.04")
+
+	content, err := os.ReadFile(filepath.Join(logDir, "ai-shim.log"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(content), "action=launch")
+	assert.Contains(t, string(content), "agent=claude-code")
+	assert.Contains(t, string(content), "profile=work")
+	assert.Contains(t, string(content), "container=claude-code-work-abc123")
+	assert.Contains(t, string(content), "image=ubuntu:24.04")
+}
+
+func TestLogExit_WritesLogFile(t *testing.T) {
+	logDir := t.TempDir()
+	LogExit(logDir, "claude-code-work-abc123", 0)
+
+	content, err := os.ReadFile(filepath.Join(logDir, "ai-shim.log"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(content), "action=exit")
+	assert.Contains(t, string(content), "container=claude-code-work-abc123")
+	assert.Contains(t, string(content), "exit_code=0")
+}
+
+func TestLogLaunch_AppendsMultipleEntries(t *testing.T) {
+	logDir := t.TempDir()
+	LogLaunch(logDir, "agent1", "p1", "c1", "img1")
+	LogLaunch(logDir, "agent2", "p2", "c2", "img2")
+	LogExit(logDir, "c1", 0)
+
+	content, err := os.ReadFile(filepath.Join(logDir, "ai-shim.log"))
+	assert.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	assert.Len(t, lines, 3)
+}
+
+func TestLogLaunch_EmptyLogDir(t *testing.T) {
+	// Should not panic when logDir is empty
+	LogLaunch("", "agent", "profile", "container", "image")
+	LogExit("", "container", 1)
 }

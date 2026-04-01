@@ -3,10 +3,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,23 +43,71 @@ func ListAgents() string {
 }
 
 // ListProfiles returns a formatted list of profiles found in storage.
+// It shows both config-defined profiles (from config/profiles/*.yaml) and
+// runtime profiles (from profiles/*/). Config-defined profiles that haven't
+// been launched yet are marked as "(not yet launched)".
 func ListProfiles(layout storage.Layout) (string, error) {
-	// Read profiles directory
-	entries, err := readDirNames(layout.Root, "profiles")
+	// Collect config-defined profiles from config/profiles/*.yaml
+	configProfiles := listConfigProfiles(layout.ConfigDir)
+
+	// Collect runtime profiles (directories under profiles/)
+	runtimeProfiles, err := readDirNames(layout.Root, "profiles")
 	if err != nil {
 		return "", err
 	}
 
-	if len(entries) == 0 {
-		return "No profiles found.\n", nil
+	// Build a merged set: all config profiles + any runtime-only profiles
+	seen := make(map[string]bool)
+	runtimeSet := make(map[string]bool)
+	for _, name := range runtimeProfiles {
+		runtimeSet[name] = true
+		seen[name] = true
 	}
+	for _, name := range configProfiles {
+		seen[name] = true
+	}
+
+	if len(seen) == 0 {
+		return "No profiles found.\n\nCreate a profile config at: " + filepath.Join(layout.ConfigDir, "profiles") + "/<name>.yaml\n", nil
+	}
+
+	// Collect sorted names
+	var names []string
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 
 	var b strings.Builder
 	b.WriteString("Profiles:\n")
-	for _, name := range entries {
-		fmt.Fprintf(&b, "  %s\n", name)
+	for _, name := range names {
+		if runtimeSet[name] {
+			fmt.Fprintf(&b, "  %s\n", name)
+		} else {
+			fmt.Fprintf(&b, "  %s  (not yet launched)\n", name)
+		}
 	}
 	return b.String(), nil
+}
+
+// listConfigProfiles reads profile names from config/profiles/*.yaml files.
+func listConfigProfiles(configDir string) []string {
+	profileDir := filepath.Join(configDir, "profiles")
+	entries, err := os.ReadDir(profileDir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if ext := filepath.Ext(name); ext == ".yaml" || ext == ".yml" {
+			names = append(names, strings.TrimSuffix(name, ext))
+		}
+	}
+	return names
 }
 
 // ShowConfig returns the fully resolved config for an agent+profile combination.
@@ -859,14 +909,41 @@ func ListAgentsJSON() (string, error) {
 	return MarshalJSON(entries)
 }
 
-// ListProfilesJSON returns profile names as a JSON string.
+// ProfileEntry is a JSON-serializable profile listing entry.
+type ProfileEntry struct {
+	Name     string `json:"name"`
+	Launched bool   `json:"launched"`
+}
+
+// ListProfilesJSON returns profile info as a JSON string.
 func ListProfilesJSON(layout storage.Layout) (string, error) {
-	entries, err := readDirNames(layout.Root, "profiles")
+	configProfiles := listConfigProfiles(layout.ConfigDir)
+	runtimeProfiles, err := readDirNames(layout.Root, "profiles")
 	if err != nil {
 		return "", err
 	}
+
+	runtimeSet := make(map[string]bool)
+	seen := make(map[string]bool)
+	for _, name := range runtimeProfiles {
+		runtimeSet[name] = true
+		seen[name] = true
+	}
+	for _, name := range configProfiles {
+		seen[name] = true
+	}
+
+	var entries []ProfileEntry
+	var names []string
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		entries = append(entries, ProfileEntry{Name: name, Launched: runtimeSet[name]})
+	}
 	if entries == nil {
-		entries = []string{}
+		entries = []ProfileEntry{}
 	}
 	return MarshalJSON(entries)
 }
@@ -1010,6 +1087,153 @@ func DiskUsageJSON(layout storage.Layout) (string, error) {
 	}
 
 	return MarshalJSON(result)
+}
+
+// ShowLogs returns the persistent launch/exit log for all agents or a
+// specific agent/profile. When agent is empty, it shows the full log.
+// When agent is specified, it filters to lines matching that agent.
+func ShowLogs(layout storage.Layout, agent, profile string, tailN int) (string, error) {
+	logFile := filepath.Join(layout.Root, "logs", "ai-shim.log")
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "No logs found. Logs are written after each agent launch.\n", nil
+		}
+		return "", err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+
+	// Filter by agent/profile if specified
+	if agent != "" {
+		var filtered []string
+		agentMatch := "agent=" + agent
+		profileMatch := "profile=" + profile
+		for _, line := range lines {
+			if !strings.Contains(line, agentMatch) {
+				continue
+			}
+			if profile != "" && !strings.Contains(line, profileMatch) {
+				continue
+			}
+			filtered = append(filtered, line)
+		}
+		lines = filtered
+	}
+
+	if len(lines) == 0 {
+		if agent != "" {
+			return fmt.Sprintf("No logs found for agent=%s profile=%s.\n", agent, profile), nil
+		}
+		return "No logs found.\n", nil
+	}
+
+	// Tail last N lines
+	if tailN > 0 && tailN < len(lines) {
+		lines = lines[len(lines)-tailN:]
+	}
+
+	var b strings.Builder
+	for _, line := range lines {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String(), nil
+}
+
+// ContainerLogs fetches Docker logs for the most recent container matching
+// the given agent and profile labels.
+func ContainerLogs(agent, profile string, tailLines int) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+	defer cancel()
+
+	cli, err := docker.NewClient(ctx)
+	if err != nil {
+		return "", fmt.Errorf("connecting to Docker: %w", err)
+	}
+	defer func() { _ = cli.Close() }()
+
+	// Find containers matching agent/profile (include stopped containers)
+	filterArgs := filters.NewArgs(
+		filters.Arg("label", container.LabelBase+"=true"),
+		filters.Arg("label", container.LabelAgent+"="+agent),
+	)
+	if profile != "" {
+		filterArgs.Add("label", container.LabelProfile+"="+profile)
+	}
+
+	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return "", fmt.Errorf("listing containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		hint := agent
+		if profile != "" {
+			hint += "/" + profile
+		}
+		return fmt.Sprintf("No containers found for %s.\nRun 'ai-shim manage status' to see active containers.\n", hint), nil
+	}
+
+	// Use the most recently created container
+	target := containers[0]
+	for _, c := range containers[1:] {
+		if c.Created > target.Created {
+			target = c
+		}
+	}
+
+	tail := "100"
+	if tailLines > 0 {
+		tail = fmt.Sprintf("%d", tailLines)
+	}
+
+	reader, err := cli.ContainerLogs(ctx, target.ID, container_types.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       tail,
+	})
+	if err != nil {
+		return "", fmt.Errorf("fetching logs: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	var buf strings.Builder
+	containerName := target.ID[:12]
+	if len(target.Names) > 0 {
+		containerName = strings.TrimPrefix(target.Names[0], "/")
+	}
+	fmt.Fprintf(&buf, "Logs for container %s (status: %s):\n\n", containerName, target.Status)
+
+	// Docker log stream has 8-byte header per frame; read raw for simplicity
+	logBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("reading logs: %w", err)
+	}
+
+	// Strip Docker multiplexed stream headers (8-byte prefix per frame)
+	buf.Write(stripDockerLogHeaders(logBytes))
+	return buf.String(), nil
+}
+
+// stripDockerLogHeaders removes the 8-byte Docker multiplexed log frame headers.
+// Format: [stream_type(1)][0(3)][size(4)][payload(size)]
+func stripDockerLogHeaders(data []byte) []byte {
+	var result []byte
+	for len(data) >= 8 {
+		// Frame: 1 byte stream type, 3 padding, 4 byte big-endian size
+		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		data = data[8:]
+		if size > len(data) {
+			size = len(data)
+		}
+		result = append(result, data[:size]...)
+		data = data[size:]
+	}
+	return result
 }
 
 func readDirNames(root, subdir string) ([]string, error) {

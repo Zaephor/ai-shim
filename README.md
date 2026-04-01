@@ -56,7 +56,10 @@ On first launch, ai-shim pulls the container image (~500MB) and installs the
 agent. This takes 30-60 seconds. Subsequent launches reuse the cached install.
 
 **Profiles** let you maintain separate configurations (work, personal, etc.).
-ai-shim ships with 39 example profiles for common stacks in `configs/examples/profiles/`.
+ai-shim ships with 39 example profiles for common stacks.
+Browse them on GitHub at [`configs/examples/profiles/`](configs/examples/profiles/)
+or in the source tree if you installed from source. Copy any profile to
+`~/.ai-shim/config/profiles/<name>.yaml` and customize it.
 
 ## Supported Agents
 
@@ -238,8 +241,8 @@ ai-shim completion <bash|zsh>   # generate shell completion script
 
 ai-shim manage agents           # list all built-in agents
 ai-shim manage profiles         # list configured profiles
-ai-shim manage config <agent> <profile>
-                                # show resolved config
+ai-shim manage config <agent> [profile]
+                                # show resolved config (profile defaults to "default")
 ai-shim manage doctor           # check Docker, storage, config
 ai-shim manage dry-run <agent> <profile> [args...]
                                 # show container spec without launching
@@ -251,6 +254,8 @@ ai-shim manage symlinks remove <path>
                                 # remove a symlink
 ai-shim manage cleanup          # remove orphaned ai-shim containers
 ai-shim manage status           # show running ai-shim containers
+ai-shim manage logs [agent] [profile]
+                                # show launch/exit log or container logs
 ai-shim manage exec <name> <cmd...>
                                 # run command in a running container
 ai-shim manage watch <agent> [profile]

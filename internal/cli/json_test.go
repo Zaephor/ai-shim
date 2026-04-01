@@ -87,7 +87,7 @@ func TestListProfilesJSON(t *testing.T) {
 		output, err := ListProfilesJSON(layout)
 		require.NoError(t, err)
 
-		var profiles []string
+		var profiles []ProfileEntry
 		require.NoError(t, json.Unmarshal([]byte(output), &profiles))
 		assert.Empty(t, profiles)
 	})
@@ -101,10 +101,13 @@ func TestListProfilesJSON(t *testing.T) {
 		output, err := ListProfilesJSON(layout)
 		require.NoError(t, err)
 
-		var profiles []string
+		var profiles []ProfileEntry
 		require.NoError(t, json.Unmarshal([]byte(output), &profiles))
-		assert.Contains(t, profiles, "work")
-		assert.Contains(t, profiles, "personal")
+		assert.Len(t, profiles, 2)
+		// Both are runtime-only (launched)
+		for _, p := range profiles {
+			assert.True(t, p.Launched)
+		}
 	})
 }
 

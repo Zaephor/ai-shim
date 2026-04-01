@@ -321,14 +321,6 @@ func parsePorts(ports []string) (nat.PortMap, nat.PortSet) {
 	return portMap, portSet
 }
 
-func isTTY() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
-}
-
 func generateContainerName(agentName, profile, workspaceHash string) string {
 	suffix := randomSuffix(8)
 	return fmt.Sprintf("%s-%s-%s-%s", agentName, profile, workspaceHash, suffix)

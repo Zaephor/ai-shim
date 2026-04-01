@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +33,7 @@ func TestListProfiles_Empty(t *testing.T) {
 	assert.Contains(t, output, "No profiles")
 }
 
-func TestListProfiles_WithProfiles(t *testing.T) {
+func TestListProfiles_WithRuntimeOnly(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "profiles", "work"), 0755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "profiles", "personal"), 0755))
@@ -42,6 +43,132 @@ func TestListProfiles_WithProfiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, output, "work")
 	assert.Contains(t, output, "personal")
+	assert.NotContains(t, output, "not yet launched")
+}
+
+func TestListProfiles_ConfigDefined(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config", "profiles")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "dev.yaml"), []byte("image: ubuntu\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ListProfiles(layout)
+	require.NoError(t, err)
+	assert.Contains(t, output, "dev")
+	assert.Contains(t, output, "not yet launched")
+}
+
+func TestListProfiles_MixedConfigAndRuntime(t *testing.T) {
+	root := t.TempDir()
+	// Runtime profile (launched)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "profiles", "work"), 0755))
+	// Config-defined profile (not yet launched)
+	configDir := filepath.Join(root, "config", "profiles")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "dev.yaml"), []byte("image: ubuntu\n"), 0644))
+	// Config-defined AND launched
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "work.yaml"), []byte("image: ubuntu\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ListProfiles(layout)
+	require.NoError(t, err)
+	assert.Contains(t, output, "work\n")        // launched, no annotation
+	assert.Contains(t, output, "dev  (not yet") // config-only, annotated
+}
+
+func TestListProfilesJSON_MixedConfigAndRuntime(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "profiles", "work"), 0755))
+	configDir := filepath.Join(root, "config", "profiles")
+	require.NoError(t, os.MkdirAll(configDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "dev.yaml"), []byte("image: ubuntu\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ListProfilesJSON(layout)
+	require.NoError(t, err)
+
+	var entries []ProfileEntry
+	require.NoError(t, json.Unmarshal([]byte(output), &entries))
+	assert.Len(t, entries, 2)
+
+	// Entries should be sorted
+	assert.Equal(t, "dev", entries[0].Name)
+	assert.False(t, entries[0].Launched)
+	assert.Equal(t, "work", entries[1].Name)
+	assert.True(t, entries[1].Launched)
+}
+
+func TestShowLogs_NoLogFile(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	output, err := ShowLogs(layout, "", "", 50)
+	require.NoError(t, err)
+	assert.Contains(t, output, "No logs found")
+}
+
+func TestShowLogs_WithEntries(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	logContent := "2026-03-30T20:00:00Z action=launch agent=claude-code profile=work container=c1 image=ubuntu\n" +
+		"2026-03-30T20:01:00Z action=exit container=c1 exit_code=0\n" +
+		"2026-03-30T20:05:00Z action=launch agent=aider profile=default container=c2 image=ubuntu\n"
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "ai-shim.log"), []byte(logContent), 0644))
+
+	layout := storage.NewLayout(root)
+
+	// Show all
+	output, err := ShowLogs(layout, "", "", 50)
+	require.NoError(t, err)
+	assert.Contains(t, output, "agent=claude-code")
+	assert.Contains(t, output, "agent=aider")
+
+	// Filter by agent
+	output, err = ShowLogs(layout, "claude-code", "", 50)
+	require.NoError(t, err)
+	assert.Contains(t, output, "agent=claude-code")
+	assert.NotContains(t, output, "agent=aider")
+
+	// Filter by agent+profile
+	output, err = ShowLogs(layout, "aider", "default", 50)
+	require.NoError(t, err)
+	assert.Contains(t, output, "agent=aider")
+	assert.NotContains(t, output, "agent=claude-code")
+}
+
+func TestShowLogs_TailN(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	var lines string
+	for i := 0; i < 10; i++ {
+		lines += fmt.Sprintf("2026-03-30T20:%02d:00Z action=launch agent=a%d profile=p container=c%d image=img\n", i, i, i)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "ai-shim.log"), []byte(lines), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowLogs(layout, "", "", 3)
+	require.NoError(t, err)
+	resultLines := strings.Split(strings.TrimSpace(output), "\n")
+	assert.Len(t, resultLines, 3)
+	assert.Contains(t, resultLines[0], "agent=a7") // last 3 lines
+}
+
+func TestStripDockerLogHeaders(t *testing.T) {
+	// Build a Docker multiplexed log frame: stdout(1), 3 padding, 4-byte size, payload
+	payload := []byte("hello world\n")
+	frame := make([]byte, 8+len(payload))
+	frame[0] = 1 // stdout
+	frame[4] = byte(len(payload) >> 24)
+	frame[5] = byte(len(payload) >> 16)
+	frame[6] = byte(len(payload) >> 8)
+	frame[7] = byte(len(payload))
+	copy(frame[8:], payload)
+
+	result := stripDockerLogHeaders(frame)
+	assert.Equal(t, payload, result)
 }
 
 func TestShowConfig(t *testing.T) {
