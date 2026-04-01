@@ -9,6 +9,7 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -35,6 +36,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -107,6 +109,7 @@ jobs:
 
   test-macos:
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -145,6 +148,7 @@ jobs:
     # so Docker/Colima cannot start a Linux VM. Intel runners work.
     # When GitHub enables nested virt on M3+ runners, switch back to macos-latest.
     runs-on: macos-15-intel
+    timeout-minutes: 15
     env:
       AI_SHIM_CI: "1"
     steps:
@@ -186,6 +190,7 @@ jobs:
   e2e:
     needs: [test]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       AI_SHIM_CI: "1"
     steps:
@@ -199,6 +204,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         goos: [linux, darwin]

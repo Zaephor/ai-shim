@@ -19,6 +19,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/docker"
 	"github.com/ai-shim/ai-shim/internal/parse"
+	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -146,8 +147,9 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 
 	if len(cfg.Env) > 0 {
 		fmt.Fprintf(&b, "  env:%s\n", src("env"))
-		for k, v := range cfg.Env {
-			fmt.Fprintf(&b, "    %s=%s\n", k, v)
+		masked := security.MaskSecrets(cfg.Env)
+		for k := range cfg.Env {
+			fmt.Fprintf(&b, "    %s=%s\n", k, masked[k])
 		}
 	}
 
@@ -424,8 +426,9 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 
 	if len(cfg.Env) > 0 {
 		b.WriteString("  Env:\n")
-		for k, v := range cfg.Env {
-			fmt.Fprintf(&b, "    %s=%s\n", k, v)
+		masked := security.MaskSecrets(cfg.Env)
+		for k := range cfg.Env {
+			fmt.Fprintf(&b, "    %s=%s\n", k, masked[k])
 		}
 	}
 

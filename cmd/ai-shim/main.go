@@ -85,7 +85,7 @@ Commands:
 Environment Variables:
   AI_SHIM_IMAGE         Override container image
   AI_SHIM_VERSION       Pin agent version
-  AI_SHIM_UPDATE_INTERVAL Agent update interval (always/never/1d/7d)
+  AI_SHIM_UPDATE_INTERVAL Agent update interval (always/never/1d/7d/24h or any Go duration)
   AI_SHIM_DIND          Enable/disable DIND (0/1)
   AI_SHIM_DIND_GPU      Enable/disable GPU for DIND (0/1)
   AI_SHIM_GPU           Enable/disable GPU (0/1)
@@ -245,6 +245,7 @@ Subcommands:
   restore         Restore a profile from backup
   disk-usage      Show storage usage breakdown
   cleanup         Remove orphaned containers, networks, volumes
+  logs            Show launch/exit logs or container logs
   agent-versions  Show installed agent versions
   reinstall       Force reinstall an agent
 `)
@@ -271,7 +272,7 @@ func printSubcommandHelp(cmd string) error {
 		"restore":        "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
 		"disk-usage":     "Usage: ai-shim manage disk-usage\n\n  Show storage usage breakdown by category and profile.",
 		"agent-versions": "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
-		"reinstall":      "Usage: ai-shim manage reinstall <agent> [profile]\n\n  Force reinstall an agent by clearing its bin cache.",
+		"reinstall":      "Usage: ai-shim manage reinstall <agent>\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":           "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
 		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
 		"logs":           "Usage: ai-shim manage logs [agent] [profile]\n\n  Without arguments: show the launch/exit log.\n  With agent [profile]: show Docker container logs for the most recent matching container.",
@@ -557,7 +558,7 @@ func runManageSubcommand(args []string) error {
 
 	case "reinstall":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: ai-shim manage reinstall <agent> [profile]")
+			return fmt.Errorf("usage: ai-shim manage reinstall <agent>")
 		}
 		agentName := args[1]
 		if err := cli.Reinstall(layout, agentName); err != nil {

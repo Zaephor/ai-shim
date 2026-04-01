@@ -483,7 +483,7 @@ git:
 		"test-image",        // image
 		"test-host",         // hostname
 		"1.0.0",             // version
-		"KEY=value",         // env
+		"KEY=***",           // env (sensitive key, masked)
 		"--flag",            // args
 		"/a:/b",             // volumes
 		"8080:80",           // ports
@@ -1007,4 +1007,48 @@ func TestContainerDisplayName_NoNames(t *testing.T) {
 		ID: "abc123def456abcdef",
 	}
 	assert.Equal(t, "abc123def456", containerDisplayName(c))
+}
+
+func TestShowConfig_MasksSensitiveEnvVars(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+env:
+  ANTHROPIC_API_KEY: "sk-ant-secret123"
+  SAFE_VAR: "visible"
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowConfig(layout, "claude-code", "work")
+	require.NoError(t, err)
+	assert.Contains(t, output, "ANTHROPIC_API_KEY=***", "sensitive env var value should be masked")
+	assert.Contains(t, output, "SAFE_VAR=visible", "non-sensitive env var should remain visible")
+	assert.NotContains(t, output, "sk-ant-secret123", "secret value must not appear in output")
+}
+
+func TestDryRun_MasksSensitiveEnvVars(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+env:
+  ANTHROPIC_API_KEY: "sk-ant-secret123"
+  SAFE_VAR: "visible"
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "work", nil)
+	require.NoError(t, err)
+	assert.Contains(t, output, "ANTHROPIC_API_KEY=***", "sensitive env var value should be masked in dry-run")
+	assert.Contains(t, output, "SAFE_VAR=visible", "non-sensitive env var should remain visible in dry-run")
+	assert.NotContains(t, output, "sk-ant-secret123", "secret value must not appear in dry-run output")
 }

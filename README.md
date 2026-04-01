@@ -106,6 +106,7 @@ args:
 
 dind: false
 gpu: false
+# dind_gpu: false                # GPU passthrough for DIND sidecar
 network_scope: isolated     # global, profile, workspace, profile-workspace, isolated
 
 # Git identity for commits made inside the container
@@ -121,6 +122,9 @@ git:
 # resources:                # optional container resource limits
 #   memory: "4g"
 #   cpus: "2.0"
+# dind_resources:
+#   memory: 2g
+#   cpus: "1.0"
 dind_hostname: ai-shim-dind # hostname for the DIND sidecar container
 dind_mirrors:               # registry mirrors (default: mirror.gcr.io)
   - https://mirror.gcr.io
@@ -181,8 +185,8 @@ See `configs/examples/` for annotated example files and
 - **Agent data registry** -- each built-in agent defines its `DataDirs` and
   `DataFiles` (e.g. `~/.claude`, `~/.claude.json`), which are persisted
   per-profile and shared when cross-agent access is granted
-- **Tool provisioning** -- typed installers (tar-extract, binary-download, apt,
-  go-install, custom) provision dev tools into the container
+- **Tool provisioning** -- typed installers (tar-extract, tar-extract-selective,
+  binary-download, apt, go-install, custom) provision dev tools into the container
 - **Template variables** -- Go `text/template` support in env vars, volumes,
   and image names, with variables kept separate from container env
 - **Profile isolation** -- each profile gets its own persistent home directory,
