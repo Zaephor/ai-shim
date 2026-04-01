@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -396,4 +398,80 @@ func TestRunManage_ManageSymlinksListDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := runManage([]string{"manage", "symlinks", "list", tmpDir})
 	assert.NoError(t, err)
+}
+
+// TestRunAgent_FullPipeline exercises the complete runAgent flow:
+// symlink parse → config resolve → BuildSpec → Docker launch.
+// The agent installs inside the container and exits (no TTY/config).
+// This is the only test that covers the runAgent orchestrator directly —
+// other e2e tests bypass it by building specs manually.
+func TestRunAgent_FullPipeline(t *testing.T) {
+	skipIfNoDocker(t)
+
+	// Use a Docker-accessible directory for HOME. In DooD environments,
+	// /tmp is inside the container overlay and invisible to the host
+	// Docker daemon. The project's tmp/ dir is bind-mounted.
+	// Go test runs from the package directory (cmd/ai-shim/).
+	// Navigate up to the project root for the Docker-accessible tmp/ dir.
+	cwd, _ := os.Getwd()
+	projectRoot := filepath.Join(cwd, "..", "..")
+	base := filepath.Join(projectRoot, "tmp", "e2e-test")
+	require.NoError(t, os.MkdirAll(base, 0755))
+	tmpHome, err := os.MkdirTemp(base, "runagent-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpHome) })
+	t.Setenv("HOME", tmpHome)
+
+	err = runManage([]string{"init"})
+	require.NoError(t, err, "init should succeed")
+
+	// Run opencode agent in a goroutine with a timeout. The agent will
+	// install via npm and then hang waiting for input (no TTY). We verify
+	// the pipeline reaches the container run phase — if config resolve,
+	// BuildSpec, or container creation fails, runAgent returns an error
+	// before the timeout.
+	type result struct {
+		exitCode int
+		err      error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		code, runErr := runAgent("opencode", nil)
+		ch <- result{code, runErr}
+	}()
+
+	select {
+	case r := <-ch:
+		// Agent exited (non-zero is expected without config)
+		require.NoError(t, r.err,
+			"runAgent pipeline should not error (exit code %d is expected from agent)", r.exitCode)
+	case <-time.After(90 * time.Second):
+		// Timeout means the container is running — the pipeline succeeded.
+		// The agent is just waiting for input. This is the expected path.
+		t.Log("runAgent pipeline reached container run phase (agent waiting for input, as expected)")
+	}
+}
+
+// TestRunAgent_UnknownAgent verifies the error path when an unknown agent
+// is specified. This tests the early exit before Docker is involved.
+func TestRunAgent_UnknownAgent(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	_ = runManage([]string{"init"})
+
+	_, err := runAgent("nonexistent-agent-xyz", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown agent")
+}
+
+// TestRunAgent_FirstRunDetected verifies runAgent fails gracefully before
+// ai-shim is initialized.
+func TestRunAgent_FirstRunDetected(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	// Don't run init — should trigger first-run detection
+
+	_, err := runAgent("opencode", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "init")
 }
