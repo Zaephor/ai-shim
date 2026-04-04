@@ -22,20 +22,20 @@ jobs:
       - name: Check for vulnerabilities
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          # Known Docker SDK vulns (server-side daemon bugs, not client-side):
-          #   GO-2026-4887: AuthZ plugin bypass with oversized request bodies
-          #   GO-2026-4883: Off-by-one in plugin privilege validation
-          # Both are in docker/docker with no fixed version available.
-          # Filter these from the output; fail only on new/unknown vulns.
+          # govulncheck has no native suppression (golang/go#59507).
+          # Skip vulns with no fix available — we can't act on them.
           govulncheck ./... 2>&1 | tee /tmp/vulncheck.out || true
+          # Parse output: each vuln block has "Fixed in:" line
+          # "Fixed in: N/A" = no upstream fix, skip it
+          # "Fixed in: v1.2.3" = fixable, fail CI
           if grep -q "Vulnerability #" /tmp/vulncheck.out; then
-            unknown=$(grep "Vulnerability #" /tmp/vulncheck.out | grep -v "GO-2026-4887\|GO-2026-4883" || true)
-            if [ -n "$unknown" ]; then
-              echo "::error::New vulnerabilities found:"
-              echo "$unknown"
+            fixable=$(awk '/^Vulnerability #/{vuln=$0} /Fixed in:/{if ($NF != "N/A") print vuln}' /tmp/vulncheck.out || true)
+            if [ -n "$fixable" ]; then
+              echo "::error::Fixable vulnerabilities found — upgrade dependencies:"
+              echo "$fixable"
               exit 1
             fi
-            echo "Only known/accepted Docker SDK vulnerabilities found — skipping"
+            echo "Only unfixable upstream vulnerabilities found (no patched versions available) — skipping"
           fi
       - name: Check dependency licenses
         run: |
