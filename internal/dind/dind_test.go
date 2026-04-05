@@ -14,6 +14,8 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -391,6 +393,81 @@ func TestDetectSysbox(t *testing.T) {
 
 	// Just verify it doesn't panic/error -- sysbox likely not available in CI
 	_ = DetectSysbox(ctx, cli)
+}
+
+// TestSidecar_StartStopLifecycle tests the DIND sidecar container lifecycle
+// without waiting for the Docker daemon inside to become ready.
+func TestSidecar_StartStopLifecycle(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	// Create a network for the sidecar
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-lifecycle", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	// Ensure the DIND image is available
+	_, inspectErr := cli.ImageInspect(ctx, DefaultImage)
+	if inspectErr != nil {
+		reader, pullErr := cli.ImagePull(ctx, DefaultImage, image.PullOptions{})
+		if pullErr != nil {
+			t.Fatal("failed to pull DIND image:", pullErr)
+		}
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+	}
+
+	// Manually create volume + container (bypassing Start to avoid WaitForReady)
+	containerName := "ai-shim-test-lifecycle-dind"
+	socketVolName := containerName + "-socket"
+
+	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{
+		Name:   socketVolName,
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.ContainerCreate(ctx, &container.Config{
+		Image:  DefaultImage,
+		Labels: map[string]string{"ai-shim": "test"},
+		Env:    []string{"DOCKER_TLS_CERTDIR="},
+	}, &container.HostConfig{
+		Privileged:  true,
+		NetworkMode: container.NetworkMode(netHandle.ID),
+		Mounts: []mount.Mount{
+			{Type: mount.TypeVolume, Source: socketVolName, Target: "/var/run"},
+		},
+	}, nil, nil, containerName)
+	require.NoError(t, err)
+
+	err = cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
+	require.NoError(t, err)
+
+	sidecar := &Sidecar{
+		client:        cli,
+		containerID:   resp.ID,
+		containerName: containerName,
+		hostname:      "test-lifecycle",
+		socketVolume:  socketVolName,
+	}
+
+	// Verify accessors return expected values
+	assert.NotEmpty(t, sidecar.ContainerID(), "ContainerID should be non-empty")
+	assert.NotEmpty(t, sidecar.SocketVolume(), "SocketVolume should be non-empty")
+	assert.Equal(t, containerName, sidecar.ContainerName())
+	assert.Equal(t, "test-lifecycle", sidecar.Hostname())
+	assert.Empty(t, sidecar.CertsVolume(), "no TLS so CertsVolume should be empty")
+
+	// Stop the sidecar
+	err = sidecar.Stop(ctx)
+	require.NoError(t, err)
+
+	// Verify the container is gone
+	_, inspectErr = cli.ContainerInspect(ctx, resp.ID)
+	assert.Error(t, inspectErr, "container should not exist after Stop")
 }
 
 func TestDetectSysbox_ReturnsFalseWithoutSysbox(t *testing.T) {

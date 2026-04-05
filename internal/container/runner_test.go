@@ -281,3 +281,41 @@ func TestRun_ContextCancellationStopsContainer(t *testing.T) {
 	_ = exitCode
 	_ = runErr
 }
+
+func TestEnsureImage_PullsNewImage(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// Pull a specific small image
+	err = runner.EnsureImage(ctx, "alpine:3.20")
+	require.NoError(t, err, "should pull alpine:3.20 without error")
+
+	// Second call should be a no-op (image cached)
+	err = runner.EnsureImage(ctx, "alpine:3.20")
+	require.NoError(t, err, "cached image should return without error")
+
+	// Bogus image should error
+	err = runner.EnsureImage(ctx, "nonexistent/image:fake")
+	assert.Error(t, err, "non-existent image should produce an error")
+}
+
+func TestInspectImageUser_UbuntuImage(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// Ensure the image is available
+	require.NoError(t, runner.EnsureImage(ctx, "ubuntu:24.04"))
+
+	user, err := runner.InspectImageUser(ctx, "ubuntu:24.04")
+	require.NoError(t, err)
+	assert.NotEmpty(t, user.HomeDir, "HomeDir should be non-empty")
+	assert.NotEmpty(t, user.Username, "Username should be non-empty")
+}

@@ -1297,3 +1297,22 @@ func TestCleanup_WithOrphanedContainer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, containers, "container should be removed after cleanup")
 }
+
+func TestStatusWithColor_ReturnsOutput(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+
+	output, err := StatusWithColor(false)
+	require.NoError(t, err, "StatusWithColor should not error when Docker is available")
+	assert.True(t,
+		strings.Contains(output, "No running") || strings.Contains(output, "Running"),
+		"output should indicate container status, got: %s", output)
+}
+
+func TestDoctorWithColor_ChecksDocker(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+
+	output := DoctorWithColor(false)
+	assert.Contains(t, output, "Docker daemon", "should check Docker daemon")
+	assert.Contains(t, output, "OK", "Docker should be OK since it is available")
+	assert.Contains(t, output, "Storage root", "should report storage root")
+}
