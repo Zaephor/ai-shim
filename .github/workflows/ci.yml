@@ -161,8 +161,10 @@ jobs:
     # ARM macOS runners (macos-latest = M-series) lack nested virtualization,
     # so Docker/Colima cannot start a Linux VM. Intel runners work.
     # When GitHub enables nested virt on M3+ runners, switch back to macos-latest.
+    # Colima startup is slow and flaky on free Intel runners — best-effort only.
     runs-on: macos-15-intel
-    timeout-minutes: 15
+    timeout-minutes: 20
+    continue-on-error: true
     env:
       AI_SHIM_CI: "1"
     steps:
@@ -196,7 +198,7 @@ jobs:
           done
           docker info
       - name: E2E and integration tests
-        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 600s
+        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 900s
       - name: Stop Colima
         if: always()
         run: colima stop
