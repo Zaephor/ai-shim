@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	ai_container "github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/network"
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/container"
@@ -189,6 +190,52 @@ func TestMaybeStopCache_DoesNothingWhenNoCache(t *testing.T) {
 	MaybeStopCache(ctx, cli)
 }
 
+func TestMaybeStopCache_RemovesActualCacheContainer(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	// Create a container named like the cache container with ai-shim cache labels
+	resp, err := cli.ContainerCreate(ctx, &container.Config{
+		Image: "alpine:latest",
+		Cmd:   []string{"sleep", "3600"},
+		Labels: map[string]string{
+			ai_container.LabelBase:  "true",
+			ai_container.LabelCache: "true",
+		},
+	}, nil, nil, nil, CacheContainerName)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		// Belt-and-suspenders cleanup in case MaybeStopCache fails
+		cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+	})
+
+	err = cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
+	require.NoError(t, err)
+
+	// Verify the container exists
+	containers, err := cli.ContainerList(ctx, container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
+	})
+	require.NoError(t, err)
+	require.Len(t, containers, 1, "cache container should exist before MaybeStopCache")
+
+	// Call MaybeStopCache - should remove it since no consumers exist
+	MaybeStopCache(ctx, cli)
+
+	// Verify the container is gone
+	containers, err = cli.ContainerList(ctx, container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, containers, "cache container should be removed after MaybeStopCache")
+
+	// Call MaybeStopCache again - should be a no-op
+	MaybeStopCache(ctx, cli)
+}
+
 func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -344,4 +391,24 @@ func TestDetectSysbox(t *testing.T) {
 
 	// Just verify it doesn't panic/error -- sysbox likely not available in CI
 	_ = DetectSysbox(ctx, cli)
+}
+
+func TestDetectSysbox_ReturnsFalseWithoutSysbox(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	// Sysbox is not installed in this environment, so it should return false
+	result := DetectSysbox(ctx, cli)
+	assert.False(t, result, "DetectSysbox should return false when sysbox-runc is not installed")
+
+	// Verify the underlying Docker info call works (no error path)
+	info, err := cli.Info(ctx)
+	require.NoError(t, err, "Docker info should succeed")
+	// Double-check: sysbox-runc should not be in the runtimes list
+	for name := range info.Runtimes {
+		assert.NotEqual(t, "sysbox-runc", name, "sysbox-runc should not be available")
+	}
 }

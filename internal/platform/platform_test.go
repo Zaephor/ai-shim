@@ -71,6 +71,18 @@ func TestCountGPUsViaSMI_NoNvidiaSMI(t *testing.T) {
 	assert.True(t, count >= 0, "GPU count should be non-negative")
 }
 
+func TestDetect_AllFieldsPopulatedOnLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-specific test")
+	}
+	info := Detect()
+	assert.True(t, info.UID >= 0, "UID should be non-negative")
+	assert.True(t, info.GID >= 0, "GID should be non-negative")
+	assert.NotEmpty(t, info.Hostname, "Hostname should be populated")
+	assert.NotEmpty(t, info.Username, "Username should be populated")
+	assert.NotEmpty(t, info.DockerSocket, "DockerSocket should be non-empty")
+}
+
 func TestDetectGPU_OnLinuxNoGPU(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-specific test")

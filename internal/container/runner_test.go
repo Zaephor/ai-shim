@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,6 +212,41 @@ func TestSaveExitLog_Appends(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "exit_code=1")
 	assert.Contains(t, string(data), "exit_code=2")
+}
+
+func TestSaveExitLog_LogDirIsFile(t *testing.T) {
+	// If logDir points to a regular file (not a directory), saveExitLog should
+	// not panic — it should silently fail because MkdirAll will error.
+	tmpDir := t.TempDir()
+	fakeDir := filepath.Join(tmpDir, "not-a-dir")
+	require.NoError(t, os.WriteFile(fakeDir, []byte("I am a file"), 0644))
+
+	r := &Runner{}
+	// Must not panic
+	r.saveExitLog(fakeDir, "test-container", 42)
+
+	// The file should still be a regular file, not replaced
+	info, err := os.Stat(fakeDir)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir(), "file should not have been replaced with a directory")
+}
+
+func TestSaveExitLog_AppendsMultipleEntries(t *testing.T) {
+	logDir := t.TempDir()
+	r := &Runner{}
+
+	r.saveExitLog(logDir, "multi", 1)
+	r.saveExitLog(logDir, "multi", 2)
+	r.saveExitLog(logDir, "multi", 3)
+
+	data, err := os.ReadFile(filepath.Join(logDir, "multi.log"))
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	assert.Len(t, lines, 3, "should have 3 log entries from 3 calls")
+	assert.Contains(t, lines[0], "exit_code=1")
+	assert.Contains(t, lines[1], "exit_code=2")
+	assert.Contains(t, lines[2], "exit_code=3")
 }
 
 func TestRun_ContextCancellationStopsContainer(t *testing.T) {

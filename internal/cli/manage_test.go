@@ -11,11 +11,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"context"
+	"time"
+
 	"github.com/ai-shim/ai-shim/internal/color"
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/testutil"
 	container_types "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
 )
 
 func TestListAgents(t *testing.T) {
@@ -1051,4 +1056,244 @@ env:
 	assert.Contains(t, output, "ANTHROPIC_API_KEY=***", "sensitive env var value should be masked in dry-run")
 	assert.Contains(t, output, "SAFE_VAR=visible", "non-sensitive env var should remain visible in dry-run")
 	assert.NotContains(t, output, "sk-ant-secret123", "secret value must not appear in dry-run output")
+}
+
+// --- formatBytes boundary tests ---
+
+func TestFormatBytes_AllBoundaries(t *testing.T) {
+	tests := []struct {
+		input    int64
+		expected string
+	}{
+		{0, "0 B"},
+		{1, "1 B"},
+		{1023, "1023 B"},
+		{1024, "1.0 KB"},
+		{1048575, "1024.0 KB"}, // 1 MB - 1 byte, still KB
+		{1048576, "1.0 MB"},
+		{1073741824, "1.0 GB"},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.input), func(t *testing.T) {
+			got := formatBytes(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// --- containerDisplayName tests ---
+
+func TestContainerDisplayName_MultipleNames(t *testing.T) {
+	c := container_types.Summary{
+		Names: []string{"/first-name", "/second-name"},
+		ID:    "abc123def456abcdef",
+	}
+	assert.Equal(t, "first-name", containerDisplayName(c))
+}
+
+func TestContainerDisplayName_EmptyNames(t *testing.T) {
+	c := container_types.Summary{
+		Names: []string{},
+		ID:    "abc123def456abcdef",
+	}
+	assert.Equal(t, "abc123def456", containerDisplayName(c))
+}
+
+// --- stripDockerLogHeaders edge case tests ---
+
+func TestStripDockerLogHeaders_EmptyInput(t *testing.T) {
+	result := stripDockerLogHeaders(nil)
+	assert.Nil(t, result)
+
+	result = stripDockerLogHeaders([]byte{})
+	assert.Nil(t, result)
+}
+
+func TestStripDockerLogHeaders_TruncatedHeader(t *testing.T) {
+	// Less than 8 bytes — not a valid frame, should return nil
+	result := stripDockerLogHeaders([]byte{1, 0, 0, 0, 0})
+	assert.Nil(t, result)
+}
+
+func TestStripDockerLogHeaders_MultipleFrames(t *testing.T) {
+	buildFrame := func(streamType byte, payload []byte) []byte {
+		frame := make([]byte, 8+len(payload))
+		frame[0] = streamType
+		frame[4] = byte(len(payload) >> 24)
+		frame[5] = byte(len(payload) >> 16)
+		frame[6] = byte(len(payload) >> 8)
+		frame[7] = byte(len(payload))
+		copy(frame[8:], payload)
+		return frame
+	}
+
+	p1 := []byte("hello ")
+	p2 := []byte("world\n")
+	data := append(buildFrame(1, p1), buildFrame(1, p2)...)
+	result := stripDockerLogHeaders(data)
+	assert.Equal(t, []byte("hello world\n"), result)
+}
+
+func TestStripDockerLogHeaders_StderrFrame(t *testing.T) {
+	payload := []byte("error output\n")
+	frame := make([]byte, 8+len(payload))
+	frame[0] = 2 // stderr stream type
+	frame[4] = byte(len(payload) >> 24)
+	frame[5] = byte(len(payload) >> 16)
+	frame[6] = byte(len(payload) >> 8)
+	frame[7] = byte(len(payload))
+	copy(frame[8:], payload)
+
+	result := stripDockerLogHeaders(frame)
+	assert.Equal(t, payload, result)
+}
+
+func TestStripDockerLogHeaders_OversizedFrameHeader(t *testing.T) {
+	// Header says 100 bytes but only 5 bytes of data follow — should clamp
+	frame := make([]byte, 8+5)
+	frame[0] = 1
+	frame[7] = 100 // claims 100 bytes
+	copy(frame[8:], []byte("short"))
+
+	result := stripDockerLogHeaders(frame)
+	assert.Equal(t, []byte("short"), result)
+}
+
+// --- ShowLogs filter matches nothing ---
+
+func TestShowLogs_FilterMatchesNothing(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	logContent := "2026-03-30T20:00:00Z action=launch agent=claude-code profile=work container=c1 image=ubuntu\n"
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "ai-shim.log"), []byte(logContent), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowLogs(layout, "nonexistent-agent", "nonexistent-profile", 50)
+	require.NoError(t, err)
+	assert.Contains(t, output, "No logs found for agent=nonexistent-agent")
+}
+
+// --- DryRun env masking with multiple key types ---
+
+func TestDryRun_MasksMultipleKeyTypes(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "agent-profiles"), 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "default.yaml"), []byte(`
+image: "test:latest"
+env:
+  OPENAI_API_KEY: "sk-openai-secret"
+  GEMINI_API_KEY: "AIza-gemini-secret"
+  NORMAL_VAR: "plaintext"
+`), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := DryRun(layout, "claude-code", "default", nil)
+	require.NoError(t, err)
+	assert.Contains(t, output, "OPENAI_API_KEY=***", "OPENAI key should be masked")
+	assert.Contains(t, output, "GEMINI_API_KEY=***", "GEMINI key should be masked")
+	assert.Contains(t, output, "NORMAL_VAR=plaintext", "non-sensitive var should be visible")
+	assert.NotContains(t, output, "sk-openai-secret", "OpenAI secret must not appear")
+	assert.NotContains(t, output, "AIza-gemini-secret", "Gemini secret must not appear")
+}
+
+func TestContainerLogs_Integration(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	containerName := "ai-shim-test-logs-" + fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+
+	// Create and start a container with ai-shim labels
+	resp, err := cli.ContainerCreate(ctx, &container_types.Config{
+		Image: "alpine:latest",
+		Cmd:   []string{"echo", "hello"},
+		Labels: map[string]string{
+			container.LabelBase:    "true",
+			container.LabelAgent:   "test-agent",
+			container.LabelProfile: "test-profile",
+		},
+	}, nil, nil, nil, containerName)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cli.ContainerRemove(ctx, resp.ID, container_types.RemoveOptions{Force: true})
+	})
+
+	err = cli.ContainerStart(ctx, resp.ID, container_types.StartOptions{})
+	require.NoError(t, err)
+
+	// Wait for the container to finish
+	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container_types.WaitConditionNotRunning)
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-statusCh:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for container to finish")
+	}
+
+	// Call ContainerLogs and verify output
+	output, err := ContainerLogs("test-agent", "test-profile", 100)
+	require.NoError(t, err)
+	assert.Contains(t, output, containerName, "output should contain the container name")
+	assert.Contains(t, output, "hello", "output should contain the echoed message")
+}
+
+func TestCleanup_WithOrphanedContainer(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	containerName := "ai-shim-test-cleanup-" + fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+
+	// Create a stopped container with ai-shim labels (simulate orphan)
+	resp, err := cli.ContainerCreate(ctx, &container_types.Config{
+		Image: "alpine:latest",
+		Cmd:   []string{"true"},
+		Labels: map[string]string{
+			container.LabelBase:    "true",
+			container.LabelAgent:   "test-agent",
+			container.LabelProfile: "test-profile",
+		},
+	}, nil, nil, nil, containerName)
+	require.NoError(t, err)
+
+	// Verify the container exists
+	containers, err := cli.ContainerList(ctx, container_types.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("id", resp.ID)),
+	})
+	require.NoError(t, err)
+	require.Len(t, containers, 1, "orphaned container should exist before cleanup")
+
+	// Run Cleanup
+	result, err := Cleanup()
+	require.NoError(t, err)
+
+	// The orphaned container should have been removed
+	found := false
+	for _, name := range result.RemovedContainers {
+		if name == containerName {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "cleanup result should include the orphaned container %s, got: %v", containerName, result.RemovedContainers)
+
+	// Verify the container is gone
+	containers, err = cli.ContainerList(ctx, container_types.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("id", resp.ID)),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, containers, "container should be removed after cleanup")
 }

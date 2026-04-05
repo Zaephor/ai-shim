@@ -475,3 +475,163 @@ func TestRunAgent_FirstRunDetected(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "init")
 }
+
+// TestRunAgent_UnknownAgentSuggestions verifies the error message for an
+// unknown agent includes the list of available agents as suggestions.
+func TestRunAgent_UnknownAgentSuggestions(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	_ = runManage([]string{"init"})
+
+	_, err := runAgent("totally-bogus-agent", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown agent")
+	// Should list available agents as suggestions
+	assert.Contains(t, err.Error(), "claude-code")
+	assert.Contains(t, err.Error(), "aider")
+}
+
+// TestRunAgent_FirstRunCreatesConfigDir verifies that after init, runAgent
+// proceeds past the first-run check (and fails later at Docker, not at init).
+func TestRunAgent_FirstRunCreatesConfigDir(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	require.NoError(t, runManage([]string{"init"}))
+
+	// Should get past first-run detection and fail at Docker setup
+	_, err := runAgent("claude-code", nil)
+	require.Error(t, err)
+	// Should NOT contain "init" — it should fail later in the pipeline
+	assert.NotContains(t, err.Error(), "run 'ai-shim init'")
+}
+
+func TestRunManage_ManageLogsNoArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	// manage logs with no args should show persistent log (or "no logs" message)
+	err := runManage([]string{"manage", "logs"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageLogsWithAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	// manage logs <agent> — should attempt container logs, fall back to
+	// persistent log filtered by agent. Should not panic or error.
+	err := runManage([]string{"manage", "logs", "claude-code"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageLogsWithAgentAndProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	// manage logs <agent> <profile> — should not panic
+	err := runManage([]string{"manage", "logs", "claude-code", "work"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageLogsHelp(t *testing.T) {
+	err := runManage([]string{"manage", "logs", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageDiskUsageNoInit(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	// disk-usage should work even without init (empty storage)
+	err := runManage([]string{"manage", "disk-usage"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageAgentVersionsNoInit(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	// agent-versions should work even without init
+	err := runManage([]string{"manage", "agent-versions"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageSwitchProfileValid(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "switch-profile", "production"})
+	assert.NoError(t, err)
+
+	// Switching again to a different profile should also work
+	err = runManage([]string{"manage", "switch-profile", "staging"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageBackupMissingProfile(t *testing.T) {
+	err := runManage([]string{"manage", "backup"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageRestoreMissingArchive(t *testing.T) {
+	err := runManage([]string{"manage", "restore", "myprofile"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageRestoreMissingAll(t *testing.T) {
+	err := runManage([]string{"manage", "restore"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageWatchMissingAgent(t *testing.T) {
+	err := runManage([]string{"manage", "watch"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageWatchHelp(t *testing.T) {
+	err := runManage([]string{"manage", "watch", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageSwitchProfileHelp(t *testing.T) {
+	err := runManage([]string{"manage", "switch-profile", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageBackupHelp(t *testing.T) {
+	err := runManage([]string{"manage", "backup", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageRestoreHelp(t *testing.T) {
+	err := runManage([]string{"manage", "restore", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_CompletionInvalid(t *testing.T) {
+	err := runManage([]string{"completion", "powershell"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported shell")
+}
+
+func TestRunManage_UnknownManageSubcommand(t *testing.T) {
+	err := runManage([]string{"manage", "frobnicate"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown manage subcommand")
+	// Should list available subcommands
+	assert.Contains(t, err.Error(), "agents")
+	assert.Contains(t, err.Error(), "profiles")
+}
+
+func TestRunManage_ManageStatusJSON(t *testing.T) {
+	skipIfNoDocker(t)
+	t.Setenv("AI_SHIM_JSON", "1")
+	err := runManage([]string{"manage", "status"})
+	assert.NoError(t, err)
+}

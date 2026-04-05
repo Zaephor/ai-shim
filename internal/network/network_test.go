@@ -92,6 +92,44 @@ func TestEnsureNetwork_HandlesAlreadyExists(t *testing.T) {
 	assert.False(t, handle.Created, "should detect pre-existing network")
 }
 
+func TestEnsureNetwork_CreateAndRemoveVerified(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	name := "ai-shim-test-cleanup-" + fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// Create a network via EnsureNetwork
+	handle, err := EnsureNetwork(ctx, cli, name, map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	assert.True(t, handle.Created)
+
+	// Verify the network exists via Docker API
+	networks, err := cli.NetworkList(ctx, dnetwork.ListOptions{})
+	require.NoError(t, err)
+	found := false
+	for _, n := range networks {
+		if n.ID == handle.ID {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "network should exist after EnsureNetwork")
+
+	// Remove the network
+	err = handle.Remove(ctx)
+	assert.NoError(t, err)
+
+	// Verify the network is gone
+	networks, err = cli.NetworkList(ctx, dnetwork.ListOptions{})
+	require.NoError(t, err)
+	for _, n := range networks {
+		assert.NotEqual(t, handle.ID, n.ID, "network should be gone after Remove")
+	}
+}
+
 func TestEnsureNetwork_ReusesExisting(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
