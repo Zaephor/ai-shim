@@ -635,3 +635,62 @@ func TestRunManage_ManageStatusJSON(t *testing.T) {
 	err := runManage([]string{"manage", "status"})
 	assert.NoError(t, err)
 }
+
+// TestInitIdempotency verifies that running init twice does not clobber
+// user-modified config files (default.yaml, agent configs, profile configs).
+func TestInitIdempotency(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	// First init — creates default configs
+	require.NoError(t, runManage([]string{"init"}))
+
+	configDir := filepath.Join(tmpDir, ".ai-shim", "config")
+
+	// Read default.yaml and verify it was created
+	defaultYAML := filepath.Join(configDir, "default.yaml")
+	original, err := os.ReadFile(defaultYAML)
+	require.NoError(t, err)
+	require.NotEmpty(t, original)
+
+	// Modify default.yaml — add a custom field at the end
+	customContent := string(original) + "\ncustom_user_field: preserve_me\n"
+	require.NoError(t, os.WriteFile(defaultYAML, []byte(customContent), 0644))
+
+	// Modify the example agent config
+	agentConfig := filepath.Join(configDir, "agents", "claude-code.yaml")
+	agentOriginal, err := os.ReadFile(agentConfig)
+	require.NoError(t, err)
+	agentCustom := string(agentOriginal) + "\nmy_custom_setting: true\n"
+	require.NoError(t, os.WriteFile(agentConfig, []byte(agentCustom), 0644))
+
+	// Modify the example profile config
+	profileConfig := filepath.Join(configDir, "profiles", "work.yaml")
+	profileOriginal, err := os.ReadFile(profileConfig)
+	require.NoError(t, err)
+	profileCustom := string(profileOriginal) + "\nmy_profile_setting: enabled\n"
+	require.NoError(t, os.WriteFile(profileConfig, []byte(profileCustom), 0644))
+
+	// Second init — should NOT clobber any of the above
+	require.NoError(t, runManage([]string{"init"}))
+
+	// Verify default.yaml still has the custom field
+	afterInit, err := os.ReadFile(defaultYAML)
+	require.NoError(t, err)
+	assert.Contains(t, string(afterInit), "custom_user_field: preserve_me",
+		"init clobbered default.yaml — user config was lost")
+	assert.Equal(t, customContent, string(afterInit),
+		"default.yaml content changed after second init")
+
+	// Verify agent config still has the custom setting
+	afterAgent, err := os.ReadFile(agentConfig)
+	require.NoError(t, err)
+	assert.Contains(t, string(afterAgent), "my_custom_setting: true",
+		"init clobbered agent config — user config was lost")
+
+	// Verify profile config still has the custom setting
+	afterProfile, err := os.ReadFile(profileConfig)
+	require.NoError(t, err)
+	assert.Contains(t, string(afterProfile), "my_profile_setting: enabled",
+		"init clobbered profile config — user config was lost")
+}

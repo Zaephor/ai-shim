@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,11 +15,7 @@ import (
 
 func TestProfileExamples_URLsReachable(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping URL check in short mode")
-	}
-	// Only run in CI to avoid hammering URLs during local dev
-	if os.Getenv("AI_SHIM_CI") != "1" {
-		t.Skip("skipping URL check outside CI (set AI_SHIM_CI=1)")
+		t.Skip("skipping URL liveness check in short mode (network-dependent)")
 	}
 
 	root := projectRoot()
@@ -31,12 +28,13 @@ func TestProfileExamples_URLsReachable(t *testing.T) {
 		t.Fatal("no profile YAML files found")
 	}
 
-	// Collect all URLs from all profile files.
+	// Collect all unique URLs from all profile files, tracking where each appears.
 	type urlEntry struct {
 		url      string
 		file     string
 		toolName string
 	}
+	seen := make(map[string]bool)
 	var urls []urlEntry
 
 	for _, f := range files {
@@ -51,7 +49,8 @@ func TestProfileExamples_URLsReachable(t *testing.T) {
 		}
 
 		for toolName, tool := range cfg.Tools {
-			if tool.URL != "" {
+			if tool.URL != "" && !seen[tool.URL] {
+				seen[tool.URL] = true
 				urls = append(urls, urlEntry{
 					url:      tool.URL,
 					file:     filepath.Base(f),
@@ -66,18 +65,17 @@ func TestProfileExamples_URLsReachable(t *testing.T) {
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 15 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Don't follow redirects — we just want the status code.
+			// Don't follow redirects — we just want the initial status code.
 			return http.ErrUseLastResponse
 		},
 	}
 
-	// Limit concurrency to 3 parallel requests.
-	sem := make(chan struct{}, 3)
+	// Limit concurrency to 5 parallel requests.
+	sem := make(chan struct{}, 5)
 	var mu sync.Mutex
-	reachable := 0
-	total := len(urls)
+	var broken []string
 
 	var wg sync.WaitGroup
 	for _, entry := range urls {
@@ -89,29 +87,37 @@ func TestProfileExamples_URLsReachable(t *testing.T) {
 
 			req, reqErr := http.NewRequest(http.MethodHead, e.url, nil)
 			if reqErr != nil {
-				t.Logf("WARNING: %s tool %q: invalid URL %q: %v", e.file, e.toolName, e.url, reqErr)
+				mu.Lock()
+				broken = append(broken, fmt.Sprintf("%s tool %q: invalid URL %q: %v", e.file, e.toolName, e.url, reqErr))
+				mu.Unlock()
 				return
 			}
 			req.Header.Set("User-Agent", "ai-shim-ci-url-check/1.0")
 
 			resp, doErr := client.Do(req)
 			if doErr != nil {
-				t.Logf("WARNING: %s tool %q: HEAD %q failed: %v", e.file, e.toolName, e.url, doErr)
+				mu.Lock()
+				broken = append(broken, fmt.Sprintf("%s tool %q: HEAD %q failed: %v", e.file, e.toolName, e.url, doErr))
+				mu.Unlock()
 				return
 			}
 			resp.Body.Close()
 
-			switch resp.StatusCode {
-			case http.StatusOK, http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect:
-				mu.Lock()
-				reachable++
-				mu.Unlock()
+			switch {
+			case resp.StatusCode >= 200 && resp.StatusCode < 400:
+				// OK: 2xx success or 3xx redirect.
 			default:
-				t.Logf("WARNING: %s tool %q: HEAD %q returned %d", e.file, e.toolName, e.url, resp.StatusCode)
+				mu.Lock()
+				broken = append(broken, fmt.Sprintf("%s tool %q: HEAD %q returned %d", e.file, e.toolName, e.url, resp.StatusCode))
+				mu.Unlock()
 			}
 		}(entry)
 	}
 	wg.Wait()
 
-	t.Logf("%d/%d URLs reachable", reachable, total)
+	t.Logf("%d/%d URLs reachable", len(urls)-len(broken), len(urls))
+
+	for _, msg := range broken {
+		t.Errorf("broken URL: %s", msg)
+	}
 }

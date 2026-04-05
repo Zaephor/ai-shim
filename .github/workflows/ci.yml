@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -40,7 +40,7 @@ jobs:
       - name: Check dependency licenses
         run: |
           go install github.com/google/go-licenses@latest
-          go-licenses check ./... --disallowed_types=restricted,reciprocal 2>&1 || true
+          go-licenses check ./... --disallowed_types=restricted,reciprocal 2>&1
           # List all licenses for visibility
           go-licenses csv ./... 2>/dev/null | head -30
       - name: Validate goreleaser config
@@ -52,10 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: Check formatting
         run: |
           bad=$(gofmt -l .)
@@ -83,7 +83,7 @@ jobs:
           go test ./internal/invocation/ -fuzz=FuzzParseName -fuzztime=10s
           go test ./internal/parse/ -fuzz=FuzzImageDigest -fuzztime=10s
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage
           path: coverage.out
@@ -125,10 +125,10 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: Unit + integration tests (no Docker)
         run: go test -short ./... -v -race -count=1
       - name: Build native binary
@@ -168,10 +168,10 @@ jobs:
     env:
       AI_SHIM_CI: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: Install Docker via Colima
         run: |
           brew install docker colima
@@ -210,10 +210,10 @@ jobs:
     env:
       AI_SHIM_CI: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: E2E and integration tests
         run: AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s -race
         timeout-minutes: 15
@@ -226,10 +226,10 @@ jobs:
         goos: [linux, darwin]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.25.8'
+          go-version-file: go.mod
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -251,7 +251,7 @@ jobs:
             exit 1
           fi
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ai-shim-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ai-shim-${{ matrix.goos }}-${{ matrix.goarch }}
