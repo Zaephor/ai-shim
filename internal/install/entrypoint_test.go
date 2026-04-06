@@ -308,3 +308,40 @@ echo "$need_install"
 		require.NoError(t, err, "generated script has syntax errors: %s", string(out))
 	})
 }
+
+// TestUpdateInterval_ClockBackwards verifies that if the recorded last-update
+// timestamp is in the future (clock skew, host reboot with bad RTC, time
+// resync) the install logic still triggers — elapsed becomes negative and
+// must be treated as "needs reinstall" rather than "still fresh".
+func TestUpdateInterval_ClockBackwards(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType:    "npm",
+		Package:        "test-pkg",
+		Binary:         "test-bin",
+		AgentName:      "test-agent",
+		UpdateInterval: 604800, // 7 days
+	})
+
+	// The generated template must contain the negative-elapsed guard.
+	assert.Contains(t, script, "-lt 0",
+		"template must guard against clock-backwards (negative elapsed)")
+
+	// Reproduce the comparison logic with last in the future and verify
+	// the conditional fires (need_install=true).
+	bashScript := `
+set -e
+need_install=false
+now=$(date +%s)
+last=$((now + 86400))   # last update is 1 day in the FUTURE
+elapsed=$((now - last)) # negative
+if [ "$elapsed" -lt 0 ] || [ "$elapsed" -ge 604800 ]; then
+  need_install=true
+fi
+echo "$need_install"
+`
+	cmd := exec.Command("bash", "-c", bashScript)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "bash error: %s", string(out))
+	assert.Equal(t, "true", strings.TrimSpace(string(out)),
+		"clock-backwards (last > now) must trigger reinstall")
+}

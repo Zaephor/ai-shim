@@ -81,7 +81,7 @@ func Init(layout storage.Layout) error {
 	// Seed example agent config
 	agentExample := filepath.Join(layout.ConfigDir, "agents", "claude-code.yaml")
 	if _, err := os.Stat(agentExample); os.IsNotExist(err) {
-		_ = os.WriteFile(agentExample, []byte(`# Claude Code agent configuration
+		if err := os.WriteFile(agentExample, []byte(`# Claude Code agent configuration
 # Uncomment and customize as needed
 # env:
 #   ANTHROPIC_API_KEY: "your-key-here"
@@ -94,13 +94,15 @@ func Init(layout storage.Layout) error {
 #   filesystem:
 #     command: npx
 #     args: ["@modelcontextprotocol/server-filesystem", "/workspace"]
-`), 0644)
+`), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to write example %s: %v\n", agentExample, err)
+		}
 	}
 
 	// Seed example profile config
 	profileExample := filepath.Join(layout.ConfigDir, "profiles", "work.yaml")
 	if _, err := os.Stat(profileExample); os.IsNotExist(err) {
-		_ = os.WriteFile(profileExample, []byte(`# Work profile configuration
+		if err := os.WriteFile(profileExample, []byte(`# Work profile configuration
 # This profile's home directory is mounted as the container's home
 # Uncomment and customize as needed
 # env:
@@ -108,7 +110,9 @@ func Init(layout storage.Layout) error {
 # volumes:
 #   - "/host/path:/container/path"
 # security_profile: strict
-`), 0644)
+`), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to write example %s: %v\n", profileExample, err)
+		}
 	}
 
 	return nil

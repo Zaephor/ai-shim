@@ -20,8 +20,46 @@ import (
 	"github.com/ai-shim/ai-shim/internal/selfupdate"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/ai-shim/ai-shim/internal/workspace"
+	container_types "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 )
+
+// cleanupStaleContainers removes any non-running ai-shim containers for the
+// given agent+profile. This handles the SIGKILL/OOM/reboot orphan case
+// where AutoRemove never fired and a stale container blocks the next launch.
+// All errors are silently ignored — this is best-effort housekeeping.
+func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agentName, profileName string) {
+	cli := runner.Client()
+	if cli == nil {
+		return
+	}
+	// Two list calls: one for "exited" + one for "dead". The Docker filter
+	// API treats multiple status values as OR within the same filter key,
+	// but we issue them separately to be portable across API versions.
+	for _, status := range []string{"exited", "dead", "created"} {
+		list, err := cli.ContainerList(ctx, container_types.ListOptions{
+			All: true,
+			Filters: filters.NewArgs(
+				filters.Arg("label", container.LabelBase+"=true"),
+				filters.Arg("label", container.LabelAgent+"="+agentName),
+				filters.Arg("label", container.LabelProfile+"="+profileName),
+				filters.Arg("status", status),
+			),
+		})
+		if err != nil {
+			logging.Debug("stale container list (%s) failed: %v", status, err)
+			continue
+		}
+		for _, c := range list {
+			if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
+				logging.Debug("stale container remove %s failed: %v", c.ID[:12], err)
+				continue
+			}
+			logging.Debug("cleaned up stale container %s (status=%s)", c.ID[:12], status)
+		}
+	}
+}
 
 var version = "dev"
 
@@ -264,7 +302,7 @@ func printSubcommandHelp(cmd string) error {
 		"profiles":       "Usage: ai-shim manage profiles\n\n  List all configured and launched profiles.",
 		"config":         "Usage: ai-shim manage config <agent> [profile]\n\n  Show the fully resolved config for an agent+profile combination.\n  Profile defaults to \"default\" if omitted.",
 		"doctor":         "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
-		"symlinks":       "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink",
+		"symlinks":       "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink\n\nName rules:\n  Agent and profile names must start with a letter or digit and may only\n  contain ASCII letters, digits, '.', '_', and '-' (max 63 characters).\n  These restrictions match Docker container naming so the resulting\n  containers and on-disk paths are always well-formed.",
 		"dry-run":        "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
 		"cleanup":        "Usage: ai-shim manage cleanup\n\n  Remove orphaned ai-shim containers, networks, and volumes.",
 		"status":         "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
@@ -299,7 +337,7 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.ListAgentsJSON()
 			if err != nil {
-				return err
+				return fmt.Errorf("listing agents (JSON): %w", err)
 			}
 			fmt.Print(output)
 			return nil
@@ -311,14 +349,14 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.ListProfilesJSON(layout)
 			if err != nil {
-				return err
+				return fmt.Errorf("listing profiles (JSON): %w", err)
 			}
 			fmt.Print(output)
 			return nil
 		}
 		output, err := cli.ListProfiles(layout)
 		if err != nil {
-			return err
+			return fmt.Errorf("listing profiles: %w", err)
 		}
 		fmt.Print(output)
 		return nil
@@ -339,14 +377,14 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.ShowConfigJSON(layout, agentName, profile)
 			if err != nil {
-				return err
+				return fmt.Errorf("showing config (JSON) for %s/%s: %w", agentName, profile, err)
 			}
 			fmt.Print(output)
 			return nil
 		}
 		output, err := cli.ShowConfig(layout, agentName, profile)
 		if err != nil {
-			return err
+			return fmt.Errorf("showing config for %s/%s: %w", agentName, profile, err)
 		}
 		fmt.Print(output)
 		return nil
@@ -355,7 +393,7 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.DoctorJSON()
 			if err != nil {
-				return err
+				return fmt.Errorf("running doctor (JSON): %w", err)
 			}
 			fmt.Print(output)
 			return nil
@@ -377,14 +415,14 @@ func runManageSubcommand(args []string) error {
 				// Fall back to persistent log filtered by agent
 				output, err = cli.ShowLogs(layout, agent, profile, 50)
 				if err != nil {
-					return err
+					return fmt.Errorf("showing logs for %s/%s: %w", agent, profile, err)
 				}
 			}
 			fmt.Print(output)
 		} else {
 			output, err := cli.ShowLogs(layout, "", "", 50)
 			if err != nil {
-				return err
+				return fmt.Errorf("showing persistent logs: %w", err)
 			}
 			fmt.Print(output)
 		}
@@ -406,7 +444,7 @@ func runManageSubcommand(args []string) error {
 			}
 			links, err := cli.ListSymlinks(dir, exe)
 			if err != nil {
-				return err
+				return fmt.Errorf("listing symlinks in %s: %w", dir, err)
 			}
 			if len(links) == 0 {
 				fmt.Println("No ai-shim symlinks found.")
@@ -418,7 +456,7 @@ func runManageSubcommand(args []string) error {
 			return nil
 		case "create":
 			if len(args) < 3 {
-				return fmt.Errorf("usage: ai-shim manage symlinks create <agent> [profile] [dir]")
+				return fmt.Errorf("usage: ai-shim manage symlinks create <agent> [profile] [dir]\n  agent/profile names: ASCII letters/digits and '._-' only, must start with letter or digit, max 63 chars")
 			}
 			agentName := args[2]
 			profile := "default"
@@ -431,7 +469,7 @@ func runManageSubcommand(args []string) error {
 			}
 			path, err := cli.CreateSymlink(agentName, profile, dir, exe)
 			if err != nil {
-				return err
+				return fmt.Errorf("creating symlink for %s/%s in %s: %w", agentName, profile, dir, err)
 			}
 			fmt.Printf("Created symlink: %s\n", path)
 			return nil
@@ -439,7 +477,10 @@ func runManageSubcommand(args []string) error {
 			if len(args) < 3 {
 				return fmt.Errorf("usage: ai-shim manage symlinks remove <path>")
 			}
-			return cli.RemoveSymlink(args[2])
+			if err := cli.RemoveSymlink(args[2]); err != nil {
+				return fmt.Errorf("removing symlink %s: %w", args[2], err)
+			}
+			return nil
 		default:
 			return fmt.Errorf("unknown symlinks subcommand: %s", args[1])
 		}
@@ -454,7 +495,7 @@ func runManageSubcommand(args []string) error {
 		}
 		output, err := cli.DryRun(layout, args[1], args[2], extraArgs)
 		if err != nil {
-			return err
+			return fmt.Errorf("dry-run for %s/%s: %w", args[1], args[2], err)
 		}
 		fmt.Print(output)
 		return nil
@@ -463,14 +504,14 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.StatusJSON()
 			if err != nil {
-				return err
+				return fmt.Errorf("getting status (JSON): %w", err)
 			}
 			fmt.Print(output)
 			return nil
 		}
 		output, err := cli.Status()
 		if err != nil {
-			return err
+			return fmt.Errorf("getting status: %w", err)
 		}
 		fmt.Print(output)
 		return nil
@@ -484,7 +525,7 @@ func runManageSubcommand(args []string) error {
 			outputPath = args[2]
 		}
 		if err := cli.BackupProfile(layout, args[1], outputPath); err != nil {
-			return err
+			return fmt.Errorf("backing up profile %s: %w", args[1], err)
 		}
 		fmt.Printf("Profile %s backed up successfully\n", args[1])
 		return nil
@@ -494,7 +535,7 @@ func runManageSubcommand(args []string) error {
 			return fmt.Errorf("usage: ai-shim manage restore <profile> <archive-path>")
 		}
 		if err := cli.RestoreProfile(layout, args[1], args[2]); err != nil {
-			return err
+			return fmt.Errorf("restoring profile %s from %s: %w", args[1], args[2], err)
 		}
 		fmt.Printf("Profile %s restored successfully\n", args[1])
 		return nil
@@ -503,14 +544,14 @@ func runManageSubcommand(args []string) error {
 		if jsonMode {
 			output, err := cli.DiskUsageJSON(layout)
 			if err != nil {
-				return err
+				return fmt.Errorf("computing disk usage (JSON): %w", err)
 			}
 			fmt.Print(output)
 			return nil
 		}
 		output, err := cli.DiskUsage(layout)
 		if err != nil {
-			return err
+			return fmt.Errorf("computing disk usage: %w", err)
 		}
 		fmt.Print(output)
 		return nil
@@ -518,10 +559,10 @@ func runManageSubcommand(args []string) error {
 	case "cleanup":
 		result, err := cli.Cleanup()
 		if err != nil {
-			return err
+			return fmt.Errorf("cleaning up orphaned resources: %w", err)
 		}
 		totalRemoved := len(result.RemovedContainers) + len(result.RemovedNetworks) + len(result.RemovedVolumes)
-		if totalRemoved == 0 && len(result.Failed) == 0 {
+		if totalRemoved == 0 && len(result.Failed) == 0 && len(result.Errors) == 0 {
 			fmt.Println("No orphaned resources found.")
 		} else {
 			if len(result.RemovedContainers) > 0 {
@@ -548,6 +589,12 @@ func runManageSubcommand(args []string) error {
 					fmt.Println("  " + f)
 				}
 			}
+			if len(result.Errors) > 0 {
+				fmt.Printf("Encountered %d error(s) during cleanup:\n", len(result.Errors))
+				for _, e := range result.Errors {
+					fmt.Println("  " + e)
+				}
+			}
 		}
 		return nil
 
@@ -562,7 +609,7 @@ func runManageSubcommand(args []string) error {
 		}
 		agentName := args[1]
 		if err := cli.Reinstall(layout, agentName); err != nil {
-			return err
+			return fmt.Errorf("reinstalling agent %s: %w", agentName, err)
 		}
 		fmt.Printf("Agent %s bin cache cleared. It will be reinstalled on next launch.\n", agentName)
 		return nil
@@ -573,7 +620,7 @@ func runManageSubcommand(args []string) error {
 		}
 		exitCode, err := cli.Exec(args[1], args[2:])
 		if err != nil {
-			return err
+			return fmt.Errorf("exec into %s: %w", args[1], err)
 		}
 		os.Exit(exitCode)
 		return nil
@@ -607,7 +654,7 @@ func runManageSubcommand(args []string) error {
 			time.Sleep(d)
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("watch loop for %s: %w", invocationName, err)
 		}
 		os.Exit(exitCode)
 		return nil
@@ -617,7 +664,7 @@ func runManageSubcommand(args []string) error {
 			return fmt.Errorf("usage: ai-shim manage switch-profile <profile>")
 		}
 		if err := cli.SwitchProfile(layout, args[1]); err != nil {
-			return err
+			return fmt.Errorf("switching to profile %s: %w", args[1], err)
 		}
 		fmt.Printf("Default profile set to: %s\n", args[1])
 		return nil
@@ -641,6 +688,13 @@ func runAgent(name string, args []string) (int, error) {
 		if current := cli.CurrentProfile(fallbackLayout); current != "default" {
 			profileName = current
 		}
+	}
+
+	// Re-validate profile after the marker-file fallback so a hand-edited
+	// .current-profile cannot smuggle invalid characters into container or
+	// path construction downstream.
+	if err := invocation.ValidateProfileName(profileName); err != nil {
+		return 1, fmt.Errorf("invalid current profile: %w", err)
 	}
 
 	// 2. Setup storage layout
@@ -724,6 +778,12 @@ func runAgent(name string, args []string) (int, error) {
 		return 1, fmt.Errorf("creating container runner: %w", err)
 	}
 	defer func() { _ = runner.Close() }()
+
+	// 6.1 Best-effort cleanup of stopped containers from previous aborted runs
+	// for this same agent+profile. Aborted runs (SIGKILL, OOM, host reboot)
+	// can leave containers in "exited" or "dead" state which will collide
+	// with the new container's name. Ignore errors — this is housekeeping.
+	cleanupStaleContainers(ctx, runner, agentName, profileName)
 
 	// 6.5 Ensure container image is available
 	image := cfg.GetImage()
@@ -811,7 +871,8 @@ func runAgent(name string, args []string) (int, error) {
 			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
 			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to start registry cache: %v\n", err)
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: registry cache unavailable, image pulls will be slower: %v\n", err)
+				fmt.Fprintf(os.Stderr, "ai-shim: hint: run 'ai-shim manage cleanup' if stale cache container exists\n")
 			} else {
 				cacheAddr = addr
 			}
@@ -848,7 +909,9 @@ func runAgent(name string, args []string) (int, error) {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
 		defer func() {
-			_ = sidecar.Stop(ctx)
+			if err := sidecar.Stop(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to stop DIND sidecar: %v\n", err)
+			}
 			if cfg.IsCacheEnabled() {
 				dind.MaybeStopCache(ctx, runner.Client())
 			}

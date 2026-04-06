@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ai-shim/ai-shim/internal/container"
+	container_types "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +30,77 @@ func TestRunManage_Version(t *testing.T) {
 	// Capture stdout would be complex, just verify no error
 	err := runManage([]string{"version"})
 	assert.NoError(t, err)
+}
+
+// TestCleanupStaleContainers verifies that cleanupStaleContainers removes a
+// stopped ai-shim container with matching agent+profile labels but leaves
+// containers with different labels alone.
+func TestCleanupStaleContainers(t *testing.T) {
+	skipIfNoDocker(t)
+
+	ctx := context.Background()
+	runner, err := container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	cli := runner.Client()
+
+	// Create a container that exits immediately, with the labels the
+	// cleanup function looks for.
+	staleName := "ai-shim-test-stale-" + time.Now().Format("150405.000000")
+	staleName = strings.ReplaceAll(staleName, ".", "-")
+	staleResp, err := cli.ContainerCreate(ctx,
+		&container_types.Config{
+			Image: "alpine:latest",
+			Cmd:   []string{"true"},
+			Labels: map[string]string{
+				container.LabelBase:    "true",
+				container.LabelAgent:   "test-stale-agent",
+				container.LabelProfile: "test-stale-profile",
+			},
+		},
+		&container_types.HostConfig{},
+		nil, nil, staleName)
+	require.NoError(t, err)
+	defer cli.ContainerRemove(ctx, staleResp.ID, container_types.RemoveOptions{Force: true})
+	require.NoError(t, cli.ContainerStart(ctx, staleResp.ID, container_types.StartOptions{}))
+
+	// Wait for the container to exit.
+	statusCh, errCh := cli.ContainerWait(ctx, staleResp.ID, container_types.WaitConditionNotRunning)
+	select {
+	case <-statusCh:
+	case waitErr := <-errCh:
+		require.NoError(t, waitErr)
+	case <-time.After(15 * time.Second):
+		t.Fatal("stale container did not exit within 15s")
+	}
+
+	// Sanity: container should still exist (not running, not removed).
+	listBefore, err := cli.ContainerList(ctx, container_types.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", container.LabelAgent+"=test-stale-agent"),
+			filters.Arg("label", container.LabelProfile+"=test-stale-profile"),
+		),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, listBefore, "stale container should exist before cleanup")
+
+	// Run the cleanup.
+	cleanupStaleContainers(ctx, runner, "test-stale-agent", "test-stale-profile")
+
+	// The stale container should now be gone.
+	listAfter, err := cli.ContainerList(ctx, container_types.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", container.LabelAgent+"=test-stale-agent"),
+			filters.Arg("label", container.LabelProfile+"=test-stale-profile"),
+		),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, listAfter, "cleanup should remove stale containers for this agent+profile")
 }
 
 func TestRunManage_ManageAgents(t *testing.T) {

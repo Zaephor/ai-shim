@@ -236,6 +236,29 @@ func TestEnsureNetwork_ConcurrentCreation(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestHandle_Remove_IdempotentWhenAlreadyGone verifies that calling Remove
+// on a network another actor has already deleted returns nil rather than a
+// "not found" error. Regression test for the concurrent-removal race fix.
+func TestHandle_Remove_IdempotentWhenAlreadyGone(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	name := "ai-shim-test-idempotent-remove-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	handle, err := EnsureNetwork(ctx, cli, name, map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	require.True(t, handle.Created)
+
+	// Simulate a concurrent process removing the network out from under us.
+	require.NoError(t, cli.NetworkRemove(ctx, handle.ID))
+
+	// Remove must still report success.
+	err = handle.Remove(ctx)
+	assert.NoError(t, err, "Remove should be idempotent when network is already gone")
+}
+
 func TestEnsureNetwork_ReusesExisting(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()

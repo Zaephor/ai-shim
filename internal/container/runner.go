@@ -68,27 +68,88 @@ func NewRunner(ctx context.Context) (*Runner, error) {
 	return &Runner{client: cli}, nil
 }
 
-// EnsureImage pulls a Docker image if it's not available locally.
-// Provides progress output to stderr.
-func (r *Runner) EnsureImage(ctx context.Context, image string) error {
-	// Check if image exists locally
-	_, err := r.client.ImageInspect(ctx, image)
+// isPermanentImagePullError returns true if the error is one we should not
+// retry on (auth/not-found errors won't recover from a delay).
+func isPermanentImagePullError(err error) bool {
 	if err == nil {
-		return nil // already available
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	permanentSubstrings := []string{
+		"not found",
+		"unauthorized",
+		"denied",
+		"manifest unknown",
+		"repository does not exist",
+		"requested access to the resource is denied",
+	}
+	for _, s := range permanentSubstrings {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// pullImageOnce performs a single image pull attempt and consumes the stream.
+// Docker reports pull errors mid-stream as JSON messages, so we scan the
+// returned body for an error field rather than relying on the ImagePull return.
+func (r *Runner) pullImageOnce(ctx context.Context, image string) error {
+	reader, err := r.client.ImagePull(ctx, image, image_types.PullOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = reader.Close() }()
+	body, copyErr := io.ReadAll(reader)
+	if copyErr != nil {
+		logging.Debug("image pull stream: %v", copyErr)
+	}
+	if idx := strings.Index(string(body), "\"error\""); idx >= 0 {
+		snippet := string(body[idx:])
+		if len(snippet) > 256 {
+			snippet = snippet[:256]
+		}
+		return fmt.Errorf("pull stream: %s", snippet)
+	}
+	return nil
+}
+
+// EnsureImage pulls a Docker image if it's not available locally.
+// Provides progress output to stderr. Retries up to 3 times with exponential
+// backoff (1s, 2s) on transient errors. Permanent errors (not found,
+// unauthorized) are returned immediately without retry.
+func (r *Runner) EnsureImage(ctx context.Context, image string) error {
+	// Fast path: already present locally.
+	if _, err := r.client.ImageInspect(ctx, image); err == nil {
+		return nil
 	}
 
 	fmt.Fprintf(os.Stderr, "ai-shim: pulling image %s...\n", image)
-	reader, err := r.client.ImagePull(ctx, image, image_types.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("pulling image %s: %w", image, err)
+
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			fmt.Fprintf(os.Stderr, "ai-shim: pull attempt %d/%d failed, retrying in %s...\n", attempt, maxAttempts, backoff)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+		err := r.pullImageOnce(ctx, image)
+		if err == nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: image %s ready\n", image)
+			return nil
+		}
+		lastErr = err
+		if isPermanentImagePullError(err) {
+			return fmt.Errorf("pulling image %s: %w", image, err)
+		}
+		logging.Debug("image pull attempt %d failed: %v", attempt+1, err)
 	}
-	defer func() { _ = reader.Close() }()
-	// Consume the reader to complete the pull
-	if _, err := io.Copy(io.Discard, reader); err != nil {
-		logging.Debug("image pull stream: %v", err)
-	}
-	fmt.Fprintf(os.Stderr, "ai-shim: image %s ready\n", image)
-	return nil
+	return fmt.Errorf("pulling image %s after %d attempts: %w", image, maxAttempts, lastErr)
 }
 
 // Run creates, starts, attaches to, and waits for a container. Returns exit code.
@@ -323,6 +384,14 @@ func (r *Runner) saveExitLog(logDir, name string, exitCode int) {
 		return
 	}
 	defer func() { _ = f.Close() }()
+
+	// Advisory exclusive lock prevents concurrent processes from interleaving
+	// exit-log entries. flock(2) is available on Linux and macOS.
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return
+	}
+	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
+
 	_, _ = f.WriteString(entry)
 }
 

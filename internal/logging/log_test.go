@@ -2,13 +2,16 @@ package logging
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDebug_Verbose(t *testing.T) {
@@ -125,4 +128,56 @@ func TestLogLaunch_EmptyLogDir(t *testing.T) {
 	// Should not panic when logDir is empty
 	LogLaunch("", "agent", "profile", "container", "image")
 	LogExit("", "container", 1)
+}
+
+// TestAppendLog_ConcurrentProcesses verifies that concurrent appendLog calls
+// from many goroutines do not interleave or lose log entries. This is a
+// regression test for the file-locking fix that wraps writes with flock(2).
+func TestAppendLog_ConcurrentProcesses(t *testing.T) {
+	logDir := t.TempDir()
+
+	const goroutines = 10
+	const perGoroutine = 20
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(gid int) {
+			defer wg.Done()
+			for i := 0; i < perGoroutine; i++ {
+				appendLog(logDir, fmt.Sprintf("msg goroutine=%d seq=%d", gid, i))
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	content, err := os.ReadFile(filepath.Join(logDir, "ai-shim.log"))
+	require.NoError(t, err)
+
+	// Trailing newline produces a single empty trailing element after Split,
+	// so trim before splitting.
+	text := strings.TrimRight(string(content), "\n")
+	lines := strings.Split(text, "\n")
+
+	require.Equal(t, goroutines*perGoroutine, len(lines),
+		"expected exactly %d log lines, got %d", goroutines*perGoroutine, len(lines))
+
+	// Verify every (goroutine, seq) pair appears exactly once and that no
+	// line was truncated or interleaved with another.
+	seen := make(map[string]bool, goroutines*perGoroutine)
+	for _, line := range lines {
+		// Each line should contain exactly one "msg goroutine=X seq=Y" record.
+		assert.Equal(t, 1, strings.Count(line, "msg goroutine="),
+			"line should contain exactly one record (interleaving detected): %q", line)
+		for g := 0; g < goroutines; g++ {
+			for i := 0; i < perGoroutine; i++ {
+				marker := fmt.Sprintf("msg goroutine=%d seq=%d", g, i)
+				if strings.HasSuffix(line, marker) {
+					assert.False(t, seen[marker], "duplicate marker %q", marker)
+					seen[marker] = true
+				}
+			}
+		}
+	}
+	assert.Equal(t, goroutines*perGoroutine, len(seen), "all messages should be present exactly once")
 }

@@ -4,31 +4,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"sync/atomic"
 
+	"github.com/ai-shim/ai-shim/internal/invocation"
 	"github.com/ai-shim/ai-shim/internal/storage"
 )
 
-var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-
-// isValidProfileName returns true if the profile name contains only
-// alphanumeric characters, hyphens, and underscores.
-func isValidProfileName(name string) bool {
-	return validProfileName.MatchString(name)
-}
+// switchProfileSeq disambiguates temp marker filenames across concurrent
+// in-process callers (which would otherwise share the same PID).
+var switchProfileSeq uint64
 
 const currentProfileFile = ".current-profile"
 
 // SwitchProfile writes the given profile name as the current default profile.
+// The profile name must satisfy invocation.ValidateProfileName.
 func SwitchProfile(layout storage.Layout, profile string) error {
-	if profile == "" {
-		return fmt.Errorf("profile name cannot be empty")
-	}
-
-	// Validate profile name: allowlist of safe characters only
-	if !isValidProfileName(profile) {
-		return fmt.Errorf("invalid profile name: %q (only alphanumeric, hyphens, and underscores allowed)", profile)
+	if err := invocation.ValidateProfileName(profile); err != nil {
+		return err
 	}
 
 	markerPath := filepath.Join(layout.ConfigDir, currentProfileFile)
@@ -38,8 +31,20 @@ func SwitchProfile(layout storage.Layout, profile string) error {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
-	if err := os.WriteFile(markerPath, []byte(profile+"\n"), 0644); err != nil {
+	// Atomic write: stage the new contents in a per-pid temp file inside the
+	// same directory, then rename(2) onto the marker. POSIX rename is atomic
+	// and guarantees that concurrent readers always observe either the old
+	// or the new file — never a truncated/partially written one. Two
+	// concurrent SwitchProfile callers thus end with one well-formed marker
+	// (last writer wins), with no possibility of corruption.
+	seq := atomic.AddUint64(&switchProfileSeq, 1)
+	tmpPath := fmt.Sprintf("%s.tmp.%d.%d", markerPath, os.Getpid(), seq)
+	if err := os.WriteFile(tmpPath, []byte(profile+"\n"), 0644); err != nil {
 		return fmt.Errorf("writing current profile: %w", err)
+	}
+	if err := os.Rename(tmpPath, markerPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("renaming current profile marker: %w", err)
 	}
 
 	return nil

@@ -22,7 +22,7 @@ else
   last=$(cat "$LAST_UPDATE")
   now=$(date +%s)
   elapsed=$((now - last))
-  if [ "$elapsed" -ge 86400 ]; then
+  if [ "$elapsed" -lt 0 ] || [ "$elapsed" -ge 86400 ]; then
     echo "Update interval elapsed, reinstalling aider-chat..."
     need_install=true
   else

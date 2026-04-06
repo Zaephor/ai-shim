@@ -18,6 +18,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/dind"
 	"github.com/ai-shim/ai-shim/internal/docker"
+	"github.com/ai-shim/ai-shim/internal/invocation"
 	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/storage"
@@ -344,11 +345,119 @@ func DoctorWithColor(useColor bool) string {
 	fmt.Fprintf(&b, "    dind image:  %s (%s)\n", dind.DefaultImage, imagePinLabel(dind.DefaultImage, true))
 	fmt.Fprintf(&b, "    cache image: %s (%s)\n", dind.CacheImage, imagePinLabel(dind.CacheImage, true))
 
+	// Symlink health check: scan common bin directories for ai-shim symlinks
+	// and report any whose target no longer exists.
+	valid, broken := scanAIShimSymlinks(symlinkScanDirs())
+	b.WriteString("\n")
+	if len(broken) == 0 {
+		fmt.Fprintf(&b, "  Symlinks:       %s (%d valid symlink(s))\n", c.Green("OK"), len(valid))
+	} else {
+		fmt.Fprintf(&b, "  Symlinks:       %s (%d broken)\n", c.Red("BROKEN"), len(broken))
+		for _, br := range broken {
+			fmt.Fprintf(&b, "    %s -> %s\n", br.Path, br.Target)
+		}
+		if len(valid) > 0 {
+			fmt.Fprintf(&b, "    (%d other symlink(s) are healthy)\n", len(valid))
+		}
+	}
+
 	return b.String()
 }
 
+// brokenSymlink describes a symlink whose target does not exist.
+type brokenSymlink struct {
+	Path   string
+	Target string
+}
+
+// symlinkScanDirs returns the directories to scan for ai-shim symlinks.
+// Order: $HOME/bin, $HOME/.local/bin, /usr/local/bin, /usr/bin, plus any
+// directory on $PATH that the user owns (skipping system dirs already
+// listed). Duplicates are removed.
+func symlinkScanDirs() []string {
+	var dirs []string
+	seen := make(map[string]bool)
+	add := func(d string) {
+		if d == "" {
+			return
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			d = abs
+		}
+		if seen[d] {
+			return
+		}
+		seen[d] = true
+		dirs = append(dirs, d)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		add(filepath.Join(home, "bin"))
+		add(filepath.Join(home, ".local", "bin"))
+	}
+	add("/usr/local/bin")
+	add("/usr/bin")
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		add(p)
+	}
+	return dirs
+}
+
+// scanAIShimSymlinks walks the given directories looking for symlinks that
+// appear to belong to ai-shim (target path contains "ai-shim" or matches the
+// agent_profile naming convention). Returns (valid, broken) lists.
+func scanAIShimSymlinks(dirs []string) (valid []string, broken []brokenSymlink) {
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			full := filepath.Join(dir, e.Name())
+			target, err := os.Readlink(full)
+			if err != nil {
+				continue
+			}
+			// Resolve relative targets against the link's directory.
+			absTarget := target
+			if !filepath.IsAbs(absTarget) {
+				absTarget = filepath.Join(dir, target)
+			}
+			// Heuristic: only consider links whose target name or path
+			// references ai-shim. This avoids reporting unrelated broken
+			// symlinks the user has lying around.
+			if !strings.Contains(absTarget, "ai-shim") &&
+				filepath.Base(absTarget) != "ai-shim" {
+				continue
+			}
+			if _, err := os.Stat(absTarget); err != nil {
+				broken = append(broken, brokenSymlink{Path: full, Target: target})
+			} else {
+				valid = append(valid, full)
+			}
+		}
+	}
+	return valid, broken
+}
+
 // CreateSymlink creates a symlink for an agent+profile combination.
+// Both agent and profile must satisfy invocation.ValidateAgentName /
+// invocation.ValidateProfileName so that the resulting symlink, container
+// name, and on-disk paths are well-formed.
 func CreateSymlink(agent, profile, targetDir string, shimPath string) (string, error) {
+	if err := invocation.ValidateAgentName(agent); err != nil {
+		return "", err
+	}
+	// Allow the empty/"default" sentinel through unchanged so that
+	// `manage symlinks create <agent>` keeps working without an explicit
+	// profile arg, but validate any non-default profile.
+	if profile != "" && profile != "default" {
+		if err := invocation.ValidateProfileName(profile); err != nil {
+			return "", err
+		}
+	}
 	name := agent
 	if profile != "" && profile != "default" {
 		name = agent + "_" + profile
@@ -540,11 +649,17 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 }
 
 // CleanupResult holds the results of a cleanup operation.
+//
+// Failed lists per-resource removal failures (e.g. one container that
+// could not be removed). Errors lists higher-level operation failures
+// such as a NetworkList or VolumeList call returning an error before
+// any individual resource was attempted.
 type CleanupResult struct {
 	RemovedContainers []string
 	RemovedNetworks   []string
 	RemovedVolumes    []string
 	Failed            []string
+	Errors            []string
 }
 
 // Cleanup finds and removes orphaned ai-shim containers, networks, and volumes.
@@ -581,7 +696,9 @@ func Cleanup() (CleanupResult, error) {
 	networks, err := cli.NetworkList(ctx, network_types.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
-	if err == nil {
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("listing networks: %v", err))
+	} else {
 		for _, n := range networks {
 			if err := cli.NetworkRemove(ctx, n.ID); err != nil {
 				result.Failed = append(result.Failed, fmt.Sprintf("network %s: %v", n.Name, err))
@@ -595,7 +712,9 @@ func Cleanup() (CleanupResult, error) {
 	volumes, err := cli.VolumeList(ctx, volume_types.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", container.LabelBase+"=true")),
 	})
-	if err == nil {
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("listing volumes: %v", err))
+	} else {
 		for _, v := range volumes.Volumes {
 			if err := cli.VolumeRemove(ctx, v.Name, true); err != nil {
 				result.Failed = append(result.Failed, fmt.Sprintf("volume %s: %v", v.Name, err))
@@ -681,6 +800,9 @@ func colorizeStatus(c color.Colorer, status string) string {
 }
 
 // BackupProfile creates a tar.gz archive of a profile's home directory.
+// It performs a disk-space pre-flight check (using profile size as a
+// conservative upper bound on archive size, leaving 20% headroom) and
+// removes the partial archive if tar fails mid-write.
 func BackupProfile(layout storage.Layout, profile, outputPath string) error {
 	profileDir := layout.ProfileHome(profile)
 	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
@@ -691,8 +813,31 @@ func BackupProfile(layout storage.Layout, profile, outputPath string) error {
 		outputPath = fmt.Sprintf("ai-shim-backup-%s-%s.tar.gz", profile, time.Now().Format("20060102-150405"))
 	}
 
+	// Pre-flight: verify destination filesystem has enough free space.
+	// We use the uncompressed profile size as a conservative upper bound and
+	// require 20% headroom. If we can't determine free space (e.g. statfs
+	// not supported on the target FS) we skip the check and let tar fail.
+	profileBytes, sizeErr := dirSize(profileDir)
+	if sizeErr == nil {
+		destDir := filepath.Dir(outputPath)
+		if destDir == "" {
+			destDir = "."
+		}
+		if absDest, absErr := filepath.Abs(destDir); absErr == nil {
+			destDir = absDest
+		}
+		if free, freeErr := freeBytes(destDir); freeErr == nil {
+			if uint64(profileBytes) > (free*8)/10 {
+				return fmt.Errorf("insufficient disk space for backup: profile is %s, only %s available at %s (need 20%% headroom)",
+					formatBytes(profileBytes), formatBytes(int64(free)), destDir)
+			}
+		}
+	}
+
 	cmd := exec.Command("tar", "czf", outputPath, "-C", filepath.Dir(profileDir), filepath.Base(profileDir))
 	if output, err := cmd.CombinedOutput(); err != nil {
+		// Clean up partial archive on failure (best-effort).
+		_ = os.Remove(outputPath)
 		return fmt.Errorf("creating backup: %s: %w", string(output), err)
 	}
 

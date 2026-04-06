@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/ai-shim/ai-shim/internal/security"
@@ -55,19 +56,44 @@ func LogExit(logDir, containerName string, exitCode int) {
 }
 
 // appendLog writes a timestamped line to the ai-shim.log file in logDir.
+// Errors are surfaced to stderr only when AI_SHIM_VERBOSE=1, since
+// logging failures should not interrupt agent execution.
 func appendLog(logDir, message string) {
 	if logDir == "" {
 		return
 	}
 	if err := os.MkdirAll(logDir, 0755); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log mkdir failed: %v\n", err)
+		}
 		return
 	}
 	logFile := filepath.Join(logDir, "ai-shim.log")
 	entry := fmt.Sprintf("%s %s\n", time.Now().Format(time.RFC3339), message)
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log open failed: %v\n", err)
+		}
 		return
 	}
 	defer func() { _ = f.Close() }()
-	_, _ = f.WriteString(entry)
+
+	// Acquire an exclusive advisory lock so concurrent ai-shim processes
+	// (or goroutines within one process) cannot interleave their writes.
+	// flock(2) is supported on both Linux and macOS, the only platforms
+	// ai-shim targets.
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log flock failed: %v\n", err)
+		}
+		return
+	}
+	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
+
+	if _, err := f.WriteString(entry); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log write failed: %v\n", err)
+		}
+	}
 }

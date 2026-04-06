@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -301,6 +302,52 @@ func TestEnsureImage_PullsNewImage(t *testing.T) {
 	// Bogus image should error
 	err = runner.EnsureImage(ctx, "nonexistent/image:fake")
 	assert.Error(t, err, "non-existent image should produce an error")
+}
+
+func TestIsPermanentImagePullError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"not found", fmt.Errorf("manifest for foo:bar not found"), true},
+		{"unauthorized", fmt.Errorf("Error response: unauthorized"), true},
+		{"denied", fmt.Errorf("pull access denied for foo"), true},
+		{"manifest unknown", fmt.Errorf("manifest unknown"), true},
+		{"repo missing", fmt.Errorf("repository does not exist"), true},
+		{"network", fmt.Errorf("dial tcp: i/o timeout"), false},
+		{"connection reset", fmt.Errorf("connection reset by peer"), false},
+		{"eof", fmt.Errorf("unexpected EOF"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isPermanentImagePullError(tc.err))
+		})
+	}
+}
+
+// TestEnsureImage_BogusImageFailsFast verifies that pulling a non-existent
+// image returns quickly (no 3x retries with backoff for "not found" errors).
+func TestEnsureImage_BogusImageFailsFast(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	// Bogus image — should fail with a clear "not found"-class error and
+	// not retry through 1s + 2s backoff (>3s total).
+	start := time.Now()
+	err = runner.EnsureImage(ctx, "ai-shim-test-nonexistent/definitely-not-real:fake-tag")
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pulling image")
+	// If we retried 3x with backoff (1s+2s) we'd be over 3s. Allow 2.5s of
+	// network slop but ensure we didn't burn through full backoff.
+	assert.Less(t, elapsed, 3*time.Second, "permanent error should not retry: took %s", elapsed)
 }
 
 func TestInspectImageUser_UbuntuImage(t *testing.T) {

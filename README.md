@@ -190,7 +190,12 @@ See `configs/examples/` for annotated example files and
 - **Template variables** -- Go `text/template` support in env vars, volumes,
   and image names, with variables kept separate from container env
 - **Profile isolation** -- each profile gets its own persistent home directory,
-  so work and personal contexts stay separate
+  so work and personal contexts stay separate.
+
+  Note: running the same profile in multiple terminals simultaneously is not
+  recommended -- the profile home directory is shared and concurrent writes
+  from multiple agents (git config, shell history, package caches) may
+  conflict. Use separate profiles for parallel sessions.
 - **Port mapping** -- forward ports from host to container
 - **Package installation** -- install apt packages at container startup
 - **Resource limits** -- optional memory and CPU limits for agent and DIND
@@ -254,6 +259,9 @@ ai-shim manage symlinks list [dir]
                                 # list ai-shim symlinks in directory
 ai-shim manage symlinks create <agent> [profile] [dir]
                                 # create a symlink
+                                # agent/profile names: ASCII letters/digits and
+                                # '._-' only, must start with a letter or digit,
+                                # max 63 chars (matches Docker container naming)
 ai-shim manage symlinks remove <path>
                                 # remove a symlink
 ai-shim manage cleanup          # remove orphaned ai-shim containers

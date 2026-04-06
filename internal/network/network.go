@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/filters"
 	dnetwork "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -100,9 +101,23 @@ func EnsureNetwork(ctx context.Context, cli *client.Client, name string, labels 
 }
 
 // Remove removes the network only if we created it.
+//
+// The call is idempotent: if another process (or a previous run) has
+// already removed the network, the resulting "not found" error from the
+// Docker API is treated as success. Any other error is wrapped and
+// returned so callers can surface it instead of silently swallowing
+// genuine failures.
 func (h *Handle) Remove(ctx context.Context) error {
 	if !h.Created {
 		return nil // don't remove pre-existing networks
 	}
-	return h.client.NetworkRemove(ctx, h.ID)
+	err := h.client.NetworkRemove(ctx, h.ID)
+	if err == nil {
+		return nil
+	}
+	if cerrdefs.IsNotFound(err) {
+		// Already gone — concurrent removal raced us. Treat as success.
+		return nil
+	}
+	return fmt.Errorf("removing network %s (%s): %w", h.Name, h.ID, err)
 }

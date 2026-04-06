@@ -84,7 +84,10 @@ func generateInstallCheck(p EntrypointParams) string {
 			b.WriteString("  last=$(cat \"$LAST_UPDATE\")\n")
 			b.WriteString("  now=$(date +%s)\n")
 			b.WriteString("  elapsed=$((now - last))\n")
-			fmt.Fprintf(&b, "  if [ \"$elapsed\" -ge %d ]; then\n", p.UpdateInterval)
+			// If elapsed is negative the host clock moved backwards (or
+			// LAST_UPDATE was written from a future-clock host). Treat
+			// the cache as stale and reinstall.
+			fmt.Fprintf(&b, "  if [ \"$elapsed\" -lt 0 ] || [ \"$elapsed\" -ge %d ]; then\n", p.UpdateInterval)
 			fmt.Fprintf(&b, "    echo \"Update interval elapsed, reinstalling %s...\"\n", pkg)
 			b.WriteString("    need_install=true\n")
 			b.WriteString("  else\n")

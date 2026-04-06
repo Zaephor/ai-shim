@@ -14,6 +14,9 @@ func ParseName(name string) (agent, profile string, err error) {
 	}
 	idx := strings.IndexByte(name, '_')
 	if idx < 0 {
+		if err := ValidateAgentName(name); err != nil {
+			return "", "", err
+		}
 		return name, "default", nil
 	}
 	agent = name[:idx]
@@ -23,6 +26,12 @@ func ParseName(name string) (agent, profile string, err error) {
 	}
 	if profile == "" {
 		return "", "", fmt.Errorf("empty profile name in %q", name)
+	}
+	if err := ValidateAgentName(agent); err != nil {
+		return "", "", err
+	}
+	if err := ValidateProfileName(profile); err != nil {
+		return "", "", err
 	}
 	return agent, profile, nil
 }
