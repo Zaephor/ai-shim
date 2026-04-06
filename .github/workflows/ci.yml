@@ -75,7 +75,7 @@ jobs:
       - name: Check for silent failure patterns
         run: make check-silent-failures
       - name: Unit tests
-        run: go test -short ./... -v -race -coverprofile=coverage.out
+        run: go test -short ./... -v -race -coverprofile=coverage.out 2>&1 | tee test-output.log
       - name: Run fuzz tests (quick)
         run: |
           go test ./internal/shell/ -fuzz=FuzzQuote -fuzztime=10s
@@ -96,6 +96,33 @@ jobs:
             echo "::error::Coverage ${total}% is below threshold ${threshold}%"
             exit 1
           fi
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Unit test coverage"
+            echo ""
+            echo "Measures lines executed by \`-short\` tests with explicit assertions."
+            echo "Integration/journey tests run in the \`e2e\` job — see that job for reach."
+            echo ""
+            echo "| Package | Coverage |"
+            echo "|---------|----------|"
+            grep -E "^ok\s+github.com/ai-shim/ai-shim/" test-output.log | \
+              awk '{
+                pkg=$2
+                sub(/^github\.com\/ai-shim\/ai-shim\//, "", pkg)
+                for (i=1; i<=NF; i++) if ($i == "coverage:") { cov=$(i+1); break }
+                if (cov == "") cov="—"
+                printf "| %s | %s |\n", pkg, cov
+              }' | sort
+            total=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}')
+            passed=$(grep -c "^--- PASS:" test-output.log || echo 0)
+            skipped=$(grep -c "^--- SKIP:" test-output.log || echo 0)
+            echo ""
+            echo "**Aggregate line coverage:** ${total}"
+            echo ""
+            echo "**Tests:** ${passed} passed, ${skipped} skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Build native binary
         run: |
           VERSION="dev-$(git rev-parse --short HEAD)"
@@ -161,10 +188,9 @@ jobs:
     # ARM macOS runners (macos-latest = M-series) lack nested virtualization,
     # so Docker/Colima cannot start a Linux VM. Intel runners work.
     # When GitHub enables nested virt on M3+ runners, switch back to macos-latest.
-    # Colima startup is slow and flaky on free Intel runners — best-effort only.
+    # Colima startup is slow on free Intel runners — bumped to 45min job timeout.
     runs-on: macos-15-intel
-    timeout-minutes: 20
-    continue-on-error: true
+    timeout-minutes: 45
     env:
       AI_SHIM_CI: "1"
     steps:
@@ -172,6 +198,16 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      - name: Pre-cache Go dependencies
+        # Download modules and build test binaries in the background so they're
+        # ready by the time Colima finishes starting. On a cold cache this saves
+        # ~12 minutes of serial download time.
+        run: |
+          go mod download &
+          MOD_PID=$!
+          echo "Started go mod download in background (PID $MOD_PID)"
+          # Don't wait — let it run while Colima installs
+          echo "MOD_PID=$MOD_PID" >> "$GITHUB_ENV"
       - name: Install Docker via Colima
         run: |
           brew install docker colima
@@ -197,8 +233,16 @@ jobs:
             sleep 3
           done
           docker info
+      - name: Wait for Go module download to finish
+        run: |
+          if [ -n "${MOD_PID:-}" ] && kill -0 "$MOD_PID" 2>/dev/null; then
+            echo "Waiting for background go mod download (PID $MOD_PID)..."
+            wait "$MOD_PID" || go mod download
+          fi
+          # Pre-build test binaries so the test step doesn't spend time compiling
+          go test -count=0 ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/
       - name: E2E and integration tests
-        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 900s
+        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 1500s
       - name: Stop Colima
         if: always()
         run: colima stop
@@ -215,8 +259,43 @@ jobs:
         with:
           go-version-file: go.mod
       - name: E2E and integration tests
-        run: AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ -v -count=1 -timeout 600s -race
+        run: |
+          AI_SHIM_CI=1 go test ./test/... ./internal/container/ ./internal/dind/ ./internal/network/ ./internal/docker/ \
+            -v -count=1 -timeout 600s -race 2>&1 | tee e2e-output.log
+          exit ${PIPESTATUS[0]}
         timeout-minutes: 15
+      - name: E2E summary
+        if: always()
+        run: |
+          {
+            echo "## Integration & journey test reach"
+            echo ""
+            echo "Journey tests exercise the full stack with real Docker. They verify"
+            echo "end-to-end behavior (agent launches, installs, runs), not unit correctness."
+            echo "Line coverage numbers are deliberately not merged with unit tests — see"
+            echo "the test job for verified coverage."
+            echo ""
+            journeys=$(grep -c "^--- PASS: TestJourney_" e2e-output.log || echo 0)
+            total_pass=$(grep -c "^--- PASS:" e2e-output.log || echo 0)
+            total_fail=$(grep -c "^--- FAIL:" e2e-output.log || echo 0)
+            total_skip=$(grep -c "^--- SKIP:" e2e-output.log || echo 0)
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Journey tests (TestJourney_*) | ${journeys} |"
+            echo "| Total passed | ${total_pass} |"
+            echo "| Total failed | ${total_fail} |"
+            echo "| Total skipped | ${total_skip} |"
+            echo ""
+            echo "### Per-package runtime"
+            echo ""
+            echo "| Package | Duration |"
+            echo "|---------|----------|"
+            grep -E "^ok\s+github.com/ai-shim/ai-shim/" e2e-output.log | \
+              awk '{
+                pkg=$2; sub(/^github\.com\/ai-shim\/ai-shim\//, "", pkg)
+                printf "| %s | %s |\n", pkg, $3
+              }' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     runs-on: ubuntu-latest
@@ -239,17 +318,35 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o ai-shim-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ai-shim
       - name: Verify binary exists
         run: test -f ai-shim-${{ matrix.goos }}-${{ matrix.goarch }} || (echo "Binary not found!" && exit 1)
-      - name: Check binary size
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      - name: Check binary size and hash
+        id: binary_info
         run: |
-          size=$(stat --format=%s ai-shim-${{ matrix.goos }}-${{ matrix.goarch }})
+          binary="ai-shim-${{ matrix.goos }}-${{ matrix.goarch }}"
+          size=$(stat --format=%s "$binary")
           size_mb=$((size / 1048576))
+          sha=$(sha256sum "$binary" | awk '{print $1}')
           echo "Binary size: ${size_mb}MB (${size} bytes)"
+          echo "SHA256: ${sha}"
+          echo "size=${size}" >> "$GITHUB_OUTPUT"
+          echo "size_mb=${size_mb}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           max_mb=20
           if [ "$size_mb" -gt "$max_mb" ]; then
             echo "::error::Binary size ${size_mb}MB exceeds ${max_mb}MB limit"
             exit 1
           fi
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## Build: ${{ matrix.goos }}/${{ matrix.goarch }}"
+            echo ""
+            echo "| Property | Value |"
+            echo "|----------|-------|"
+            echo "| Binary | \`ai-shim-${{ matrix.goos }}-${{ matrix.goarch }}\` |"
+            echo "| Size | ${{ steps.binary_info.outputs.size_mb }}MB (${{ steps.binary_info.outputs.size }} bytes) |"
+            echo "| SHA256 | \`${{ steps.binary_info.outputs.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload binary
         uses: actions/upload-artifact@v6
         with:
