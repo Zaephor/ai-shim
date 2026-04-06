@@ -162,9 +162,6 @@ func TestEnsureNetwork_CreateAndRemoveVerified(t *testing.T) {
 func TestEnsureNetwork_ConcurrentCreation(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	require.NoError(t, err)
-	defer cli.Close()
 
 	name := "ai-shim-test-concurrent-" + fmt.Sprintf("%d", time.Now().UnixNano())
 
@@ -177,7 +174,15 @@ func TestEnsureNetwork_ConcurrentCreation(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			h, err := EnsureNetwork(ctx, cli, name, map[string]string{"ai-shim": "test"})
+			// Each goroutine gets its own Docker client to avoid data races
+			// in the Docker SDK's API version negotiation.
+			c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+			if err != nil {
+				errs[idx] = err
+				return
+			}
+			defer c.Close()
+			h, err := EnsureNetwork(ctx, c, name, map[string]string{"ai-shim": "test"})
 			handles[idx] = h
 			errs[idx] = err
 		}(i)
@@ -201,7 +206,10 @@ func TestEnsureNetwork_ConcurrentCreation(t *testing.T) {
 	}
 
 	// Verify only 1 network exists with this name
-	networks, err := cli.NetworkList(ctx, dnetwork.ListOptions{})
+	verifyCli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer verifyCli.Close()
+	networks, err := verifyCli.NetworkList(ctx, dnetwork.ListOptions{})
 	require.NoError(t, err)
 	count := 0
 	for _, n := range networks {
@@ -220,8 +228,11 @@ func TestEnsureNetwork_ConcurrentCreation(t *testing.T) {
 	}
 	assert.GreaterOrEqual(t, createdCount, 1, "at least one goroutine should have created the network")
 
-	// Cleanup - use the network ID directly since only one creator's Remove will work
-	err = cli.NetworkRemove(ctx, networkID)
+	// Cleanup
+	cleanupCli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cleanupCli.Close()
+	err = cleanupCli.NetworkRemove(ctx, networkID)
 	assert.NoError(t, err)
 }
 
