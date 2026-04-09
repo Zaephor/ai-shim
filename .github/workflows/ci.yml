@@ -242,7 +242,12 @@ jobs:
           # Pre-build test binaries so the test step doesn't spend time compiling
           go test -count=0 ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/
       - name: E2E and integration tests
-        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 1500s
+        # macOS/Colima runs containers ~5x slower than Linux; cumulative happy-path
+        # runtime on the prior run was ~24 min, leaving no headroom against the
+        # -timeout. Raised to 2400s (40 min) for cushion; job-level timeout-minutes
+        # is 45 so we still fail fast if a single test hangs past the per-call
+        # context timeout in helpers_test.go.
+        run: go test ./test/... ./internal/container/ ./internal/dind/ ./internal/docker/ -v -count=1 -timeout 2400s
       - name: Stop Colima
         if: always()
         run: colima stop

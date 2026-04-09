@@ -97,7 +97,8 @@ func TestE2E_EntrypointContainsInstallCommand(t *testing.T) {
 // with the correct environment and hostname.
 func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -116,7 +117,8 @@ func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 // TestE2E_ContainerMountsAccessible tests that storage mounts are accessible.
 func TestE2E_ContainerMountsAccessible(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -144,7 +146,8 @@ func TestE2E_ContainerMountsAccessible(t *testing.T) {
 // TestE2E_ContainerWorkspaceMount tests workspace path hashing and mounting.
 func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -172,7 +175,8 @@ func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 // TestE2E_ContainerUserMapping tests UID/GID mapping.
 func TestE2E_ContainerUserMapping(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -198,7 +202,8 @@ func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
 		t.Skip("skipping slow E2E test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -229,7 +234,8 @@ func TestE2E_RealEntrypointExecution(t *testing.T) {
 		t.Skip("skipping slow E2E test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -283,7 +289,8 @@ func TestE2E_FullFlowWithConfig(t *testing.T) {
 		t.Skip("skipping slow E2E test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -346,7 +353,8 @@ env:
 // config resolve -> build spec -> container runs
 func TestE2E_FullBuildSpecProducesValidContainer(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()

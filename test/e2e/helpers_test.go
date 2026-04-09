@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
 	"github.com/ai-shim/ai-shim/internal/cli"
@@ -16,6 +17,27 @@ import (
 	"github.com/ai-shim/ai-shim/internal/platform"
 	"github.com/ai-shim/ai-shim/internal/storage"
 	"github.com/stretchr/testify/require"
+)
+
+// Per-container test timeouts. These bound each test's Runner.Run call so a
+// hung container surfaces as a clear "context deadline exceeded" failure
+// rather than blocking the whole test binary until the global -timeout fires.
+//
+// Linux containers finish in well under a minute; macOS via Colima is ~5x
+// slower but still well within these budgets. Adjust if Colima regresses.
+const (
+	// buildAndRunTimeout bounds buildAndRun's per-container lifetime.
+	// Used by journey tests that run the real agent entrypoint.
+	buildAndRunTimeout = 5 * time.Minute
+
+	// quickRunTimeout bounds short single-command containers (hostname
+	// checks, mount checks, echo, etc.). These finish in seconds on Linux.
+	quickRunTimeout = 2 * time.Minute
+
+	// installRunTimeout bounds agent-install and tool-verification runs.
+	// These are legitimately slow on Colima — TestDefaultImage_HasRequiredTools
+	// was observed at 395s on macOS CI — so the budget has to be generous.
+	installRunTimeout = 10 * time.Minute
 )
 
 // setupJourneyLayout creates a temp root under the Docker-accessible project
@@ -38,7 +60,8 @@ type specOverride func(*container.ContainerSpec)
 
 func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string, cfg config.Config, verifyCmd string, overrides ...specOverride) (string, int) {
 	t.Helper()
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), buildAndRunTimeout)
+	defer cancel()
 
 	def, ok := agent.Lookup(agentName)
 	require.True(t, ok, "agent %q must exist in registry", agentName)

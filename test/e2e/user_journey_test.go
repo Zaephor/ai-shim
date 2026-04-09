@@ -181,7 +181,8 @@ func TestJourney_ContainerCleanup(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 
 	// AutoRemove is async — give Docker a moment to clean up.
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), installRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -407,7 +408,8 @@ func TestJourney_CleanupRemovesOrphans(t *testing.T) {
 		t.Skip("skipping slow journey test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), installRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
@@ -481,7 +483,8 @@ func TestJourney_DINDSidecar(t *testing.T) {
 		t.Skip("skipping DIND journey test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), installRunTimeout)
+	defer cancel()
 
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)

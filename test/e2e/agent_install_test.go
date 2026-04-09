@@ -29,7 +29,8 @@ func TestE2E_AllAgents_InstallAndLaunch(t *testing.T) {
 		t.Skip("skipping all-agent install on macOS — already covered by Linux e2e, too slow via Colima")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), installRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()

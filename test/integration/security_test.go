@@ -377,8 +377,9 @@ func TestSecurity_ImageDigestValidation(t *testing.T) {
 	}
 }
 
-// TestSecurity_InvocationNameInjection verifies that ParseName handles
-// adversarial symlink names without panicking or leaking paths.
+// TestSecurity_InvocationNameInjection verifies that ParseName rejects
+// adversarial symlink names (path traversal, shell metacharacters) before
+// they can reach the filesystem or container runtime.
 func TestSecurity_InvocationNameInjection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
@@ -401,16 +402,14 @@ func TestSecurity_InvocationNameInjection(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "path_traversal",
-			input:     "../../../etc/passwd",
-			wantAgent: "../../../etc/passwd",
-			wantErr:   false, // ParseName just splits on _, no path validation
+			name:    "path_traversal",
+			input:   "../../../etc/passwd",
+			wantErr: true, // ValidateAgentName rejects '/' and leading '.'
 		},
 		{
-			name:      "semicolon_in_name",
-			input:     "agent; rm -rf /",
-			wantAgent: "agent; rm -rf /",
-			wantErr:   false, // ParseName does not validate shell safety
+			name:    "semicolon_in_name",
+			input:   "agent; rm -rf /",
+			wantErr: true, // ValidateAgentName rejects ';', ' ', '/'
 		},
 	}
 

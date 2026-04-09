@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -248,6 +249,57 @@ func TestSaveExitLog_AppendsMultipleEntries(t *testing.T) {
 	assert.Contains(t, lines[0], "exit_code=1")
 	assert.Contains(t, lines[1], "exit_code=2")
 	assert.Contains(t, lines[2], "exit_code=3")
+}
+
+// TestRun_NoGoroutineLeakWithBackgroundContext is a regression test for a bug
+// where Run() spawned a watcher goroutine doing `<-ctx.Done()`. When callers
+// passed context.Background() (whose Done() returns nil), the watcher blocked
+// on a nil channel forever and leaked one goroutine per Run() call. CI stack
+// dumps showed 30+ leaked goroutines accumulating during the e2e suite.
+//
+// The fix wires a `runDone` channel that defer-closes on every Run() return
+// path; the watcher selects on both, so normal exits free it.
+func TestRun_NoGoroutineLeakWithBackgroundContext(t *testing.T) {
+	ctx := context.Background()
+	runner := newTestRunner(t, ctx)
+	defer runner.Close()
+
+	// Settle baseline: do one warm-up Run so any one-shot init goroutines
+	// (Docker client lazy state, etc.) are already counted.
+	_, err := runner.Run(ctx, ContainerSpec{
+		Image:  testImage,
+		Cmd:    []string{"true"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	time.Sleep(200 * time.Millisecond)
+	runtime.GC()
+	baseline := runtime.NumGoroutine()
+
+	// Run several more containers with the non-cancellable context. Without
+	// the fix, each call leaks the watcher goroutine, so the count grows
+	// roughly linearly with N. With the fix, it stays flat.
+	const n = 5
+	for i := 0; i < n; i++ {
+		_, err := runner.Run(ctx, ContainerSpec{
+			Image:  testImage,
+			Cmd:    []string{"true"},
+			Labels: map[string]string{"ai-shim": "test"},
+		})
+		require.NoError(t, err)
+	}
+
+	// Allow any in-flight cleanup (deferred close, scheduler) to settle.
+	time.Sleep(200 * time.Millisecond)
+	runtime.GC()
+	after := runtime.NumGoroutine()
+
+	// Allow a small slack for scheduler jitter and unrelated runtime
+	// goroutines, but reject anything close to N leaks.
+	const slack = 2
+	assert.LessOrEqual(t, after, baseline+slack,
+		"goroutine leak: baseline=%d after %d Run() calls=%d (slack=%d)",
+		baseline, n, after, slack)
 }
 
 func TestRun_ContextCancellationStopsContainer(t *testing.T) {

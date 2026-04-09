@@ -232,14 +232,25 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		return -1, fmt.Errorf("starting container: %w", err)
 	}
 
+	// runDone signals normal exit so the cancellation watcher below can
+	// terminate. Without this, callers passing a non-cancellable context
+	// (e.g. context.Background(), whose Done() returns nil) would leak the
+	// watcher goroutine forever — it would block on <-nil indefinitely.
+	runDone := make(chan struct{})
+	defer close(runDone)
+
 	// Stop container when context is cancelled (e.g. programmatic shutdown).
 	// Uses a background context for the stop call since the original ctx is done.
 	go func() {
-		<-ctx.Done()
-		stopTimeout := 10 // seconds
-		_ = r.client.ContainerStop(context.Background(), containerID, container.StopOptions{
-			Timeout: &stopTimeout,
-		})
+		select {
+		case <-ctx.Done():
+			stopTimeout := 10 // seconds
+			_ = r.client.ContainerStop(context.Background(), containerID, container.StopOptions{
+				Timeout: &stopTimeout,
+			})
+		case <-runDone:
+			// Run() returned normally; nothing to stop.
+		}
 	}()
 
 	// Forward signals to container (critical for non-TTY mode;

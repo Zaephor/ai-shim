@@ -42,7 +42,8 @@ func TestConcurrent_ParallelLaunch(t *testing.T) {
 		t.Skip("skipping slow concurrent test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
 
 	// Pre-pull alpine once on the host so the parallel goroutines don't
 	// race on the image pull (which can serialize behind Docker's pull lock).

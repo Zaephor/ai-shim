@@ -18,7 +18,8 @@ func TestDefaultImage_HasRequiredTools(t *testing.T) {
 		t.Skip("skipping image compatibility test")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), installRunTimeout)
+	defer cancel()
 	runner, err := container.NewRunner(ctx)
 	require.NoError(t, err)
 	defer runner.Close()
