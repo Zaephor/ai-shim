@@ -1,6 +1,6 @@
 module github.com/ai-shim/ai-shim
 
-go 1.25.8
+go 1.25.9
 
 require (
 	github.com/containerd/errdefs v1.0.0
