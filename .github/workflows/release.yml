@@ -1,9 +1,28 @@
 name: Release
 
+# This workflow is called by release-please after it creates a release, and
+# can also be dispatched manually to backfill artifacts onto an existing
+# release (e.g. when a release was created before this workflow was wired up,
+# or when specific assets need to be regenerated — delete the stale assets
+# from the GitHub release first, then dispatch this workflow).
+#
+# It builds goreleaser artifacts but does NOT publish them through goreleaser.
+# Instead, a dedicated step inspects the existing release and uploads only
+# assets that are missing, so existing artifacts are never overwritten.
+
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,13 +34,69 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - name: Verify release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG does not exist on GitHub. Create it first (via release-please or manually)."
+            exit 1
+          fi
+          echo "Release $TAG found."
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Run GoReleaser
+
+      - name: Build artifacts (skip publish)
         uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.6.1
-          args: release --clean
+          args: release --clean --skip=publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload only missing artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Snapshot existing asset names on the release (one per line, empty if none).
+          existing=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+
+          echo "Existing assets on $TAG:"
+          if [[ -n "$existing" ]]; then
+            while IFS= read -r asset; do
+              echo "  $asset"
+            done <<< "$existing"
+          else
+            echo "  (none)"
+          fi
+          echo
+
+          uploaded=0
+          skipped=0
+          shopt -s nullglob
+          for f in dist/*.tar.gz dist/checksums.txt; do
+            name=$(basename "$f")
+            if printf '%s\n' "$existing" | grep -Fxq "$name"; then
+              echo "SKIP  (already on release): $name"
+              skipped=$((skipped + 1))
+            else
+              echo "UPLOAD: $name"
+              gh release upload "$TAG" "$f"
+              uploaded=$((uploaded + 1))
+            fi
+          done
+
+          echo
+          echo "Summary: uploaded=$uploaded, skipped=$skipped"
+          if [[ "$uploaded" -eq 0 ]]; then
+            echo "::notice::All artifacts already present on release $TAG. Nothing to upload."
+          fi

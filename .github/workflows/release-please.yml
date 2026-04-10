@@ -12,7 +12,25 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           release-type: go
+
+  # Chain the Release workflow in the same run. This sidesteps the
+  # GitHub Actions rule that pushes made by the default GITHUB_TOKEN
+  # (which release-please uses to create the tag) do not trigger
+  # subsequent `on: push: tags` workflows.
+  release:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
