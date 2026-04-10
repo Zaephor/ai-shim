@@ -60,7 +60,7 @@ var validToolTypes = map[string]bool{
 func TestProfileExamples_ValidYAML(t *testing.T) {
 	files := collectExampleFiles(t)
 
-	const expectedCount = 41 // 39 profiles + 1 default + 1 agent
+	const expectedCount = 42 // 39 profiles + 1 default + 2 agents
 	if len(files) != expectedCount {
 		t.Fatalf("expected %d example files, got %d", expectedCount, len(files))
 	}

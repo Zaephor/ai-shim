@@ -1,0 +1,33 @@
+# ai-shim agent override for copilot-cli
+#
+# This file applies to all copilot-cli invocations regardless of profile.
+# Place it at: ~/.ai-shim/config/agents/copilot-cli.yaml
+#
+# Tier 2 -- overrides default.yaml, overridden by profile and agent-profile.
+#
+# copilot-cli persists: ~/.copilot (dir)
+
+env:
+  GITHUB_TOKEN: "ghp_your-token-here"
+
+# Pin to a specific version (empty = latest).
+# version: "1.0.0"
+
+# Git identity for commits made by copilot inside the container.
+git:
+  name: "Your Name"
+  email: "you@example.com"
+
+# Enable DIND so copilot can run Docker commands inside the sandbox.
+dind: true
+
+# Install additional tools available to copilot-cli.
+tools:
+  gh:
+    type: tar-extract
+    url: "https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_amd64.tar.gz"
+    binary: gh
+
+packages:
+  - git
+  - jq

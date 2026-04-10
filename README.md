@@ -63,11 +63,12 @@ or in the source tree if you installed from source. Copy any profile to
 
 ## Supported Agents
 
-ai-shim ships with 9 built-in agent definitions:
+ai-shim ships with 10 built-in agent definitions:
 
 | Agent | Install Method | Binary |
 |---|---|---|
 | claude-code | custom (install script) | `claude` |
+| copilot-cli | npm | `copilot` |
 | gemini-cli | npm | `gemini` |
 | qwen-code | npm | `qwen` |
 | codex | npm | `codex` |

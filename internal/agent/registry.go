@@ -22,6 +22,7 @@ var builtins = map[string]Definition{
 	"gemini-cli":  {Name: "gemini-cli", InstallType: "npm", Package: "@google/gemini-cli", Binary: "gemini", DataDirs: []string{".gemini"}},
 	"qwen-code":   {Name: "qwen-code", InstallType: "npm", Package: "@qwen-code/qwen-code", Binary: "qwen", DataDirs: []string{".qwen"}},
 	"codex":       {Name: "codex", InstallType: "npm", Package: "@openai/codex", Binary: "codex", DataDirs: []string{".codex"}},
+	"copilot-cli": {Name: "copilot-cli", InstallType: "npm", Package: "@github/copilot", Binary: "copilot", DataDirs: []string{".copilot"}},
 	"pi":          {Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}},
 	"gsd":         {Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}},
 	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", DataDirs: []string{".aider"}},
