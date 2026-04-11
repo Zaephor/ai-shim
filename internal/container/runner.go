@@ -411,7 +411,24 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 	}()
 
 	// Wait for container exit or detach.
-	statusCh, errCh := r.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+	//
+	// For non-persistent (AutoRemove=true) containers we wait on the
+	// "removed" condition rather than "not-running" so that Run() does
+	// not return until Docker has finished auto-removing the container.
+	// Without this, callers (and tests like TestE2E_NonPersistentContainer-
+	// AutoRemove) that inspect the container immediately after Run returns
+	// would race Docker's asynchronous removal and occasionally still see
+	// the stopped-but-not-yet-removed container.
+	//
+	// Persistent containers disable AutoRemove and are removed explicitly
+	// by Run after attachAndStream returns, so they must keep the
+	// "not-running" condition — waiting for "removed" would deadlock since
+	// nothing else removes them.
+	waitCondition := container.WaitConditionNotRunning
+	if !spec.Persistent {
+		waitCondition = container.WaitConditionRemoved
+	}
+	statusCh, errCh := r.client.ContainerWait(ctx, containerID, waitCondition)
 	select {
 	case <-detachCh:
 		// User triggered detach — close the attach connection to unblock
