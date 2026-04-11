@@ -302,6 +302,16 @@ func TestMaybeStopCache_RemovesActualCacheContainer(t *testing.T) {
 	defer cli.Close()
 	ctx := context.Background()
 
+	// Ensure alpine:latest is available. ContainerCreate does not auto-pull
+	// (same class of bug as the original EnsureCache fix) so on a fresh
+	// machine this test would otherwise fail with "No such image".
+	if _, err := cli.ImageInspect(ctx, "alpine:latest"); err != nil {
+		reader, pullErr := cli.ImagePull(ctx, "docker.io/library/alpine:latest", image.PullOptions{})
+		require.NoError(t, pullErr, "must be able to pull alpine:latest")
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+	}
+
 	// Create a container named like the cache container with ai-shim cache labels
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: "alpine:latest",
