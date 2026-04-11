@@ -15,6 +15,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/docker"
 	"github.com/ai-shim/ai-shim/internal/logging"
 	"github.com/ai-shim/ai-shim/internal/parse"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -224,11 +225,29 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 	}
 	containerID := resp.ID
 
+	// Attach BEFORE start. The order matters: for fast-exit commands
+	// (e.g. `echo hello`) the container can terminate in ~1ms, before
+	// a post-start ContainerAttach would connect. When that happens the
+	// attach returns a stream that never delivers data or EOF, and
+	// stdcopy.StdCopy in streamAttached blocks forever. Attaching first
+	// guarantees the output pipeline is hooked up before the container
+	// process runs.
+	attachResp, err := r.client.ContainerAttach(ctx, containerID, container.AttachOptions{
+		Stream: true,
+		Stdin:  spec.Stdin,
+		Stdout: true,
+		Stderr: true,
+	})
+	if err != nil {
+		return AttachResult{ExitCode: -1}, fmt.Errorf("attaching to container: %w", err)
+	}
+
 	if err := r.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		attachResp.Close()
 		return AttachResult{ExitCode: -1}, fmt.Errorf("starting container: %w", err)
 	}
 
-	result, err := r.attachAndStream(ctx, containerID, spec)
+	result, err := r.streamAttached(ctx, containerID, attachResp, spec)
 	if err != nil {
 		return result, err
 	}
@@ -249,13 +268,6 @@ func (r *Runner) Reattach(ctx context.Context, containerID string, tty bool) (At
 		Stdin:      tty,
 		Persistent: true,
 	}
-	return r.attachAndStream(ctx, containerID, spec)
-}
-
-// attachAndStream handles I/O streaming, signal forwarding, TTY setup, and
-// detach detection for an already-started container. Blocks until the
-// container exits or the user detaches.
-func (r *Runner) attachAndStream(ctx context.Context, containerID string, spec ContainerSpec) (AttachResult, error) {
 	attachResp, err := r.client.ContainerAttach(ctx, containerID, container.AttachOptions{
 		Stream: true,
 		Stdin:  spec.Stdin,
@@ -265,6 +277,19 @@ func (r *Runner) attachAndStream(ctx context.Context, containerID string, spec C
 	if err != nil {
 		return AttachResult{ExitCode: -1}, fmt.Errorf("attaching to container: %w", err)
 	}
+	return r.streamAttached(ctx, containerID, attachResp, spec)
+}
+
+// streamAttached handles I/O streaming, signal forwarding, TTY setup, and
+// detach detection for a container the caller has already attached to.
+// Takes ownership of attachResp and closes it on return.
+//
+// The caller must open attachResp BEFORE starting the container (for Run)
+// or after confirming the container is already running (for Reattach). This
+// ordering is load-bearing: attaching after a fast-exit container has
+// terminated yields a stream that never produces data or EOF, and the
+// stdcopy.StdCopy call below would block forever.
+func (r *Runner) streamAttached(ctx context.Context, containerID string, attachResp types.HijackedResponse, spec ContainerSpec) (AttachResult, error) {
 	defer attachResp.Close()
 
 	// runDone signals normal exit so the cancellation watcher below can

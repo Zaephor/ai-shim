@@ -50,6 +50,35 @@ func TestRun_SimpleCommand(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 }
 
+// TestRun_FastExitDoesNotHang is a regression test for a race condition
+// introduced in the detach/reattach refactor (commit de59ef8) where the
+// Run function called ContainerStart before ContainerAttach. For fast-exit
+// commands (`echo hello` finishes in ~1ms), the container would terminate
+// before the attach connection was established, leaving stdcopy.StdCopy
+// blocked forever on a stream that never produced data or EOF.
+//
+// The loop increases the chance of hitting the race on machines where the
+// timing is tighter; a single iteration is sufficient to hang on most
+// hosts. A per-Run context deadline ensures the test fails fast instead of
+// timing out the whole test binary if the bug regresses.
+func TestRun_FastExitDoesNotHang(t *testing.T) {
+	ctx := context.Background()
+	runner := newTestRunner(t, ctx)
+	defer runner.Close()
+
+	for i := 0; i < 5; i++ {
+		runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		result, err := runner.Run(runCtx, ContainerSpec{
+			Image:  testImage,
+			Cmd:    []string{"echo", "hello"},
+			Labels: map[string]string{"ai-shim": "test"},
+		})
+		cancel()
+		require.NoError(t, err, "iteration %d: Run must not hang when the container exits before attach", i)
+		assert.Equal(t, 0, result.ExitCode, "iteration %d", i)
+	}
+}
+
 func TestRun_ExitCode(t *testing.T) {
 	ctx := context.Background()
 	runner := newTestRunner(t, ctx)
