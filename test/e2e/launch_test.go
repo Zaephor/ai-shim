@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	dockerContainer "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
@@ -103,7 +105,7 @@ func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 	require.NoError(t, err)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image:    "alpine:latest",
 		Hostname: "ai-shim-test",
 		Env:      []string{"TEST_KEY=test_value", "ANOTHER=123"},
@@ -111,7 +113,7 @@ func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 		Labels:   map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "container should see env vars and hostname")
+	assert.Equal(t, 0, result.ExitCode, "container should see env vars and hostname")
 }
 
 // TestE2E_ContainerMountsAccessible tests that storage mounts are accessible.
@@ -131,7 +133,7 @@ func TestE2E_ContainerMountsAccessible(t *testing.T) {
 	markerPath := filepath.Join(layout.SharedBin, "test-marker")
 	require.NoError(t, os.WriteFile(markerPath, []byte("hello"), 0644))
 
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image: "alpine:latest",
 		Mounts: []mount.Mount{
 			{Type: mount.TypeBind, Source: layout.SharedBin, Target: "/usr/local/share/ai-shim/bin"},
@@ -140,7 +142,7 @@ func TestE2E_ContainerMountsAccessible(t *testing.T) {
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "marker file should be readable inside container")
+	assert.Equal(t, 0, result.ExitCode, "marker file should be readable inside container")
 }
 
 // TestE2E_ContainerWorkspaceMount tests workspace path hashing and mounting.
@@ -159,7 +161,7 @@ func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 	// Use a known workspace target
 	wsTarget := "/workspace/abc123"
 
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image:      "alpine:latest",
 		WorkingDir: wsTarget,
 		Mounts: []mount.Mount{
@@ -169,7 +171,7 @@ func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "workspace should be mounted and workdir set")
+	assert.Equal(t, 0, result.ExitCode, "workspace should be mounted and workdir set")
 }
 
 // TestE2E_ContainerUserMapping tests UID/GID mapping.
@@ -183,14 +185,14 @@ func TestE2E_ContainerUserMapping(t *testing.T) {
 
 	uid := os.Getuid()
 
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image:  "alpine:latest",
 		User:   fmt.Sprintf("%d:%d", uid, os.Getgid()),
 		Cmd:    []string{"sh", "-c", fmt.Sprintf(`test "$(id -u)" = "%d"`, uid)},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "container should run with correct UID")
+	assert.Equal(t, 0, result.ExitCode, "container should run with correct UID")
 }
 
 // TestE2E_AgentLaunchFailsGracefully tests that launching an agent
@@ -210,7 +212,7 @@ func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
 
 	// Test with a simple npm agent - just verify the entrypoint script runs
 	// We use alpine with a script that simulates the install flow
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image: "alpine:latest",
 		Entrypoint: []string{"sh", "-c", `
 			echo "Testing entrypoint structure"
@@ -222,7 +224,7 @@ func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 // TestE2E_RealEntrypointExecution tests that the generated entrypoint script
@@ -252,7 +254,7 @@ func TestE2E_RealEntrypointExecution(t *testing.T) {
 	// 1. sh -c works with our script format
 	// 2. npm is available in the image
 	// 3. The error handling pattern works (|| { echo ERROR; exit 1; })
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Image: container.DefaultImage,
 		Entrypoint: []string{"sh", "-c", `
 #!/bin/sh
@@ -278,7 +280,7 @@ exit 0
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "entrypoint structure should work in target image")
+	assert.Equal(t, 0, result.ExitCode, "entrypoint structure should work in target image")
 }
 
 // TestE2E_FullFlowWithConfig tests the complete config -> build spec -> launch path
@@ -344,9 +346,9 @@ env:
 	`}
 	spec.Cmd = nil
 
-	exitCode, err := runner.Run(ctx, spec)
+	result, err := runner.Run(ctx, spec)
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "full flow should produce working container")
+	assert.Equal(t, 0, result.ExitCode, "full flow should produce working container")
 }
 
 // TestE2E_FullBuildSpecProducesValidContainer tests the complete flow:
@@ -400,7 +402,110 @@ func TestE2E_FullBuildSpecProducesValidContainer(t *testing.T) {
 	`}
 	spec.Cmd = nil
 
-	exitCode, err := runner.Run(ctx, spec)
+	result, err := runner.Run(ctx, spec)
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "full spec build should produce working container with correct hostname")
+	assert.Equal(t, 0, result.ExitCode, "full spec build should produce working container with correct hostname")
+}
+
+// TestE2E_PersistentContainerNoAutoRemove verifies that persistent containers
+// are NOT auto-removed by Docker after exit, and must be explicitly cleaned up.
+func TestE2E_PersistentContainerNoAutoRemove(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
+	runner, err := container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	containerName := fmt.Sprintf("e2e-persistent-%s", randomTestSuffix())
+
+	result, err := runner.Run(ctx, container.ContainerSpec{
+		Image:      "alpine:latest",
+		Cmd:        []string{"echo", "persistent-test"},
+		Labels:     map[string]string{container.LabelBase: "test"},
+		Name:       containerName,
+		Persistent: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.False(t, result.Detached, "normal exit should not be Detached")
+
+	// Run() should have explicitly removed the container after normal exit.
+	// Verify it's gone.
+	_, inspectErr := runner.Client().ContainerInspect(ctx, containerName)
+	assert.Error(t, inspectErr, "persistent container should be removed after normal exit")
+}
+
+// TestE2E_NonPersistentContainerAutoRemove verifies that non-persistent
+// containers (Persistent=false) are auto-removed by Docker on exit.
+func TestE2E_NonPersistentContainerAutoRemove(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), quickRunTimeout)
+	defer cancel()
+	runner, err := container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	containerName := fmt.Sprintf("e2e-ephemeral-%s", randomTestSuffix())
+
+	result, err := runner.Run(ctx, container.ContainerSpec{
+		Image:      "alpine:latest",
+		Cmd:        []string{"echo", "ephemeral-test"},
+		Labels:     map[string]string{container.LabelBase: "test"},
+		Name:       containerName,
+		Persistent: false,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode)
+
+	// Auto-removed by Docker — container should be gone.
+	_, inspectErr := runner.Client().ContainerInspect(ctx, containerName)
+	assert.Error(t, inspectErr, "non-persistent container should be auto-removed by Docker")
+}
+
+// TestE2E_ReattachToRunningContainer verifies that Reattach can connect to
+// an already-running container.
+func TestE2E_ReattachToRunningContainer(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	runner, err := container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	containerName := fmt.Sprintf("e2e-reattach-%s", randomTestSuffix())
+
+	// Create and start a persistent container that sleeps, then exits.
+	containerCfg := &dockerContainer.Config{
+		Image:     "alpine:latest",
+		Cmd:       []string{"sh", "-c", "sleep 3 && echo reattach-success"},
+		OpenStdin: true,
+		Labels:    map[string]string{container.LabelBase: "test", container.LabelPersistent: "true"},
+	}
+	hostCfg := &dockerContainer.HostConfig{
+		AutoRemove: false,
+	}
+
+	resp, err := runner.Client().ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, containerName)
+	require.NoError(t, err)
+	containerID := resp.ID
+
+	// Ensure cleanup
+	defer func() {
+		_ = runner.Client().ContainerRemove(context.Background(), containerID, dockerContainer.RemoveOptions{Force: true})
+	}()
+
+	require.NoError(t, runner.Client().ContainerStart(ctx, containerID, dockerContainer.StartOptions{}))
+
+	// Reattach to the running container
+	result, err := runner.Reattach(ctx, containerID, false)
+	require.NoError(t, err)
+	assert.False(t, result.Detached)
+	assert.Equal(t, 0, result.ExitCode, "reattached container should exit cleanly")
 }

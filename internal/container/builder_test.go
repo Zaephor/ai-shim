@@ -105,6 +105,25 @@ func TestBuildSpec_Labels(t *testing.T) {
 	assert.Equal(t, "true", spec.Labels["ai-shim"])
 	assert.Equal(t, "gemini-cli", spec.Labels["ai-shim.agent"])
 	assert.Equal(t, "work", spec.Labels["ai-shim.profile"])
+
+	// Workspace labels should always be set
+	assert.NotEmpty(t, spec.Labels[LabelWorkspace], "workspace hash label must be set")
+	assert.NotEmpty(t, spec.Labels[LabelWorkspaceDir], "workspace dir label must be set")
+}
+
+func TestBuildSpec_PersistentMatchesTTY(t *testing.T) {
+	p := defaultBuildParams()
+	spec := BuildSpec(p)
+
+	// Persistent flag and label must be consistent with the TTY detection.
+	tty := IsTTY()
+	assert.Equal(t, tty, spec.Persistent, "Persistent must match IsTTY()")
+	assert.Equal(t, tty, spec.TTY, "TTY must match IsTTY()")
+	if tty {
+		assert.Equal(t, "true", spec.Labels[LabelPersistent])
+	} else {
+		assert.Empty(t, spec.Labels[LabelPersistent])
+	}
 }
 
 func TestBuildSpec_RequiredMountsPresent(t *testing.T) {

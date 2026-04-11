@@ -43,14 +43,14 @@ func TestDefaultImage_HasRequiredTools(t *testing.T) {
 
 	for _, tc := range tools {
 		t.Run(tc.name, func(t *testing.T) {
-			exitCode, runErr := runner.Run(ctx, container.ContainerSpec{
+			result, runErr := runner.Run(ctx, container.ContainerSpec{
 				Image:      container.DefaultImage,
 				Entrypoint: []string{"sh", "-c", tc.command},
 				Labels:     map[string]string{container.LabelBase: "test"},
 				Name:       fmt.Sprintf("e2e-imagecompat-%s-%d", tc.name, time.Now().UnixNano()%100000),
 			})
 			require.NoError(t, runErr, "%s: container execution error", tc.name)
-			assert.Equal(t, 0, exitCode, "%s: expected exit code 0", tc.name)
+			assert.Equal(t, 0, result.ExitCode, "%s: expected exit code 0", tc.name)
 		})
 	}
 }

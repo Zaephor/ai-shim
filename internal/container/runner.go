@@ -52,6 +52,13 @@ type ContainerSpec struct {
 	SecurityOpt  []string        // Docker SecurityOpt (e.g. no-new-privileges)
 	CapDrop      []string        // Linux capabilities to drop
 	LogDir       string          // directory for exit logs (empty = no logging)
+	Persistent   bool            // when true, container supports detach/reattach (AutoRemove disabled)
+}
+
+// AttachResult describes how an attach session ended.
+type AttachResult struct {
+	ExitCode int  // container exit code (-1 if detached or error)
+	Detached bool // true if user triggered detach
 }
 
 // Runner manages container lifecycle via the Docker API.
@@ -152,8 +159,8 @@ func (r *Runner) EnsureImage(ctx context.Context, image string) error {
 	return fmt.Errorf("pulling image %s after %d attempts: %w", image, maxAttempts, lastErr)
 }
 
-// Run creates, starts, attaches to, and waits for a container. Returns exit code.
-func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
+// Run creates, starts, attaches to, and waits for a container.
+func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, error) {
 	containerCfg := &container.Config{
 		Image:        spec.Image,
 		Hostname:     spec.Hostname,
@@ -173,7 +180,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 
 	hostCfg := &container.HostConfig{
 		Mounts:       spec.Mounts,
-		AutoRemove:   true,
+		AutoRemove:   !spec.Persistent,
 		PortBindings: spec.Ports,
 		SecurityOpt:  spec.SecurityOpt,
 		CapDrop:      spec.CapDrop,
@@ -213,10 +220,42 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 
 	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, networkCfg, nil, spec.Name)
 	if err != nil {
-		return -1, fmt.Errorf("creating container: %w", err)
+		return AttachResult{ExitCode: -1}, fmt.Errorf("creating container: %w", err)
 	}
 	containerID := resp.ID
 
+	if err := r.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		return AttachResult{ExitCode: -1}, fmt.Errorf("starting container: %w", err)
+	}
+
+	result, err := r.attachAndStream(ctx, containerID, spec)
+	if err != nil {
+		return result, err
+	}
+
+	// For persistent containers that exited normally, explicitly remove.
+	if spec.Persistent && !result.Detached {
+		_ = r.client.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true})
+	}
+
+	return result, nil
+}
+
+// Reattach connects to an already-running container for detach/reattach
+// sessions. Sets up the same I/O streaming as Run but skips creation.
+func (r *Runner) Reattach(ctx context.Context, containerID string, tty bool) (AttachResult, error) {
+	spec := ContainerSpec{
+		TTY:        tty,
+		Stdin:      tty,
+		Persistent: true,
+	}
+	return r.attachAndStream(ctx, containerID, spec)
+}
+
+// attachAndStream handles I/O streaming, signal forwarding, TTY setup, and
+// detach detection for an already-started container. Blocks until the
+// container exits or the user detaches.
+func (r *Runner) attachAndStream(ctx context.Context, containerID string, spec ContainerSpec) (AttachResult, error) {
 	attachResp, err := r.client.ContainerAttach(ctx, containerID, container.AttachOptions{
 		Stream: true,
 		Stdin:  spec.Stdin,
@@ -224,13 +263,9 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 		Stderr: true,
 	})
 	if err != nil {
-		return -1, fmt.Errorf("attaching to container: %w", err)
+		return AttachResult{ExitCode: -1}, fmt.Errorf("attaching to container: %w", err)
 	}
 	defer attachResp.Close()
-
-	if err := r.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		return -1, fmt.Errorf("starting container: %w", err)
-	}
 
 	// runDone signals normal exit so the cancellation watcher below can
 	// terminate. Without this, callers passing a non-cancellable context
@@ -239,26 +274,39 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 	runDone := make(chan struct{})
 	defer close(runDone)
 
+	// detachCh is closed when the user triggers the detach key sequence.
+	detachCh := make(chan struct{})
+
 	// Stop container when context is cancelled (e.g. programmatic shutdown).
-	// Uses a background context for the stop call since the original ctx is done.
+	// For persistent containers, context cancellation also just detaches.
 	go func() {
 		select {
 		case <-ctx.Done():
-			stopTimeout := 10 // seconds
-			_ = r.client.ContainerStop(context.Background(), containerID, container.StopOptions{
-				Timeout: &stopTimeout,
-			})
+			if !spec.Persistent {
+				stopTimeout := 10 // seconds
+				_ = r.client.ContainerStop(context.Background(), containerID, container.StopOptions{
+					Timeout: &stopTimeout,
+				})
+			}
 		case <-runDone:
-			// Run() returned normally; nothing to stop.
 		}
 	}()
 
-	// Forward signals to container (critical for non-TTY mode;
-	// in TTY mode signals pass through the PTY naturally)
+	// Forward signals to container. For persistent sessions, SIGHUP triggers
+	// detach instead of kill (matches screen/tmux behavior).
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		for sig := range sigCh {
+			if spec.Persistent && sig == syscall.SIGHUP {
+				// Terminal hangup → detach instead of killing.
+				select {
+				case <-detachCh:
+				default:
+					close(detachCh)
+				}
+				return
+			}
 			_ = r.client.ContainerKill(ctx, containerID, sig.String())
 		}
 	}()
@@ -268,16 +316,12 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 	}()
 
 	if spec.TTY {
-		// Put host terminal into raw mode so keystrokes and control
-		// sequences pass through to the container uninterpreted.
 		if restore := makeRaw(); restore != nil {
 			defer restore()
 		}
 
-		// Set initial container terminal size to match host.
 		r.resizeContainer(ctx, containerID)
 
-		// Forward SIGWINCH so the container tracks host terminal resizes.
 		winchCh := make(chan os.Signal, 1)
 		signal.Notify(winchCh, syscall.SIGWINCH)
 		go func() {
@@ -293,29 +337,73 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 
 	if spec.Stdin {
 		go func() {
-			if _, err := io.Copy(attachResp.Conn, os.Stdin); err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: stdin copy error: %v\n", err)
+			var stdin io.Reader = os.Stdin
+			if spec.Persistent && spec.TTY {
+				// Parse custom detach keys from environment.
+				keys := DefaultDetachKeys
+				if envKeys := os.Getenv("AI_SHIM_DETACH_KEYS"); envKeys != "" {
+					if parsed, err := ParseDetachKeys(envKeys); err == nil {
+						keys = parsed
+					} else {
+						fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid AI_SHIM_DETACH_KEYS: %v (using default)\n", err)
+					}
+				}
+				stdin = NewDetachableReaderWithKeys(os.Stdin, detachCh, keys)
 			}
-			_ = attachResp.CloseWrite()
+			if _, err := io.Copy(attachResp.Conn, stdin); err != nil {
+				// Suppress errors during detach — they're expected.
+				select {
+				case <-detachCh:
+				default:
+					fmt.Fprintf(os.Stderr, "ai-shim: warning: stdin copy error: %v\n", err)
+				}
+			}
+			// Only signal EOF to container if not detaching.
+			select {
+			case <-detachCh:
+			default:
+				_ = attachResp.CloseWrite()
+			}
 		}()
 	}
 
-	if spec.TTY {
-		if _, err := io.Copy(os.Stdout, attachResp.Reader); err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: stdout copy error: %v\n", err)
+	// Stream container output. This blocks until the attach connection closes
+	// (container exits or we close it on detach).
+	outputDone := make(chan struct{})
+	go func() {
+		defer close(outputDone)
+		if spec.TTY {
+			if _, err := io.Copy(os.Stdout, attachResp.Reader); err != nil {
+				select {
+				case <-detachCh:
+				default:
+					fmt.Fprintf(os.Stderr, "ai-shim: warning: stdout copy error: %v\n", err)
+				}
+			}
+		} else {
+			_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
 		}
-	} else {
-		_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
-	}
+	}()
 
+	// Wait for container exit or detach.
 	statusCh, errCh := r.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 	select {
+	case <-detachCh:
+		// User triggered detach — close the attach connection to unblock
+		// the output goroutine, then return.
+		attachResp.Close()
+		<-outputDone
+		return AttachResult{ExitCode: -1, Detached: true}, nil
+
 	case err := <-errCh:
+		<-outputDone
 		if err != nil {
-			return -1, fmt.Errorf("waiting for container: %w", err)
+			return AttachResult{ExitCode: -1}, fmt.Errorf("waiting for container: %w", err)
 		}
-		return 0, nil
+		return AttachResult{ExitCode: 0}, nil
+
 	case status := <-statusCh:
+		<-outputDone
 		exitCode := int(status.StatusCode)
 		if exitCode != 0 {
 			r.saveExitLog(spec.LogDir, spec.Name, exitCode)
@@ -324,7 +412,7 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (int, error) {
 				fmt.Fprintf(os.Stderr, "ai-shim: exit log: %s/%s.log\n", spec.LogDir, spec.Name)
 			}
 		}
-		return exitCode, nil
+		return AttachResult{ExitCode: exitCode}, nil
 	}
 }
 

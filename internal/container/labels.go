@@ -1,9 +1,13 @@
 package container
 
 const (
-	LabelBase      = "ai-shim"
-	LabelAgent     = "ai-shim.agent"
-	LabelProfile   = "ai-shim.profile"
-	LabelCache     = "ai-shim.cache"
-	LabelUsesCache = "ai-shim.uses-cache"
+	LabelBase         = "ai-shim"
+	LabelAgent        = "ai-shim.agent"
+	LabelProfile      = "ai-shim.profile"
+	LabelCache        = "ai-shim.cache"
+	LabelUsesCache    = "ai-shim.uses-cache"
+	LabelWorkspace    = "ai-shim.workspace"     // workspace hash for directory-scoped lookup
+	LabelWorkspaceDir = "ai-shim.workspace.dir" // human-readable path (display only)
+	LabelPersistent   = "ai-shim.persistent"    // "true" for detach-capable containers
+	LabelDIND         = "ai-shim.dind"          // marks DIND sidecar containers
 )

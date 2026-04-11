@@ -89,9 +89,9 @@ func TestConcurrent_ParallelLaunch(t *testing.T) {
 				Stdin: false,
 			}
 
-			exitCode, err := runner.Run(ctx, spec)
+			result, err := runner.Run(ctx, spec)
 			results[idx].err = err
-			results[idx].exitCode = exitCode
+			results[idx].exitCode = result.ExitCode
 			// We just need to verify the container ran with our expected
 			// output as part of its command — the echo would have produced it.
 			// stdout is not captured here because the test only validates that

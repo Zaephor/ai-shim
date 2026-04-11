@@ -41,13 +41,13 @@ func TestRun_SimpleCommand(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:  testImage,
 		Cmd:    []string{"echo", "hello"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 func TestRun_ExitCode(t *testing.T) {
@@ -55,13 +55,13 @@ func TestRun_ExitCode(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:  testImage,
 		Cmd:    []string{"sh", "-c", "exit 42"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 42, exitCode)
+	assert.Equal(t, 42, result.ExitCode)
 }
 
 func TestRun_WithEnv(t *testing.T) {
@@ -69,14 +69,14 @@ func TestRun_WithEnv(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:  testImage,
 		Env:    []string{"TEST_VAR=hello"},
 		Cmd:    []string{"sh", "-c", "test \"$TEST_VAR\" = hello"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 func TestRun_WithWorkdir(t *testing.T) {
@@ -84,14 +84,14 @@ func TestRun_WithWorkdir(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:      testImage,
 		WorkingDir: "/tmp",
 		Cmd:        []string{"sh", "-c", "test \"$(pwd)\" = /tmp"},
 		Labels:     map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 func TestRun_WithHostname(t *testing.T) {
@@ -99,14 +99,14 @@ func TestRun_WithHostname(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:    testImage,
 		Hostname: "test-shim",
 		Cmd:      []string{"sh", "-c", "test \"$(hostname)\" = test-shim"},
 		Labels:   map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 func TestInspectImageUser_Alpine(t *testing.T) {
@@ -126,7 +126,7 @@ func TestRun_WithMount(t *testing.T) {
 
 	// Use a volume mount instead of bind mount to avoid issues in DinD
 	// environments where the host filesystem differs from the test runner.
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image: testImage,
 		Mounts: []mount.Mount{
 			{Type: mount.TypeVolume, Target: "/testmount"},
@@ -135,7 +135,7 @@ func TestRun_WithMount(t *testing.T) {
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, 0, result.ExitCode)
 }
 
 func TestEnsureImage_AlreadyLocal(t *testing.T) {
@@ -161,7 +161,7 @@ func TestRun_NonZeroExitShowsMessage(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:  testImage,
 		Cmd:    []string{"sh", "-c", "exit 42"},
 		Labels: map[string]string{"ai-shim": "test"},
@@ -169,7 +169,7 @@ func TestRun_NonZeroExitShowsMessage(t *testing.T) {
 		LogDir: t.TempDir(),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 42, exitCode)
+	assert.Equal(t, 42, result.ExitCode)
 }
 
 func TestRun_CompletesWithSignalHandler(t *testing.T) {
@@ -177,13 +177,13 @@ func TestRun_CompletesWithSignalHandler(t *testing.T) {
 	runner := newTestRunner(t, ctx)
 	defer runner.Close()
 
-	exitCode, err := runner.Run(ctx, ContainerSpec{
+	result, err := runner.Run(ctx, ContainerSpec{
 		Image:  testImage,
 		Cmd:    []string{"echo", "signal handler active"},
 		Labels: map[string]string{"ai-shim": "test"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "signal handler should not interfere with normal execution")
+	assert.Equal(t, 0, result.ExitCode, "signal handler should not interfere with normal execution")
 }
 
 func TestSaveExitLog_WritesLogFile(t *testing.T) {
@@ -308,12 +308,12 @@ func TestRun_ContextCancellationStopsContainer(t *testing.T) {
 	defer runner.Close()
 
 	done := make(chan struct{})
-	var exitCode int
+	var result AttachResult
 	var runErr error
 
 	go func() {
 		defer close(done)
-		exitCode, runErr = runner.Run(ctx, ContainerSpec{
+		result, runErr = runner.Run(ctx, ContainerSpec{
 			Image:  testImage,
 			Cmd:    []string{"sleep", "60"},
 			Labels: map[string]string{LabelBase: "test"},
@@ -331,7 +331,7 @@ func TestRun_ContextCancellationStopsContainer(t *testing.T) {
 		t.Fatal("container did not stop within 20s of context cancellation")
 	}
 
-	_ = exitCode
+	_ = result
 	_ = runErr
 }
 

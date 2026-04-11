@@ -616,3 +616,65 @@ func TestJourney_WorkingDirValidation(t *testing.T) {
 	assert.NoError(t, err,
 		"a normal temp directory should be accepted as working dir")
 }
+
+func TestJourney_DetachKeysParsing(t *testing.T) {
+	// Default keys
+	keys, err := container.ParseDetachKeys("ctrl-],d")
+	require.NoError(t, err)
+	assert.Equal(t, [2]byte{0x1D, 0x64}, keys)
+
+	// Docker-style keys
+	keys, err = container.ParseDetachKeys("ctrl-p,ctrl-q")
+	require.NoError(t, err)
+	assert.Equal(t, [2]byte{0x10, 0x11}, keys)
+
+	// Invalid format
+	_, err = container.ParseDetachKeys("invalid")
+	assert.Error(t, err)
+
+	_, err = container.ParseDetachKeys("")
+	assert.Error(t, err)
+}
+
+func TestJourney_DetachLabelsInBuildSpec(t *testing.T) {
+	// BuildSpec should always include workspace labels.
+	configDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(configDir, "profiles"), 0755))
+
+	cfg, err := config.Resolve(configDir, "claude-code", "default")
+	require.NoError(t, err)
+
+	agentDef, ok := agent.Lookup("claude-code")
+	require.True(t, ok)
+
+	layout := storage.NewLayout(t.TempDir())
+	require.NoError(t, layout.EnsureDirectories("claude-code", "default"))
+
+	spec := container.BuildSpec(container.BuildParams{
+		Config:   cfg,
+		Agent:    agentDef,
+		Profile:  "default",
+		Layout:   layout,
+		Platform: platform.Detect(),
+		HomeDir:  "/home/user",
+	})
+
+	assert.NotEmpty(t, spec.Labels[container.LabelWorkspace],
+		"BuildSpec must set workspace hash label")
+	assert.NotEmpty(t, spec.Labels[container.LabelWorkspaceDir],
+		"BuildSpec must set workspace dir label")
+	assert.Equal(t, "true", spec.Labels[container.LabelBase],
+		"BuildSpec must set base label")
+}
+
+func TestJourney_AttachResultDefaults(t *testing.T) {
+	// Zero-value AttachResult should indicate no detach and exit code 0.
+	var result container.AttachResult
+	assert.False(t, result.Detached)
+	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestJourney_DefaultDetachKeys(t *testing.T) {
+	// Verify the default detach keys are Ctrl+] then 'd'.
+	assert.Equal(t, [2]byte{0x1D, 0x64}, container.DefaultDetachKeys)
+}

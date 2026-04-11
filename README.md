@@ -213,6 +213,11 @@ See `configs/examples/` for annotated example files and
   from management commands
 - **Colorized output** -- management output uses ANSI colors; disable with
   `AI_SHIM_NO_COLOR=1` or the standard `NO_COLOR` variable
+- **Session detach/reattach** -- TTY sessions are persistent: press
+  **Ctrl+], d** to detach without stopping the container, then re-invoke
+  the same symlink to reattach. Customizable via `AI_SHIM_DETACH_KEYS`.
+  Use `ai-shim manage attach` / `ai-shim manage stop` for explicit control.
+  DIND sidecars and networks are preserved across detach/reattach cycles.
 - **Container exec** -- `ai-shim manage exec <name> <command...>` runs a
   command in a running ai-shim container
 - **Watch mode** -- `ai-shim manage watch <agent> [profile]` auto-restarts
@@ -271,6 +276,10 @@ ai-shim manage logs [agent] [profile]
                                 # show launch/exit log or container logs
 ai-shim manage exec <name> <cmd...>
                                 # run command in a running container
+ai-shim manage attach <agent> [profile]
+                                # reattach to a detached session
+ai-shim manage stop <agent> [profile]
+                                # stop a running session
 ai-shim manage watch <agent> [profile]
                                 # restart agent on crash with retries
 ai-shim manage agent-versions   # show installed agent versions
@@ -305,6 +314,7 @@ AI_SHIM_VERBOSE=0/1             # enable debug output
 AI_SHIM_JSON=0/1                # JSON output for management commands
 AI_SHIM_NO_COLOR=0/1            # disable colored output
 AI_SHIM_WATCH_RETRIES=<n>       # max restarts for watch mode (default 3)
+AI_SHIM_DETACH_KEYS=<keys>      # detach key sequence (default ctrl-],d)
 ```
 
 ## Development

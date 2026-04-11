@@ -116,7 +116,7 @@ func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string,
 	// Ensure image is available
 	require.NoError(t, runner.EnsureImage(ctx, spec.Image))
 
-	exitCode, err := runner.Run(ctx, spec)
+	result, err := runner.Run(ctx, spec)
 	require.NoError(t, err, "container Run should not return an error")
 
 	// Read captured output from the marker file on the host side.
@@ -127,7 +127,7 @@ func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string,
 		output = string(data)
 	}
 
-	return output, exitCode
+	return output, result.ExitCode
 }
 
 // buildAndRunRaw is like buildAndRun but returns the full entrypoint script

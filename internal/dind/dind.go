@@ -86,10 +86,12 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		entrypoint = dockerdArgs
 	}
 
-	labels := cfg.Labels
-	if labels == nil {
-		labels = map[string]string{}
+	// Copy labels to avoid mutating the caller's map.
+	labels := make(map[string]string, len(cfg.Labels)+2)
+	for k, v := range cfg.Labels {
+		labels[k] = v
 	}
+	labels[ai_container.LabelDIND] = "true"
 	if cfg.CacheAddr != "" {
 		labels[ai_container.LabelUsesCache] = "true"
 	}

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ai-shim/ai-shim/internal/agent"
@@ -23,20 +26,19 @@ import (
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/client"
 )
 
 // cleanupStaleContainers removes any non-running ai-shim containers for the
 // given agent+profile. This handles the SIGKILL/OOM/reboot orphan case
 // where AutoRemove never fired and a stale container blocks the next launch.
+// For persistent containers that exited while detached, reports their exit code.
 // All errors are silently ignored — this is best-effort housekeeping.
 func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agentName, profileName string) {
 	cli := runner.Client()
 	if cli == nil {
 		return
 	}
-	// Two list calls: one for "exited" + one for "dead". The Docker filter
-	// API treats multiple status values as OR within the same filter key,
-	// but we issue them separately to be portable across API versions.
 	for _, status := range []string{"exited", "dead", "created"} {
 		list, err := cli.ContainerList(ctx, container_types.ListOptions{
 			All: true,
@@ -52,6 +54,13 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 			continue
 		}
 		for _, c := range list {
+			// Report exit code for persistent containers that exited while detached.
+			if c.Labels[container.LabelPersistent] == "true" && status == "exited" {
+				inspect, inspErr := cli.ContainerInspect(ctx, c.ID)
+				if inspErr == nil && inspect.State != nil {
+					fmt.Fprintf(os.Stderr, "ai-shim: previous session exited (code %d)\n", inspect.State.ExitCode)
+				}
+			}
 			if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
 				logging.Debug("stale container remove %s failed: %v", c.ID[:12], err)
 				continue
@@ -114,6 +123,8 @@ Commands:
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
   manage exec <name> <cmd...>   Execute command in running container
+  manage attach <agent> [profile] Reattach to a detached session
+  manage stop <agent> [profile]  Stop a running session
   manage logs [agent] [profile]  Show launch/exit logs or container logs
   manage watch <agent> [profile] Restart agent on crash with retries
   manage switch-profile <profile> Set the default profile
@@ -138,6 +149,7 @@ Environment Variables:
   AI_SHIM_JSON          Enable JSON output for management commands (0/1)
   AI_SHIM_NO_COLOR      Disable colored output (0/1)
   AI_SHIM_WATCH_RETRIES Max restart count for watch mode (default 3)
+  AI_SHIM_DETACH_KEYS   Detach key sequence (default ctrl-],d)
 `)
 }
 
@@ -277,6 +289,8 @@ Subcommands:
   dry-run         Preview container config
   status          Show running containers
   exec            Execute command in a running container
+  attach          Reattach to a detached session
+  stop            Stop a running session
   watch           Restart agent on crash with retries
   switch-profile  Set the default profile
   backup          Backup a profile
@@ -312,6 +326,8 @@ func printSubcommandHelp(cmd string) error {
 		"agent-versions": "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
 		"reinstall":      "Usage: ai-shim manage reinstall <agent>\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":           "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
+		"attach":         "Usage: ai-shim manage attach <agent> [profile]\n\n  Reattach to a detached ai-shim session.\n  Detach from a running session with Ctrl+], d.",
+		"stop":           "Usage: ai-shim manage stop <agent> [profile]\n\n  Stop a running ai-shim session and remove its container.",
 		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
 		"logs":           "Usage: ai-shim manage logs [agent] [profile]\n\n  Without arguments: show the launch/exit log.\n  With agent [profile]: show Docker container logs for the most recent matching container.",
 		"switch-profile": "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
@@ -625,6 +641,33 @@ func runManageSubcommand(args []string) error {
 		os.Exit(exitCode)
 		return nil
 
+	case "attach":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage attach <agent> [profile]")
+		}
+		agentName := args[1]
+		profile := "default"
+		if len(args) > 2 {
+			profile = args[2]
+		}
+		exitCode, err := manageAttach(agentName, profile)
+		if err != nil {
+			return fmt.Errorf("attach to %s/%s: %w", agentName, profile, err)
+		}
+		os.Exit(exitCode)
+		return nil
+
+	case "stop":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage stop <agent> [profile]")
+		}
+		agentName := args[1]
+		profile := "default"
+		if len(args) > 2 {
+			profile = args[2]
+		}
+		return manageStop(agentName, profile)
+
 	case "watch":
 		if len(args) < 2 {
 			return fmt.Errorf("usage: ai-shim manage watch <agent> [profile]")
@@ -785,6 +828,27 @@ func runAgent(name string, args []string) (int, error) {
 	// with the new container's name. Ignore errors — this is housekeeping.
 	cleanupStaleContainers(ctx, runner, agentName, profileName)
 
+	// 6.2 Check for existing running session (reattach support)
+	if container.IsTTY() {
+		wsHash := workspace.HashPath(platInfo.Hostname, pwd)
+		session, lookupErr := container.FindRunningSession(ctx, runner.Client(), agentName, profileName, wsHash)
+		if lookupErr != nil {
+			logging.Debug("session lookup failed: %v", lookupErr)
+		}
+		if session != nil {
+			action := promptReattach(session)
+			switch action {
+			case "reattach":
+				return handleReattach(ctx, runner, session, cfg, filepath.Join(layout.Root, "logs"))
+			case "new":
+				stopSession(ctx, runner.Client(), session)
+				// fall through to create new container
+			case "exit":
+				return 0, nil
+			}
+		}
+	}
+
 	// 6.5 Ensure container image is available
 	image := cfg.GetImage()
 	if err := runner.EnsureImage(ctx, image); err != nil {
@@ -832,6 +896,10 @@ func runAgent(name string, args []string) (int, error) {
 	}
 	logging.Debug("container name=%s", spec.Name)
 
+	// detached tracks whether the user triggered a detach so DIND cleanup
+	// can be skipped (preserving the sidecar and network for reattach).
+	var detached bool
+
 	// 7.5 Create shared network and start DIND sidecar if enabled
 	if cfg.IsDINDEnabled() {
 		dindGPU := cfg.IsDINDGPUEnabled()
@@ -851,6 +919,9 @@ func runAgent(name string, args []string) (int, error) {
 			return 1, fmt.Errorf("creating network: %w", err)
 		}
 		defer func() {
+			if detached {
+				return // preserve network for reattach
+			}
 			if err := netHandle.Remove(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove network: %v\n", err)
 			}
@@ -909,6 +980,9 @@ func runAgent(name string, args []string) (int, error) {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
 		}
 		defer func() {
+			if detached {
+				return // preserve DIND sidecar for reattach
+			}
 			if err := sidecar.Stop(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to stop DIND sidecar: %v\n", err)
 			}
@@ -939,11 +1013,213 @@ func runAgent(name string, args []string) (int, error) {
 
 	// 8. Run container, return its exit code
 	logging.LogLaunch(logDir, agentName, profileName, spec.Name, image)
-	exitCode, err := runner.Run(ctx, spec)
-	logging.LogExit(logDir, spec.Name, exitCode)
+	result, err := runner.Run(ctx, spec)
+	detached = result.Detached
+	logging.LogExit(logDir, spec.Name, result.ExitCode)
 	if err != nil {
 		return 1, fmt.Errorf("running container: %w", err)
 	}
 
-	return exitCode, nil
+	if result.Detached {
+		fmt.Fprintf(os.Stderr, "\nai-shim: detached from %s. Reattach by running the same command.\n", spec.Name)
+		return 0, nil
+	}
+
+	return result.ExitCode, nil
+}
+
+// promptReattach asks the user what to do with an existing running session.
+// Returns "reattach", "new", or "exit".
+func promptReattach(session *container.RunningSession) string {
+	age := time.Since(session.CreatedAt).Truncate(time.Second)
+	dir := session.WorkspaceDir
+	if dir == "" {
+		dir = "(unknown)"
+	}
+	fmt.Fprintf(os.Stderr, "ai-shim: running session found for %s/%s\n", session.AgentName, session.Profile)
+	fmt.Fprintf(os.Stderr, "  container: %s (running %s)\n", session.ContainerName, age)
+	fmt.Fprintf(os.Stderr, "  workspace: %s\n", dir)
+	fmt.Fprintf(os.Stderr, "\n  [Y] Reattach  [n] Exit  [new] Stop old and start fresh\n")
+	fmt.Fprintf(os.Stderr, "  Choice [Y/n/new]: ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return "exit"
+	}
+	input := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	switch input {
+	case "", "y", "yes":
+		return "reattach"
+	case "n", "no":
+		return "exit"
+	case "new":
+		return "new"
+	default:
+		fmt.Fprintf(os.Stderr, "ai-shim: unrecognized choice %q, exiting\n", input)
+		return "exit"
+	}
+}
+
+// handleReattach reconnects to an existing container session.
+func handleReattach(ctx context.Context, runner *container.Runner, session *container.RunningSession, cfg config.Config, logDir string) (int, error) {
+	fmt.Fprintf(os.Stderr, "ai-shim: reattaching to %s...\n", session.ContainerName)
+
+	// Show recent container logs for context.
+	showRecentLogs(ctx, runner.Client(), session.ContainerID)
+
+	result, err := runner.Reattach(ctx, session.ContainerID, true)
+	if err != nil {
+		return 1, fmt.Errorf("reattaching to container: %w", err)
+	}
+
+	if result.Detached {
+		fmt.Fprintf(os.Stderr, "\nai-shim: detached from %s. Reattach by running the same command.\n", session.ContainerName)
+		return 0, nil
+	}
+
+	// Container exited while we were attached — clean up.
+	_ = runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	logging.LogExit(logDir, session.ContainerName, result.ExitCode)
+
+	// Clean up DIND sidecar if present.
+	if cfg.IsDINDEnabled() {
+		stopDINDForSession(ctx, runner.Client(), session)
+	}
+
+	return result.ExitCode, nil
+}
+
+// showRecentLogs prints the last few lines of container output for context
+// when reattaching. Errors are silently ignored.
+func showRecentLogs(ctx context.Context, cli *client.Client, containerID string) {
+	tail := "10"
+	reader, err := cli.ContainerLogs(ctx, containerID, container_types.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       tail,
+	})
+	if err != nil {
+		return
+	}
+	defer func() { _ = reader.Close() }()
+
+	fmt.Fprintf(os.Stderr, "--- last %s lines ---\n", tail)
+	_, _ = io.Copy(os.Stderr, reader)
+	fmt.Fprintf(os.Stderr, "--- reattached ---\n\n")
+}
+
+// stopSession stops a running container and its associated DIND sidecar.
+func stopSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
+	stopTimeout := 5
+	_ = cli.ContainerStop(ctx, session.ContainerID, container_types.StopOptions{
+		Timeout: &stopTimeout,
+	})
+	_ = cli.ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	stopDINDForSession(ctx, cli, session)
+}
+
+// stopDINDForSession finds and stops the DIND sidecar associated with a session.
+func stopDINDForSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
+	// Find DIND sidecar by labels
+	f := filters.NewArgs(
+		filters.Arg("label", container.LabelBase+"=true"),
+		filters.Arg("label", container.LabelDIND+"=true"),
+		filters.Arg("label", container.LabelAgent+"="+session.AgentName),
+		filters.Arg("label", container.LabelProfile+"="+session.Profile),
+		filters.Arg("status", "running"),
+	)
+	list, err := cli.ContainerList(ctx, container_types.ListOptions{Filters: f})
+	if err != nil {
+		return
+	}
+	for _, c := range list {
+		stopTimeout := 5
+		_ = cli.ContainerStop(ctx, c.ID, container_types.StopOptions{Timeout: &stopTimeout})
+		_ = cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true})
+	}
+}
+
+// manageAttach implements `ai-shim manage attach <agent> [profile]`.
+func manageAttach(agentName, profile string) (int, error) {
+	ctx := context.Background()
+	runner, err := container.NewRunner(ctx)
+	if err != nil {
+		return 1, fmt.Errorf("creating container runner: %w", err)
+	}
+	defer func() { _ = runner.Close() }()
+
+	sessions, err := container.FindAllRunningSessions(ctx, runner.Client(), agentName, profile)
+	if err != nil {
+		return 1, fmt.Errorf("finding sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		return 1, fmt.Errorf("no running session found for %s/%s", agentName, profile)
+	}
+
+	// If multiple sessions (different workspaces), let user choose.
+	session := &sessions[0]
+	if len(sessions) > 1 {
+		fmt.Fprintf(os.Stderr, "ai-shim: multiple running sessions for %s/%s:\n", agentName, profile)
+		for i, s := range sessions {
+			dir := s.WorkspaceDir
+			if dir == "" {
+				dir = "(unknown)"
+			}
+			age := time.Since(s.CreatedAt).Truncate(time.Second)
+			fmt.Fprintf(os.Stderr, "  [%d] %s (running %s, workspace: %s)\n", i+1, s.ContainerName, age, dir)
+		}
+		fmt.Fprintf(os.Stderr, "  Choice [1]: ")
+
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			input := strings.TrimSpace(scanner.Text())
+			if input != "" {
+				idx := 0
+				if _, err := fmt.Sscanf(input, "%d", &idx); err == nil && idx >= 1 && idx <= len(sessions) {
+					session = &sessions[idx-1]
+				}
+			}
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "ai-shim: reattaching to %s...\n", session.ContainerName)
+	showRecentLogs(ctx, runner.Client(), session.ContainerID)
+
+	result, err := runner.Reattach(ctx, session.ContainerID, true)
+	if err != nil {
+		return 1, fmt.Errorf("reattaching: %w", err)
+	}
+
+	if result.Detached {
+		fmt.Fprintf(os.Stderr, "\nai-shim: detached from %s.\n", session.ContainerName)
+		return 0, nil
+	}
+
+	// Container exited — clean up.
+	_ = runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	return result.ExitCode, nil
+}
+
+// manageStop implements `ai-shim manage stop <agent> [profile]`.
+func manageStop(agentName, profile string) error {
+	ctx := context.Background()
+	runner, err := container.NewRunner(ctx)
+	if err != nil {
+		return fmt.Errorf("creating container runner: %w", err)
+	}
+	defer func() { _ = runner.Close() }()
+
+	sessions, err := container.FindAllRunningSessions(ctx, runner.Client(), agentName, profile)
+	if err != nil {
+		return fmt.Errorf("finding sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		return fmt.Errorf("no running session found for %s/%s", agentName, profile)
+	}
+
+	for _, s := range sessions {
+		stopSession(ctx, runner.Client(), &s)
+		fmt.Fprintf(os.Stderr, "ai-shim: stopped %s\n", s.ContainerName)
+	}
+	return nil
 }

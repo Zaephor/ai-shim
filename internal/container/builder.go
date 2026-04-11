@@ -51,6 +51,8 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		LabelProfile: p.Profile,
 	}
 
+	// Workspace labels are set after wsHash is computed below.
+
 	homeDir := p.HomeDir
 	if homeDir == "" {
 		homeDir = "/home/user"
@@ -65,6 +67,9 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	wsHash := workspace.HashPath(p.Platform.Hostname, pwd)
 	name := generateContainerName(p.Agent.Name, p.Profile, wsHash)
+
+	labels[LabelWorkspace] = wsHash
+	labels[LabelWorkspaceDir] = pwd
 
 	mounts := buildMounts(p, pwd, workdir, homeDir)
 
@@ -164,6 +169,12 @@ func BuildSpec(p BuildParams) ContainerSpec {
 
 	tty := IsTTY()
 
+	// TTY sessions are persistent (support detach/reattach).
+	persistent := tty
+	if persistent {
+		labels[LabelPersistent] = "true"
+	}
+
 	// Security profile
 	securityOpt, capDrop := resolveSecurityProfile(p.Config.SecurityProfile)
 
@@ -186,6 +197,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		SecurityOpt:  securityOpt,
 		CapDrop:      capDrop,
 		LogDir:       p.LogDir,
+		Persistent:   persistent,
 	}
 }
 

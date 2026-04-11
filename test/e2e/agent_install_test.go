@@ -95,14 +95,14 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 				verifyScript = strings.Replace(verifyScript, "set +e\n", "set +e\n"+uvInstall, 1)
 			}
 
-			exitCode, err := runner.Run(ctx, container.ContainerSpec{
+			result, err := runner.Run(ctx, container.ContainerSpec{
 				Image:      container.DefaultImage,
 				Entrypoint: []string{"sh", "-c", verifyScript},
 				Labels:     map[string]string{container.LabelBase: "test"},
 				Name:       fmt.Sprintf("e2e-install-%s-%s", name, randomTestSuffix()),
 			})
 			require.NoError(t, err, "%s: container execution error", name)
-			assert.NotEqual(t, 99, exitCode, "%s: binary not found after install (install failed)", name)
+			assert.NotEqual(t, 99, result.ExitCode, "%s: binary not found after install (install failed)", name)
 		})
 	}
 }

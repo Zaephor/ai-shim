@@ -346,11 +346,11 @@ func TestJourney_ContainerStopsOnContext(t *testing.T) {
 
 	// Launch a container that sleeps for 60s
 	done := make(chan struct{})
-	var exitCode int
+	var result container.AttachResult
 	var runErr error
 	go func() {
 		defer close(done)
-		exitCode, runErr = runner.Run(ctx, container.ContainerSpec{
+		result, runErr = runner.Run(ctx, container.ContainerSpec{
 			Name:   containerName,
 			Image:  "alpine:latest",
 			Cmd:    []string{"sleep", "60"},
@@ -373,7 +373,7 @@ func TestJourney_ContainerStopsOnContext(t *testing.T) {
 	}
 
 	// We expect either an error or a non-zero exit code
-	_ = exitCode
+	_ = result
 	_ = runErr
 
 	// Verify no orphaned container remains
@@ -516,7 +516,7 @@ func TestJourney_DINDSidecar(t *testing.T) {
 	//    Use a retry loop because the socket file may take a moment to
 	//    appear in the volume mount from the client container's perspective.
 	containerName := fmt.Sprintf("ai-shim-test-dind-client-%d", time.Now().UnixNano())
-	exitCode, err := runner.Run(ctx, container.ContainerSpec{
+	result, err := runner.Run(ctx, container.ContainerSpec{
 		Name:  containerName,
 		Image: "docker:latest",
 		Env:   []string{"DOCKER_HOST=unix:///var/run/dind/docker.sock"},
@@ -541,5 +541,5 @@ exit 1
 		Labels:    labels,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, exitCode, "docker info inside DIND should exit 0")
+	assert.Equal(t, 0, result.ExitCode, "docker info inside DIND should exit 0")
 }
