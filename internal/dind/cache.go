@@ -15,13 +15,23 @@ import (
 
 const (
 	CacheContainerName = "ai-shim-registry-cache"
-	CacheImage         = "registry:2"
-	CachePort          = "5000"
+	// CacheImage is the fully-qualified reference for the pull-through
+	// registry cache image. The full form (registry host + library/)
+	// avoids any ambiguity in the Docker SDK's reference handling.
+	CacheImage = "docker.io/library/registry:2"
+	CachePort  = "5000"
 )
 
 // EnsureCache starts the pull-through registry cache if it's not already running.
 // Returns the cache container's address (for use as a registry mirror).
-func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (string, error) {
+//
+// Takes a *container.Runner (rather than a raw *client.Client) so it can reuse
+// the runner's EnsureImage logic — the Docker SDK's ContainerCreate does NOT
+// auto-pull missing images (unlike the `docker run` CLI), so the cache image
+// must be pulled explicitly before the cache container is created.
+func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir string) (string, error) {
+	cli := runner.Client()
+
 	// Check if cache is already running
 	containers, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
@@ -33,6 +43,13 @@ func EnsureCache(ctx context.Context, cli *client.Client, cacheDir string) (stri
 	if len(containers) > 0 {
 		// Already running on host network
 		return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
+	}
+
+	// Ensure the cache image is pulled. Without this, ContainerCreate below
+	// fails with "No such image" on any host that hasn't pulled registry:2
+	// through some other code path first.
+	if err := runner.EnsureImage(ctx, CacheImage); err != nil {
+		return "", fmt.Errorf("pulling cache image: %w", err)
 	}
 
 	// Create cache directory if needed

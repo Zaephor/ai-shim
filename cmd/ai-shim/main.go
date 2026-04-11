@@ -940,7 +940,7 @@ func runAgent(name string, args []string) (int, error) {
 		var cacheAddr string
 		if cfg.IsCacheEnabled() {
 			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
-			addr, err := dind.EnsureCache(ctx, runner.Client(), cacheDir)
+			addr, err := dind.EnsureCache(ctx, runner, cacheDir)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: registry cache unavailable, image pulls will be slower: %v\n", err)
 				fmt.Fprintf(os.Stderr, "ai-shim: hint: run 'ai-shim manage cleanup' if stale cache container exists\n")

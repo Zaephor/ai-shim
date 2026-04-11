@@ -150,24 +150,17 @@ func TestStart_WithMirrors(t *testing.T) {
 
 func TestEnsureCache_StartsAndStops(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	require.NoError(t, err)
-	defer cli.Close()
 	ctx := context.Background()
-
-	// Pull registry image if needed (skip if pull fails)
-	pullReader, err := cli.ImagePull(ctx, "docker.io/library/registry:2", image.PullOptions{})
-	if err != nil {
-		t.Skip("Cannot pull registry:2 image:", err)
-	}
-	io.Copy(io.Discard, pullReader)
-	pullReader.Close()
+	runner, err := ai_container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
 
 	// Use a path accessible to the Docker daemon
 	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache")
 	os.MkdirAll(cacheDir, 0755)
 	t.Cleanup(func() { os.RemoveAll(cacheDir) })
-	addr, err := EnsureCache(ctx, cli, cacheDir)
+	addr, err := EnsureCache(ctx, runner, cacheDir)
 	require.NoError(t, err)
 	assert.Contains(t, addr, "host.docker.internal")
 	assert.Contains(t, addr, CachePort)
@@ -178,6 +171,53 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	})
 	for _, c := range containers {
 		cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
+	}
+}
+
+// TestEnsureCache_PullsImageWhenMissing is a regression test for a bug where
+// EnsureCache called ContainerCreate without first pulling the cache image.
+// The Docker SDK's ContainerCreate does NOT auto-pull (unlike the `docker run`
+// CLI), so on any host where registry:2 was not already cached, enabling the
+// DIND registry mirror failed with "No such image: registry:2".
+func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := ai_container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
+
+	// Clean up any pre-existing cache container from a prior run so we hit
+	// the cold-start code path inside EnsureCache.
+	existing, _ := cli.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
+	})
+	for _, c := range existing {
+		_ = cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
+	}
+
+	// Force-remove the cache image (both canonical and short refs) so
+	// EnsureCache must pull it itself. This mirrors a fresh developer
+	// machine that has never used the registry mirror before.
+	_, _ = cli.ImageRemove(ctx, CacheImage, image.RemoveOptions{Force: true})
+	_, _ = cli.ImageRemove(ctx, "registry:2", image.RemoveOptions{Force: true})
+
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache-pull")
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))
+	t.Cleanup(func() { _ = os.RemoveAll(cacheDir) })
+
+	addr, err := EnsureCache(ctx, runner, cacheDir)
+	require.NoError(t, err, "EnsureCache must pull the cache image when it is not present locally")
+	assert.Contains(t, addr, "host.docker.internal")
+	assert.Contains(t, addr, CachePort)
+
+	// Cleanup cache container but leave the image so other tests benefit.
+	containers, _ := cli.ContainerList(ctx, container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("name", "^/"+CacheContainerName+"$")),
+	})
+	for _, c := range containers {
+		_ = cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
 	}
 }
 
