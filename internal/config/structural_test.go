@@ -45,6 +45,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		Git:             &GitConfig{Name: "User", Email: "u@e.com"},
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
+		SymlinkDir:      "~/.local/bin",
 	}
 
 	result := Merge(Config{}, over)
@@ -139,6 +140,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		Git:             &GitConfig{Name: "User", Email: "u@e.com"},
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
+		SymlinkDir:      "~/.local/bin",
 	}
 
 	tiers := []namedConfig{{name: "test-tier", config: over}}

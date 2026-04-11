@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -442,6 +443,66 @@ func scanAIShimSymlinks(dirs []string) (valid []string, broken []brokenSymlink) 
 	return valid, broken
 }
 
+// DefaultSymlinkDir is the built-in fallback for `manage symlinks create`
+// when neither an explicit CLI dir nor a config value is provided. It is
+// a user-writable directory that is conventionally on $PATH on Linux and
+// macOS (via shell profile / systemd --user setup).
+const DefaultSymlinkDir = ".local/bin"
+
+// ResolveSymlinkDir picks the directory where agent symlinks should be
+// installed, in priority order:
+//
+//  1. explicit (if non-empty): the --dir argument passed on the command
+//     line. Tilde is expanded so `~/bin` works.
+//  2. symlink_dir in <configDir>/default.yaml. Only default.yaml is read —
+//     the symlink directory is a global user preference rather than a
+//     per-agent setting, so it is not resolved through the 5-tier stack.
+//     Tilde in the config value is expanded.
+//  3. $HOME/.local/bin as a friendly default.
+//
+// configDir is the same directory used for the 5-tier config (i.e.
+// ~/.ai-shim/config). If default.yaml does not exist, ResolveSymlinkDir
+// silently falls through to the $HOME default — a missing config file is
+// not an error here.
+func ResolveSymlinkDir(configDir, explicit string) (string, error) {
+	if explicit != "" {
+		return expandTilde(explicit)
+	}
+
+	cfgPath := filepath.Join(configDir, "default.yaml")
+	if _, err := os.Stat(cfgPath); err == nil {
+		cfg, loadErr := config.LoadFile(cfgPath)
+		if loadErr != nil {
+			return "", fmt.Errorf("loading symlink_dir from %s: %w", cfgPath, loadErr)
+		}
+		if cfg.SymlinkDir != "" {
+			return expandTilde(cfg.SymlinkDir)
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	return filepath.Join(home, DefaultSymlinkDir), nil
+}
+
+// expandTilde replaces a leading `~` or `~/` in a path with the current
+// user's home directory. Other uses of ~ (e.g. `~user/foo`) are left as-is.
+func expandTilde(path string) (string, error) {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot expand ~: %w", err)
+		}
+		if path == "~" {
+			return home, nil
+		}
+		return filepath.Join(home, path[2:]), nil
+	}
+	return path, nil
+}
+
 // CreateSymlink creates a symlink for an agent+profile combination.
 // Both agent and profile must satisfy invocation.ValidateAgentName /
 // invocation.ValidateProfileName so that the resulting symlink, container
@@ -469,6 +530,19 @@ func CreateSymlink(agent, profile, targetDir string, shimPath string) (string, e
 	}
 
 	if err := os.Symlink(shimPath, linkPath); err != nil {
+		// Rewrite permission errors to point at the two realistic fixes:
+		// either run with sudo, or set symlink_dir in default.yaml to a
+		// user-writable path. os.Symlink wraps the underlying errno in a
+		// *os.LinkError, so unwrap before checking.
+		if errors.Is(err, os.ErrPermission) {
+			return "", fmt.Errorf(
+				"creating symlink %s: permission denied. "+
+					"Either re-run with sudo, or set `symlink_dir` in "+
+					"~/.ai-shim/config/default.yaml to a user-writable "+
+					"directory (e.g. ~/.local/bin): %w",
+				linkPath, err,
+			)
+		}
 		return "", fmt.Errorf("creating symlink: %w", err)
 	}
 	return linkPath, nil

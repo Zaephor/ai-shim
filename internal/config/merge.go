@@ -67,6 +67,9 @@ func Merge(base, over Config) Config {
 	if over.UpdateInterval != "" {
 		result.UpdateInterval = over.UpdateInterval
 	}
+	if over.SymlinkDir != "" {
+		result.SymlinkDir = over.SymlinkDir
+	}
 	if over.Git != nil {
 		if result.Git == nil {
 			result.Git = &GitConfig{}

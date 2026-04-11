@@ -346,6 +346,91 @@ func TestCreateSymlink_AlreadyExists(t *testing.T) {
 	assert.Error(t, err, "should fail if symlink already exists")
 }
 
+func TestResolveSymlinkDir_ExplicitWins(t *testing.T) {
+	// Explicit argument beats both config and the home-dir default.
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "default.yaml"),
+		[]byte("symlink_dir: /this-should-be-ignored\n"),
+		0644,
+	))
+	override := t.TempDir()
+
+	got, err := ResolveSymlinkDir(configDir, override)
+	require.NoError(t, err)
+	assert.Equal(t, override, got)
+}
+
+func TestResolveSymlinkDir_FromConfig(t *testing.T) {
+	// With no explicit argument, fall back to default.yaml's symlink_dir.
+	configDir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "custom-bin")
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "default.yaml"),
+		[]byte("symlink_dir: "+target+"\n"),
+		0644,
+	))
+
+	got, err := ResolveSymlinkDir(configDir, "")
+	require.NoError(t, err)
+	assert.Equal(t, target, got)
+}
+
+func TestResolveSymlinkDir_ExpandsTilde(t *testing.T) {
+	// Config values like `~/.local/bin` should expand to $HOME/.local/bin.
+	configDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(configDir, "default.yaml"),
+		[]byte("symlink_dir: ~/scratch/agents\n"),
+		0644,
+	))
+
+	got, err := ResolveSymlinkDir(configDir, "")
+	require.NoError(t, err)
+	home, _ := os.UserHomeDir()
+	assert.Equal(t, filepath.Join(home, "scratch/agents"), got)
+}
+
+func TestResolveSymlinkDir_DefaultsToHomeLocalBin(t *testing.T) {
+	// With no explicit arg and no config, the default is $HOME/.local/bin.
+	configDir := t.TempDir() // no default.yaml written
+
+	got, err := ResolveSymlinkDir(configDir, "")
+	require.NoError(t, err)
+	home, _ := os.UserHomeDir()
+	assert.Equal(t, filepath.Join(home, ".local", "bin"), got)
+}
+
+func TestResolveSymlinkDir_ExplicitArgExpandsTilde(t *testing.T) {
+	// Explicit CLI arg should also expand a leading ~.
+	configDir := t.TempDir()
+
+	got, err := ResolveSymlinkDir(configDir, "~/bin")
+	require.NoError(t, err)
+	home, _ := os.UserHomeDir()
+	assert.Equal(t, filepath.Join(home, "bin"), got)
+}
+
+func TestCreateSymlink_PermissionErrorHintsSudo(t *testing.T) {
+	// Create a read-only target directory and attempt to install a
+	// symlink into it. The returned error must mention sudo so the user
+	// has a clear next step.
+	if os.Getuid() == 0 {
+		t.Skip("running as root; cannot test permission-denied symlink")
+	}
+	dir := t.TempDir()
+	require.NoError(t, os.Chmod(dir, 0555)) // r-xr-xr-x: no writes
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
+
+	shimPath := filepath.Join(t.TempDir(), "ai-shim")
+	require.NoError(t, os.WriteFile(shimPath, []byte(""), 0755))
+
+	_, err := CreateSymlink("claude-code", "default", dir, shimPath)
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "sudo",
+		"permission-denied error should suggest sudo or a user-writable symlink_dir")
+}
+
 func TestListSymlinks(t *testing.T) {
 	dir := t.TempDir()
 	shimPath := filepath.Join(dir, "ai-shim")

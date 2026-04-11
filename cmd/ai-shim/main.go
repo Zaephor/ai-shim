@@ -70,6 +70,29 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 	}
 }
 
+// dirOnPath reports whether the given directory appears in the current
+// $PATH. Used to nudge the user when `manage symlinks create` installs
+// into a location that would not be found by their shell.
+func dirOnPath(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	for _, entry := range filepath.SplitList(os.Getenv("PATH")) {
+		if entry == "" {
+			continue
+		}
+		entryAbs, err := filepath.Abs(entry)
+		if err != nil {
+			entryAbs = entry
+		}
+		if entryAbs == abs {
+			return true
+		}
+	}
+	return false
+}
+
 var version = "dev"
 
 func main() {
@@ -454,17 +477,27 @@ func runManageSubcommand(args []string) error {
 		}
 		switch args[1] {
 		case "list":
-			dir := "."
+			explicit := ""
 			if len(args) > 2 {
-				dir = args[2]
+				explicit = args[2]
+			}
+			dir, err := cli.ResolveSymlinkDir(layout.ConfigDir, explicit)
+			if err != nil {
+				return fmt.Errorf("resolving symlink directory: %w", err)
+			}
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				fmt.Printf("Symlink directory %s does not exist yet. "+
+					"Run `ai-shim manage symlinks create <agent>` to create it.\n", dir)
+				return nil
 			}
 			links, err := cli.ListSymlinks(dir, exe)
 			if err != nil {
 				return fmt.Errorf("listing symlinks in %s: %w", dir, err)
 			}
 			if len(links) == 0 {
-				fmt.Println("No ai-shim symlinks found.")
+				fmt.Printf("No ai-shim symlinks found in %s.\n", dir)
 			} else {
+				fmt.Printf("Symlinks in %s:\n", dir)
 				for _, l := range links {
 					fmt.Println("  " + l)
 				}
@@ -472,22 +505,39 @@ func runManageSubcommand(args []string) error {
 			return nil
 		case "create":
 			if len(args) < 3 {
-				return fmt.Errorf("usage: ai-shim manage symlinks create <agent> [profile] [dir]\n  agent/profile names: ASCII letters/digits and '._-' only, must start with letter or digit, max 63 chars")
+				return fmt.Errorf("usage: ai-shim manage symlinks create <agent> [profile] [dir]\n  agent/profile names: ASCII letters/digits and '._-' only, must start with letter or digit, max 63 chars\n  dir defaults to symlink_dir in default.yaml or ~/.local/bin")
 			}
 			agentName := args[2]
 			profile := "default"
-			dir := "."
+			explicit := ""
 			if len(args) > 3 {
 				profile = args[3]
 			}
 			if len(args) > 4 {
-				dir = args[4]
+				explicit = args[4]
+			}
+			dir, err := cli.ResolveSymlinkDir(layout.ConfigDir, explicit)
+			if err != nil {
+				return fmt.Errorf("resolving symlink directory: %w", err)
+			}
+			// Create the target directory if it doesn't exist yet —
+			// friendly on fresh machines where ~/.local/bin has never
+			// been touched.
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return fmt.Errorf("creating symlink directory %s: %w", dir, err)
 			}
 			path, err := cli.CreateSymlink(agentName, profile, dir, exe)
 			if err != nil {
 				return fmt.Errorf("creating symlink for %s/%s in %s: %w", agentName, profile, dir, err)
 			}
 			fmt.Printf("Created symlink: %s\n", path)
+			// Friendly nudge when the target dir isn't on $PATH.
+			if !dirOnPath(dir) {
+				fmt.Fprintf(os.Stderr,
+					"ai-shim: note: %s is not on your $PATH. "+
+						"Add it (e.g. to ~/.bashrc or ~/.zshrc) so `%s` is directly invocable.\n",
+					dir, filepath.Base(path))
+			}
 			return nil
 		case "remove":
 			if len(args) < 3 {

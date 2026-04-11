@@ -39,6 +39,12 @@ type Config struct {
 	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`
 	SecurityProfile string                  `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
 	UpdateInterval  string                  `yaml:"update_interval,omitempty" json:"update_interval,omitempty"`
+	// SymlinkDir is the directory where `manage symlinks create` installs
+	// agent symlinks. Tilde (~) is expanded to the user's home directory.
+	// Read from ~/.ai-shim/config/default.yaml only (global preference);
+	// not resolved through the 5-tier agent/profile stack. Defaults to
+	// $HOME/.local/bin when unset.
+	SymlinkDir string `yaml:"symlink_dir,omitempty" json:"symlink_dir,omitempty"`
 }
 
 // GitConfig defines git user identity for commits inside the container.

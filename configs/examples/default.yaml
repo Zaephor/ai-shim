@@ -92,6 +92,14 @@
 # Options: default, strict, none
 # security_profile: default
 
+# Directory where `ai-shim manage symlinks create` installs agent symlinks.
+# Tilde is expanded to $HOME. Default: ~/.local/bin (a user-writable path
+# that is conventionally on $PATH).
+#
+# If you point this at a directory owned by root (e.g. /usr/local/bin),
+# `manage symlinks create` will refuse with a hint to re-run under sudo.
+# symlink_dir: ~/.local/bin
+
 # Enable TLS for the DIND Docker socket. Default: false
 # dind_tls: false
 
