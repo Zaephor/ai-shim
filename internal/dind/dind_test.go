@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +64,67 @@ func TestStart_AndStop(t *testing.T) {
 
 	err = sidecar.Stop(ctx)
 	assert.NoError(t, err)
+}
+
+// TestStart_SocketGroupOwnership is a regression test for a permissions bug
+// where the DIND sidecar's /var/run/docker.sock was created as root:docker
+// (group GID 2375 — a convention in the docker:dind image where the docker
+// group's GID matches the TCP port number) mode 660. Agent containers run
+// as the host user's UID/GID (e.g. 1000:1000), which is NOT in the docker
+// group, so they hit "permission denied" when trying to use the DIND socket.
+//
+// The fix: after WaitForReady, chgrp the socket to the agent's GID inside
+// the DIND container. dind.Config.SocketGID carries the target GID.
+//
+// This test asserts the socket's group ends up equal to SocketGID after
+// Start returns. Against pre-fix code the group is 2375.
+func TestStart_SocketGroupOwnership(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-gid", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	const targetGID = 1000
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind",
+		SocketGID: targetGID,
+	})
+	require.NoError(t, err)
+	defer func() { _ = sidecar.Stop(ctx) }()
+
+	// Exec `stat` on the socket and capture stdout. Format: "<uid> <gid> <mode>".
+	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), container.ExecOptions{
+		Cmd:          []string{"stat", "-c", "%u %g %a", "/var/run/docker.sock"},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	require.NoError(t, err)
+
+	attach, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
+	require.NoError(t, err)
+	defer attach.Close()
+
+	var stdoutBuf, stderrBuf strings.Builder
+	_, err = stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader)
+	require.NoError(t, err)
+
+	inspect, err := cli.ContainerExecInspect(ctx, execResp.ID)
+	require.NoError(t, err)
+	require.Equal(t, 0, inspect.ExitCode, "stat failed: %s", stderrBuf.String())
+
+	fields := strings.Fields(strings.TrimSpace(stdoutBuf.String()))
+	require.Len(t, fields, 3, "unexpected stat output: %q", stdoutBuf.String())
+
+	uid, _ := strconv.Atoi(fields[0])
+	gid, _ := strconv.Atoi(fields[1])
+
+	assert.Equal(t, 0, uid, "socket should remain owned by root")
+	assert.Equal(t, targetGID, gid, "socket group should be chgrp'd to SocketGID (was %s, want %d)", fields[1], targetGID)
 }
 
 func TestStart_CustomImage(t *testing.T) {

@@ -502,23 +502,33 @@ func TestJourney_DINDSidecar(t *testing.T) {
 	defer func() { _ = netHandle.Remove(ctx) }()
 
 	// 3. Start the DIND sidecar (Start already calls WaitForReady internally).
+	//    Pass SocketGID = current test uid/gid so the non-root client
+	//    container below can use /var/run/dind/docker.sock. Without this
+	//    the socket is left as root:2375 mode 660 and the non-root client
+	//    hits "permission denied".
 	dindName := fmt.Sprintf("ai-shim-test-dind-%d", time.Now().UnixNano())
+	clientGID := os.Getgid()
 	sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
 		ContainerName: dindName,
 		Hostname:      "dind",
 		NetworkID:     netHandle.ID,
 		Labels:        labels,
+		SocketGID:     clientGID,
 	})
 	require.NoError(t, err)
 	defer func() { _ = sidecar.Stop(ctx) }()
 
 	// 4. Run a test container with the DIND socket mounted.
-	//    Use a retry loop because the socket file may take a moment to
-	//    appear in the volume mount from the client container's perspective.
+	//    Crucially, run as a non-root UID/GID — this is the path
+	//    exercised in production (agent containers run as the host
+	//    user) and the regression test for the socket-permissions fix.
+	//    The container must also be in the same /etc/group "docker" so
+	//    the socket's mode 660 allows access via the matching GID.
 	containerName := fmt.Sprintf("ai-shim-test-dind-client-%d", time.Now().UnixNano())
 	result, err := runner.Run(ctx, container.ContainerSpec{
 		Name:  containerName,
 		Image: "docker:latest",
+		User:  fmt.Sprintf("%d:%d", os.Getuid(), clientGID),
 		Env:   []string{"DOCKER_HOST=unix:///var/run/dind/docker.sock"},
 		Mounts: []mount.Mount{
 			{
@@ -541,5 +551,5 @@ exit 1
 		Labels:    labels,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, result.ExitCode, "docker info inside DIND should exit 0")
+	assert.Equal(t, 0, result.ExitCode, "docker info inside DIND should exit 0 as non-root client")
 }

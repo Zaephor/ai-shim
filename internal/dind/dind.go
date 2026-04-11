@@ -1,8 +1,10 @@
 package dind
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 const (
@@ -49,6 +52,12 @@ type Config struct {
 	CacheAddr     string          // pull-through cache address (added as mirror)
 	Resources     *ResourceLimits // optional resource constraints
 	TLS           bool            // enable TLS for DIND socket communication
+	// SocketGID, when non-zero, tells Start to chgrp /var/run/docker.sock
+	// to this GID inside the DIND container after the daemon is ready.
+	// Required so that agent containers running as a non-root UID/GID can
+	// use the DIND socket — the docker:dind image creates the socket with
+	// group "docker" (GID 2375), which the agent's GID is not a member of.
+	SocketGID int
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -210,6 +219,29 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		return nil, fmt.Errorf("waiting for DIND daemon: %w", err)
 	}
 
+	// Rebind /var/run/docker.sock's group to the agent's GID so the
+	// non-root agent container can use the socket. The docker:dind image
+	// ships with group "docker" at GID 2375 (matching the default TCP
+	// port by convention); dockerd creates the socket as root:docker mode
+	// 660. Without this chgrp, agents running as the host user's UID/GID
+	// (typically 1000:1000) hit "permission denied" on every DIND call.
+	//
+	// The daemon is ready by this point (WaitForReady's `docker info`
+	// exec succeeds only after dockerd has bound the unix socket), so
+	// the socket must exist.
+	if cfg.SocketGID != 0 {
+		chgrpCmd := []string{"chgrp", strconv.Itoa(cfg.SocketGID), "/var/run/docker.sock"}
+		exitCode, _, stderr, err := sidecar.exec(ctx, chgrpCmd)
+		if err != nil {
+			_ = sidecar.Stop(ctx)
+			return nil, fmt.Errorf("chgrp DIND socket: %w", err)
+		}
+		if exitCode != 0 {
+			_ = sidecar.Stop(ctx)
+			return nil, fmt.Errorf("chgrp DIND socket: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
+		}
+	}
+
 	return sidecar, nil
 }
 
@@ -232,24 +264,46 @@ func (s *Sidecar) WaitForReady(ctx context.Context) error {
 	}
 }
 
-// isDaemonReady checks if the Docker daemon inside the DIND container is responding.
-func (s *Sidecar) isDaemonReady(ctx context.Context) bool {
-	execCfg := container.ExecOptions{
-		Cmd: []string{"docker", "info"},
-	}
-	resp, err := s.client.ContainerExecCreate(ctx, s.containerID, execCfg)
+// exec runs a command inside the DIND container and waits for it to
+// finish. Returns the exit code plus captured stdout/stderr.
+//
+// This uses ContainerExecAttach (not bare ContainerExecStart) and drains
+// the hijacked stream to EOF before inspecting. Without draining, the
+// daemon may still be running the exec when we call ExecInspect, and
+// ExitCode reads back as the Go zero value (0) — yielding a false-positive
+// "success" for commands that haven't actually completed yet.
+func (s *Sidecar) exec(ctx context.Context, cmd []string) (exitCode int, stdout, stderr []byte, err error) {
+	resp, err := s.client.ContainerExecCreate(ctx, s.containerID, container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
 	if err != nil {
-		return false
+		return -1, nil, nil, fmt.Errorf("creating exec: %w", err)
 	}
-	if err := s.client.ContainerExecStart(ctx, resp.ID, container.ExecStartOptions{}); err != nil {
-		return false
+
+	attach, err := s.client.ContainerExecAttach(ctx, resp.ID, container.ExecStartOptions{})
+	if err != nil {
+		return -1, nil, nil, fmt.Errorf("attaching to exec: %w", err)
 	}
-	// Check exit code
+	defer attach.Close()
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader); err != nil && err != io.EOF {
+		return -1, stdoutBuf.Bytes(), stderrBuf.Bytes(), fmt.Errorf("reading exec output: %w", err)
+	}
+
 	inspect, err := s.client.ContainerExecInspect(ctx, resp.ID)
 	if err != nil {
-		return false
+		return -1, stdoutBuf.Bytes(), stderrBuf.Bytes(), fmt.Errorf("inspecting exec: %w", err)
 	}
-	return inspect.ExitCode == 0
+	return inspect.ExitCode, stdoutBuf.Bytes(), stderrBuf.Bytes(), nil
+}
+
+// isDaemonReady checks if the Docker daemon inside the DIND container is responding.
+func (s *Sidecar) isDaemonReady(ctx context.Context) bool {
+	exitCode, _, _, err := s.exec(ctx, []string{"docker", "info"})
+	return err == nil && exitCode == 0
 }
 
 // ContainerID returns the DIND container ID.

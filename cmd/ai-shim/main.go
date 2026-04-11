@@ -975,6 +975,12 @@ func runAgent(name string, args []string) (int, error) {
 			CacheAddr:     cacheAddr,
 			Resources:     dindResources,
 			TLS:           cfg.IsDINDTLSEnabled(),
+			// Chgrp the DIND docker.sock to the agent's GID so the
+			// non-root agent container can access the socket. Without
+			// this the socket ends up root:2375 mode 660 and any docker
+			// CLI call from inside the agent fails with "permission
+			// denied" (docker:dind's "docker" group has GID 2375).
+			SocketGID: platInfo.GID,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
