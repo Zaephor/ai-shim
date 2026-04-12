@@ -1,13 +1,14 @@
 #!/bin/sh
 set -e
 
+export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv >/dev/null 2>&1; then
   echo "Installing uv..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
 fi
 export UV_TOOL_DIR=/usr/local/share/ai-shim/agents/aider/bin/tools
 export UV_TOOL_BIN_DIR=/usr/local/share/ai-shim/agents/aider/bin/bin
+export UV_CACHE_DIR=/usr/local/share/ai-shim/agents/aider/cache/uv
 export PATH="$UV_TOOL_BIN_DIR:$PATH"
 LAST_UPDATE="/usr/local/share/ai-shim/agents/aider/cache/.last-update"
 INSTALLED_VERSION="/usr/local/share/ai-shim/agents/aider/cache/.installed-version"

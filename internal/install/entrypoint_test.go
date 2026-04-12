@@ -156,6 +156,24 @@ func TestGenerateEntrypoint_UVBootstrap(t *testing.T) {
 	assert.True(t, strings.Contains(script, "curl -LsSf https://astral.sh/uv/install.sh | sh"))
 }
 
+// TestGenerateEntrypoint_UVPATHBeforeCheck verifies that $HOME/.local/bin is
+// exported onto PATH BEFORE the `command -v uv` check, so a persisted uv
+// binary installed on a previous launch is found without re-downloading.
+func TestGenerateEntrypoint_UVPATHBeforeCheck(t *testing.T) {
+	script := GenerateEntrypoint(EntrypointParams{
+		InstallType: "uv",
+		Package:     "aider-chat",
+		Binary:      "aider",
+		AgentName:   "test-agent",
+	})
+	pathExport := strings.Index(script, `export PATH="$HOME/.local/bin:$PATH"`)
+	uvCheck := strings.Index(script, "command -v uv")
+	require.True(t, pathExport >= 0, "script must export $HOME/.local/bin onto PATH")
+	require.True(t, uvCheck >= 0, "script must contain command -v uv check")
+	assert.True(t, pathExport < uvCheck,
+		"PATH export ($HOME/.local/bin) must appear before command -v uv check to avoid re-downloading uv every launch")
+}
+
 func TestGenerateEntrypoint_UVCaching(t *testing.T) {
 	script := GenerateEntrypoint(EntrypointParams{
 		InstallType: "uv",

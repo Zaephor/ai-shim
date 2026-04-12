@@ -144,14 +144,17 @@ func generateUVInstall(p EntrypointParams) string {
 	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 
 	var b strings.Builder
+	// Ensure $HOME/.local/bin is on PATH before checking for uv, so a
+	// previously-installed uv binary is visible and not re-downloaded.
+	b.WriteString("export PATH=\"$HOME/.local/bin:$PATH\"\n")
 	// Bootstrap uv if not already installed
 	b.WriteString("if ! command -v uv >/dev/null 2>&1; then\n")
 	b.WriteString("  echo \"Installing uv...\"\n")
 	b.WriteString("  curl -LsSf https://astral.sh/uv/install.sh | sh\n")
-	b.WriteString("  export PATH=\"$HOME/.local/bin:$PATH\"\n")
 	b.WriteString("fi\n")
 	fmt.Fprintf(&b, "export UV_TOOL_DIR=%s/bin/tools\n", agentDir)
 	fmt.Fprintf(&b, "export UV_TOOL_BIN_DIR=%s/bin/bin\n", agentDir)
+	fmt.Fprintf(&b, "export UV_CACHE_DIR=%s/cache/uv\n", agentDir)
 	b.WriteString("export PATH=\"$UV_TOOL_BIN_DIR:$PATH\"\n")
 
 	b.WriteString(generateInstallCheck(p))
