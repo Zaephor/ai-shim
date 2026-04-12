@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0](https://github.com/Zaephor/ai-shim/compare/v0.1.0...v0.2.0) (2026-04-12)
+
+
+### Features
+
+* **agents:** add GitHub Copilot CLI as built-in agent ([0e70c6c](https://github.com/Zaephor/ai-shim/commit/0e70c6ca32ed04af5736d1391efd7fe69082f93d))
+* **cli:** default symlink dir to ~/.local/bin with config override ([c4acf45](https://github.com/Zaephor/ai-shim/commit/c4acf45f97a5fb81ba19df94b4959b7d626cdb8d))
+* **container:** add session detach/reattach support ([de59ef8](https://github.com/Zaephor/ai-shim/commit/de59ef8150df889d50863d0ac562db9c8d63dd07))
+* **selfupdate:** configurable repo, version injection, prerelease ([20a078d](https://github.com/Zaephor/ai-shim/commit/20a078d6d1c9c156a10d42f91996079af70ba585))
+* **tools:** add data_dir, cache_scope, and env_var for persistent tool directories ([61174cd](https://github.com/Zaephor/ai-shim/commit/61174cd35f120c3ecd1706439636c7bc61256d19))
+
+
+### Bug Fixes
+
+* **ci:** chain goreleaser from release-please, upload only missing assets ([aa611d6](https://github.com/Zaephor/ai-shim/commit/aa611d63e575886233622256a4719532dfd68ffa))
+* **cli:** surface errors from container stop, inspect, and cleanup paths ([ce2d136](https://github.com/Zaephor/ai-shim/commit/ce2d136b611bff20bb6a1faf2797e047c55f8785))
+* **cli:** warn on custom agent parse errors, fix ShowConfig and NetworkRemove ([4a629eb](https://github.com/Zaephor/ai-shim/commit/4a629eb019353347e2a3244c77e73e17fd213197))
+* **container:** attach before start to avoid fast-exit hang ([54d1bf1](https://github.com/Zaephor/ai-shim/commit/54d1bf1c72bb72ed2a94753bf6b843494862e41b))
+* **container:** prevent detachCh double-close panic and reject invalid resource limits ([d37e1b0](https://github.com/Zaephor/ai-shim/commit/d37e1b078bf5ff321e2b489c0d57bf4ca02ff4d9))
+* **container:** wait for removal on non-persistent containers ([44b5152](https://github.com/Zaephor/ai-shim/commit/44b5152ce6fd9597bf34247c1f4bf6e3753e44f7))
+* **container:** warn on saveExitLog/parsePorts/signal errors, document stdin leak ([1123740](https://github.com/Zaephor/ai-shim/commit/112374069180fb7a27b0875b7eba753dbe2d07a4))
+* **dind:** chgrp socket to agent GID and drain exec before inspect ([58b601b](https://github.com/Zaephor/ai-shim/commit/58b601bf571dd4936f45be943110bf7ac81172a9))
+* **dind:** pull registry cache image before starting container ([26826cc](https://github.com/Zaephor/ai-shim/commit/26826cc05ce94ceae67d6825ea35ede461bb68dd))
+* **dind:** TLS cert permissions, volume cleanup, resource limit errors ([f1190d4](https://github.com/Zaephor/ai-shim/commit/f1190d4c219a33b646a87e1a88993c1130300497))
+* **install:** fix uv PATH ordering causing reinstall every launch ([aad90e6](https://github.com/Zaephor/ai-shim/commit/aad90e6ac4220776fddbc2971ccece9ddf69cf24))
+* **selfupdate:** extract binary from tar.gz archive ([51e752b](https://github.com/Zaephor/ai-shim/commit/51e752ba13d41494375720ce6d097c155283677b))
+
 ## 0.1.0 (2026-04-09)
 
 
