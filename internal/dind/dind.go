@@ -170,18 +170,24 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		if cfg.Resources.Memory != "" {
 			memBytes, err := parse.Memory(cfg.Resources.Memory)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", cfg.Resources.Memory, err)
-			} else {
-				hostCfg.Memory = memBytes
+				_ = cli.VolumeRemove(ctx, socketVolName, true)
+				if certsVolName != "" {
+					_ = cli.VolumeRemove(ctx, certsVolName, true)
+				}
+				return nil, fmt.Errorf("invalid DIND memory limit %q: %w", cfg.Resources.Memory, err)
 			}
+			hostCfg.Memory = memBytes
 		}
 		if cfg.Resources.CPUs != "" {
 			cpus, err := strconv.ParseFloat(cfg.Resources.CPUs, 64)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", cfg.Resources.CPUs, err)
-			} else {
-				hostCfg.NanoCPUs = int64(cpus * 1e9)
+				_ = cli.VolumeRemove(ctx, socketVolName, true)
+				if certsVolName != "" {
+					_ = cli.VolumeRemove(ctx, certsVolName, true)
+				}
+				return nil, fmt.Errorf("invalid DIND CPU limit %q: %w", cfg.Resources.CPUs, err)
 			}
+			hostCfg.NanoCPUs = int64(cpus * 1e9)
 		}
 	}
 
@@ -239,6 +245,25 @@ func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error
 		if exitCode != 0 {
 			_ = sidecar.Stop(ctx)
 			return nil, fmt.Errorf("chgrp DIND socket: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
+		}
+
+		// Fix TLS client cert permissions so the non-root agent can read them.
+		// The docker:dind entrypoint creates /certs/client/ as root:root 0700.
+		// We chgrp and chmod the directory tree to grant the agent's GID access.
+		// This must run after WaitForReady because dockerd creates the certs
+		// during startup.
+		if cfg.TLS {
+			gidStr := strconv.Itoa(cfg.SocketGID)
+			certChgrpCmd := []string{"sh", "-c", "chgrp -R " + gidStr + " /certs/client && chmod -R g+rX /certs/client"}
+			exitCode, _, stderr, err := sidecar.exec(ctx, certChgrpCmd)
+			if err != nil {
+				_ = sidecar.Stop(ctx)
+				return nil, fmt.Errorf("chgrp DIND certs: %w", err)
+			}
+			if exitCode != 0 {
+				_ = sidecar.Stop(ctx)
+				return nil, fmt.Errorf("chgrp DIND certs: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
+			}
 		}
 	}
 

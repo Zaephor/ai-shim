@@ -602,3 +602,119 @@ func TestDetectSysbox_ReturnsFalseWithoutSysbox(t *testing.T) {
 		assert.NotEqual(t, "sysbox-runc", name, "sysbox-runc should not be available")
 	}
 }
+
+// TestStart_TLSCertPermissions is a regression test for a permissions bug where
+// the DIND sidecar's /certs/client/ directory was created as root:root mode 0700
+// by the docker:dind entrypoint. Agent containers running as non-root UID/GID
+// cannot read the client TLS certs, which are needed to authenticate to the
+// DIND daemon.
+//
+// The fix: after WaitForReady and the socket chgrp, exec
+// "chgrp -R <gid> /certs/client && chmod -R g+rX /certs/client" inside the
+// DIND container so the agent's GID can read the certs.
+//
+// This test asserts that /certs/client is group-owned by SocketGID and that
+// the group has read+execute permission after Start returns.
+func TestStart_TLSCertPermissions(t *testing.T) {
+	cli := getClient(t)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-tls-perms", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	const targetGID = 1000
+	sidecar, err := Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-tls-perms",
+		TLS:       true,
+		SocketGID: targetGID,
+	})
+	require.NoError(t, err)
+	defer func() { _ = sidecar.Stop(ctx) }()
+
+	// Exec `stat -c '%g %a' /certs/client` inside DIND.
+	// %g = owning group ID, %a = octal permissions.
+	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), container.ExecOptions{
+		Cmd:          []string{"stat", "-c", "%g %a", "/certs/client"},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	require.NoError(t, err)
+
+	attach, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
+	require.NoError(t, err)
+	defer attach.Close()
+
+	var stdoutBuf, stderrBuf strings.Builder
+	_, err = stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader)
+	require.NoError(t, err)
+
+	inspect, err := cli.ContainerExecInspect(ctx, execResp.ID)
+	require.NoError(t, err)
+	require.Equal(t, 0, inspect.ExitCode, "stat of /certs/client failed: %s", stderrBuf.String())
+
+	fields := strings.Fields(strings.TrimSpace(stdoutBuf.String()))
+	require.Len(t, fields, 2, "unexpected stat output: %q", stdoutBuf.String())
+
+	gid, err := strconv.Atoi(fields[0])
+	require.NoError(t, err, "could not parse GID from stat output: %q", fields[0])
+	assert.Equal(t, targetGID, gid, "/certs/client group should be chgrp'd to SocketGID (was %s, want %d)", fields[0], targetGID)
+
+	// The octal mode must include group-read (bit 040) and group-execute (bit 010).
+	// stat -c '%a' returns octal without leading zero (e.g. "750").
+	mode, err := strconv.ParseInt(fields[1], 8, 64)
+	require.NoError(t, err, "could not parse mode from stat output: %q", fields[1])
+	assert.NotZero(t, mode&040, "/certs/client should have group-read permission (mode %s)", fields[1])
+	assert.NotZero(t, mode&010, "/certs/client should have group-execute permission (mode %s)", fields[1])
+}
+
+// TestStart_InvalidMemoryLimit asserts that Start returns a hard error when
+// the memory resource limit cannot be parsed, rather than silently continuing
+// with no limits applied (unbounded container).
+func TestStart_InvalidMemoryLimit(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-badmem", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	_, err = Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-badmem",
+		Resources: &ResourceLimits{Memory: "not-a-valid-size"},
+	})
+	require.Error(t, err, "Start should return an error for an invalid memory limit")
+	assert.Contains(t, err.Error(), "not-a-valid-size", "error should include the bad value")
+}
+
+// TestStart_InvalidCPULimit asserts that Start returns a hard error when
+// the CPU resource limit cannot be parsed, rather than silently continuing
+// with no limits applied (unbounded container).
+func TestStart_InvalidCPULimit(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	require.NoError(t, err)
+	defer cli.Close()
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-badcpu", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	_, err = Start(ctx, cli, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-badcpu",
+		Resources: &ResourceLimits{CPUs: "not-a-float"},
+	})
+	require.Error(t, err, "Start should return an error for an invalid CPU limit")
+	assert.Contains(t, err.Error(), "not-a-float", "error should include the bad value")
+}

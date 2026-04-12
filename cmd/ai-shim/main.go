@@ -1219,7 +1219,8 @@ func stopSession(ctx context.Context, cli *client.Client, session *container.Run
 	stopDINDForSession(ctx, cli, session)
 }
 
-// stopDINDForSession finds and stops the DIND sidecar associated with a session.
+// stopDINDForSession finds and stops the DIND sidecar associated with a session,
+// including removing its socket and certs volumes to avoid leaking Docker volumes.
 func stopDINDForSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
 	// Find DIND sidecar by labels
 	f := filters.NewArgs(
@@ -1234,9 +1235,23 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 		return
 	}
 	for _, c := range list {
+		// Derive volume names from the container name before removing the container.
+		// Container names in the Docker API have a leading "/" that must be stripped.
+		containerName := ""
+		if len(c.Names) > 0 {
+			containerName = strings.TrimPrefix(c.Names[0], "/")
+		}
+
 		stopTimeout := 5
 		_ = cli.ContainerStop(ctx, c.ID, container_types.StopOptions{Timeout: &stopTimeout})
 		_ = cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true})
+
+		// Remove associated volumes. Errors are silently ignored — if the volumes
+		// are already gone (e.g. removed by a previous cleanup pass) that is fine.
+		if containerName != "" {
+			_ = cli.VolumeRemove(ctx, containerName+"-socket", true)
+			_ = cli.VolumeRemove(ctx, containerName+"-certs", true)
+		}
 	}
 }
 
