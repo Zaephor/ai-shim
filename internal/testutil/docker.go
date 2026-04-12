@@ -27,3 +27,14 @@ func SkipIfNoDocker(t *testing.T) {
 	}
 	_ = cli.Close()
 }
+
+// SkipIfNestedDocker skips the test if the current process is running
+// inside a Docker container (detected by the presence of /.dockerenv).
+// Some Docker features like TLS cert generation in DIND are too slow
+// in nested virtualization to complete within test timeouts.
+func SkipIfNestedDocker(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		t.Skip("skipping: nested Docker detected (/.dockerenv exists); TLS DIND is too slow in nested virtualization")
+	}
+}

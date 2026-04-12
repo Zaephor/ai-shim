@@ -402,6 +402,7 @@ func TestStart_WaitsForReady(t *testing.T) {
 }
 
 func TestStart_TLS(t *testing.T) {
+	testutil.SkipIfNestedDocker(t)
 	runner := getRunner(t)
 	ctx := context.Background()
 
@@ -591,6 +592,7 @@ func TestDetectSysbox_ReturnsFalseWithoutSysbox(t *testing.T) {
 // This test asserts that /certs/client is group-owned by SocketGID and that
 // the group has read+execute permission after Start returns.
 func TestStart_TLSCertPermissions(t *testing.T) {
+	testutil.SkipIfNestedDocker(t)
 	runner := getRunner(t)
 	ctx := context.Background()
 
