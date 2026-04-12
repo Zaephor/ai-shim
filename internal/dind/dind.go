@@ -11,6 +11,7 @@ import (
 
 	ai_container "github.com/ai-shim/ai-shim/internal/container"
 	"github.com/ai-shim/ai-shim/internal/parse"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/volume"
@@ -62,10 +63,21 @@ type Config struct {
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
 // The caller must provide a pre-created network via cfg.NetworkID.
-func Start(ctx context.Context, cli *client.Client, cfg Config) (*Sidecar, error) {
+// Start calls runner.EnsureImage internally so callers do not need to
+// pre-pull the DIND image.
+func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidecar, error) {
 	image := cfg.Image
 	if image == "" {
 		image = DefaultImage
+	}
+
+	cli := runner.Client()
+
+	// Ensure the DIND image is present before ContainerCreate; the Docker SDK
+	// does not auto-pull (unlike `docker run`), so a missing image would cause
+	// ContainerCreate to fail with "No such image".
+	if err := runner.EnsureImage(ctx, image); err != nil {
+		return nil, fmt.Errorf("preparing DIND image %s: %w", image, err)
 	}
 
 	// Create a volume for the DIND docker socket
@@ -365,13 +377,13 @@ func (s *Sidecar) Stop(ctx context.Context) error {
 	}
 	// Remove the socket volume
 	if s.socketVolume != "" {
-		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && firstErr == nil {
+		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && !cerrdefs.IsNotFound(err) && firstErr == nil {
 			firstErr = fmt.Errorf("removing DIND socket volume: %w", err)
 		}
 	}
 	// Remove the certs volume if TLS was enabled
 	if s.certsVolume != "" {
-		if err := s.client.VolumeRemove(ctx, s.certsVolume, true); err != nil && firstErr == nil {
+		if err := s.client.VolumeRemove(ctx, s.certsVolume, true); err != nil && !cerrdefs.IsNotFound(err) && firstErr == nil {
 			firstErr = fmt.Errorf("removing DIND certs volume: %w", err)
 		}
 	}

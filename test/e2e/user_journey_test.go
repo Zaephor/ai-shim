@@ -492,7 +492,6 @@ func TestJourney_DINDSidecar(t *testing.T) {
 	defer runner.Close()
 
 	// 1. Pull required images.
-	require.NoError(t, runner.EnsureImage(ctx, dind.DefaultImage))
 	require.NoError(t, runner.EnsureImage(ctx, "docker:latest"))
 
 	// 2. Create a dedicated network for DIND communication.
@@ -502,14 +501,15 @@ func TestJourney_DINDSidecar(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = netHandle.Remove(ctx) }()
 
-	// 3. Start the DIND sidecar (Start already calls WaitForReady internally).
+	// 3. Start the DIND sidecar (Start already calls WaitForReady internally,
+	//    and pulls the DIND image if needed).
 	//    Pass SocketGID = current test uid/gid so the non-root client
 	//    container below can use /var/run/dind/docker.sock. Without this
 	//    the socket is left as root:2375 mode 660 and the non-root client
 	//    hits "permission denied".
 	dindName := fmt.Sprintf("ai-shim-test-dind-%d", time.Now().UnixNano())
 	clientGID := os.Getgid()
-	sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
+	sidecar, err := dind.Start(ctx, runner, dind.Config{
 		ContainerName: dindName,
 		Hostname:      "dind",
 		NetworkID:     netHandle.ID,

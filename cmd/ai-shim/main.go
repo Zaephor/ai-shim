@@ -1044,13 +1044,7 @@ func runAgent(name string, args []string) (int, error) {
 			}
 		}
 
-		// Pull DIND image if needed
-		dindImage := dind.DefaultImage
-		if err := runner.EnsureImage(ctx, dindImage); err != nil {
-			return 1, fmt.Errorf("preparing DIND image: %w", err)
-		}
-
-		// Start DIND sidecar on same network
+		// Start DIND sidecar on same network (Start pulls the image internally)
 		dindName := spec.Name + "-dind"
 		var dindResources *dind.ResourceLimits
 		if cfg.DINDResources != nil {
@@ -1059,7 +1053,7 @@ func runAgent(name string, args []string) (int, error) {
 				CPUs:   cfg.DINDResources.CPUs,
 			}
 		}
-		sidecar, err := dind.Start(ctx, runner.Client(), dind.Config{
+		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,
 			UseSysbox:     useSysbox,
 			Labels:        spec.Labels,

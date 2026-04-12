@@ -23,38 +23,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getClient(t *testing.T) *client.Client {
+func getRunner(t *testing.T) *ai_container.Runner {
 	t.Helper()
 	testutil.SkipIfNoDocker(t)
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		t.Fatal("failed to create docker client:", err)
-	}
-	// Ensure DIND image is available
 	ctx := context.Background()
-	_, err = cli.ImageInspect(ctx, DefaultImage)
+	runner, err := ai_container.NewRunner(ctx)
 	if err != nil {
-		reader, pullErr := cli.ImagePull(ctx, DefaultImage, image.PullOptions{})
-		if pullErr != nil {
-			t.Fatal("failed to pull DIND image:", pullErr)
-		}
-		_, _ = io.Copy(io.Discard, reader)
-		_ = reader.Close()
+		t.Fatal("failed to create container runner:", err)
 	}
-	return cli
+	t.Cleanup(func() { runner.Close() })
+	return runner
 }
 
 func TestStart_AndStop(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
 	// Create network first
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind",
@@ -79,16 +69,15 @@ func TestStart_AndStop(t *testing.T) {
 // This test asserts the socket's group ends up equal to SocketGID after
 // Start returns. Against pre-fix code the group is 2375.
 func TestStart_SocketGroupOwnership(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-gid", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-gid", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
 	const targetGID = 1000
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind",
@@ -98,14 +87,14 @@ func TestStart_SocketGroupOwnership(t *testing.T) {
 	defer func() { _ = sidecar.Stop(ctx) }()
 
 	// Exec `stat` on the socket and capture stdout. Format: "<uid> <gid> <mode>".
-	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), container.ExecOptions{
+	execResp, err := runner.Client().ContainerExecCreate(ctx, sidecar.ContainerID(), container.ExecOptions{
 		Cmd:          []string{"stat", "-c", "%u %g %a", "/var/run/docker.sock"},
 		AttachStdout: true,
 		AttachStderr: true,
 	})
 	require.NoError(t, err)
 
-	attach, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
+	attach, err := runner.Client().ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
 	require.NoError(t, err)
 	defer attach.Close()
 
@@ -113,7 +102,7 @@ func TestStart_SocketGroupOwnership(t *testing.T) {
 	_, err = stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader)
 	require.NoError(t, err)
 
-	inspect, err := cli.ContainerExecInspect(ctx, execResp.ID)
+	inspect, err := runner.Client().ContainerExecInspect(ctx, execResp.ID)
 	require.NoError(t, err)
 	require.Equal(t, 0, inspect.ExitCode, "stat failed: %s", stderrBuf.String())
 
@@ -128,15 +117,14 @@ func TestStart_SocketGroupOwnership(t *testing.T) {
 }
 
 func TestStart_CustomImage(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-img", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-img", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Image:     "docker:dind",
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
@@ -148,15 +136,14 @@ func TestStart_CustomImage(t *testing.T) {
 }
 
 func TestStart_ContainerName(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-name", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-name", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		ContainerName: "test-dind-container",
 		Hostname:      "test-dind-host",
 		Labels:        map[string]string{"ai-shim": "test"},
@@ -170,16 +157,14 @@ func TestStart_ContainerName(t *testing.T) {
 }
 
 func TestStart_ReturnsSocketVolume(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-socket", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-socket", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind",
@@ -191,15 +176,14 @@ func TestStart_ReturnsSocketVolume(t *testing.T) {
 }
 
 func TestStart_WithMirrors(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-mirrors", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-mirrors", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind",
@@ -352,17 +336,14 @@ func TestMaybeStopCache_RemovesActualCacheContainer(t *testing.T) {
 }
 
 func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	require.NoError(t, err)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-mirrors-verify", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-mirrors-verify", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind",
@@ -372,7 +353,7 @@ func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
 	defer sidecar.Stop(ctx)
 
 	// Inspect container to verify mirrors in entrypoint
-	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	inspect, err := runner.Client().ContainerInspect(ctx, sidecar.ContainerID())
 	require.NoError(t, err)
 
 	// Entrypoint should contain --registry-mirror flags
@@ -396,15 +377,14 @@ func TestWaitForReady_Timeout(t *testing.T) {
 }
 
 func TestStart_WaitsForReady(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-ready", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-ready", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-ready",
@@ -413,26 +393,23 @@ func TestStart_WaitsForReady(t *testing.T) {
 	defer sidecar.Stop(ctx)
 
 	// After Start returns, the daemon should be ready.
-	// Verify by exec-ing docker info inside the container.
-	execCfg := container.ExecOptions{
-		Cmd: []string{"docker", "info"},
-	}
-	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), execCfg)
-	require.NoError(t, err)
-	err = cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{})
-	assert.NoError(t, err, "docker info should succeed after Start returns")
+	// Use sidecar.exec() (unexported but accessible within the same package) so
+	// we get the same attach+drain+inspect pattern as production code, avoiding
+	// the stale-exit-code bug that bare ContainerExecStart exhibits.
+	exitCode, _, stderr, err := sidecar.exec(ctx, []string{"docker", "info"})
+	require.NoError(t, err, "exec should not fail")
+	assert.Equal(t, 0, exitCode, "docker info should exit 0 after Start returns; stderr: %s", stderr)
 }
 
 func TestStart_TLS(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-tls", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-tls", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-tls",
@@ -445,7 +422,7 @@ func TestStart_TLS(t *testing.T) {
 	assert.NotEmpty(t, sidecar.CertsVolume(), "TLS sidecar should have a certs volume")
 
 	// Verify TLS env var was set on the container
-	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	inspect, err := runner.Client().ContainerInspect(ctx, sidecar.ContainerID())
 	require.NoError(t, err)
 
 	var foundTLSEnv bool
@@ -467,15 +444,14 @@ func TestStart_TLS(t *testing.T) {
 }
 
 func TestStart_NoTLS(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-notls", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-notls", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-notls",
@@ -487,7 +463,7 @@ func TestStart_NoTLS(t *testing.T) {
 	assert.Empty(t, sidecar.CertsVolume(), "non-TLS sidecar should not have a certs volume")
 
 	// Verify TLS is disabled
-	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	inspect, err := runner.Client().ContainerInspect(ctx, sidecar.ContainerID())
 	require.NoError(t, err)
 
 	var foundEmptyTLS bool
@@ -500,12 +476,11 @@ func TestStart_NoTLS(t *testing.T) {
 }
 
 func TestDetectSysbox(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
 	// Just verify it doesn't panic/error -- sysbox likely not available in CI
-	_ = DetectSysbox(ctx, cli)
+	_ = DetectSysbox(ctx, runner.Client())
 }
 
 // TestSidecar_StartStopLifecycle tests the DIND sidecar container lifecycle
