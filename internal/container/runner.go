@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -197,18 +198,16 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 		if spec.Resources.Memory != "" {
 			memBytes, err := parse.Memory(spec.Resources.Memory)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid memory limit %q: %v\n", spec.Resources.Memory, err)
-			} else {
-				hostCfg.Memory = memBytes
+				return AttachResult{ExitCode: -1}, fmt.Errorf("invalid memory limit %q: %w", spec.Resources.Memory, err)
 			}
+			hostCfg.Memory = memBytes
 		}
 		if spec.Resources.CPUs != "" {
 			cpus, err := strconv.ParseFloat(spec.Resources.CPUs, 64)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid cpu limit %q: %v\n", spec.Resources.CPUs, err)
-			} else {
-				hostCfg.NanoCPUs = int64(cpus * 1e9)
+				return AttachResult{ExitCode: -1}, fmt.Errorf("invalid cpu limit %q: %w", spec.Resources.CPUs, err)
 			}
+			hostCfg.NanoCPUs = int64(cpus * 1e9)
 		}
 	}
 
@@ -302,6 +301,15 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 	// detachCh is closed when the user triggers the detach key sequence.
 	detachCh := make(chan struct{})
 
+	// triggerDetach closes detachCh exactly once, regardless of how many
+	// goroutines call it concurrently. This shared Once covers both the signal
+	// handler below and the DetachableReader, eliminating the TOCTOU gap that
+	// would cause a panic if both sites raced to close the channel.
+	var detachOnce sync.Once
+	triggerDetach := func() {
+		detachOnce.Do(func() { close(detachCh) })
+	}
+
 	// Stop container when context is cancelled (e.g. programmatic shutdown).
 	// For persistent containers, context cancellation also just detaches.
 	go func() {
@@ -325,11 +333,8 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 		for sig := range sigCh {
 			if spec.Persistent && sig == syscall.SIGHUP {
 				// Terminal hangup → detach instead of killing.
-				select {
-				case <-detachCh:
-				default:
-					close(detachCh)
-				}
+				// Use the shared Once so this can never race with DetachableReader.
+				triggerDetach()
 				return
 			}
 			_ = r.client.ContainerKill(ctx, containerID, sig.String())
@@ -373,7 +378,7 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 						fmt.Fprintf(os.Stderr, "ai-shim: warning: invalid AI_SHIM_DETACH_KEYS: %v (using default)\n", err)
 					}
 				}
-				stdin = NewDetachableReaderWithKeys(os.Stdin, detachCh, keys)
+				stdin = NewDetachableReaderWithTrigger(os.Stdin, keys, triggerDetach)
 			}
 			if _, err := io.Copy(attachResp.Conn, stdin); err != nil {
 				// Suppress errors during detach — they're expected.

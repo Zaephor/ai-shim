@@ -431,6 +431,47 @@ func TestEnsureImage_BogusImageFailsFast(t *testing.T) {
 	assert.Less(t, elapsed, 3*time.Second, "permanent error should not retry: took %s", elapsed)
 }
 
+// TestRun_InvalidResourceLimitsError is a regression test for the silent
+// resource-limit downgrade bug. Previously, an unparseable Memory or CPUs
+// value printed a warning and continued — launching the container with NO
+// resource limits (silently worse than configured). The fix returns a hard
+// error so the caller can surface it.
+func TestRun_InvalidResourceLimitsError(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	ctx := context.Background()
+	runner, err := NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+
+	t.Run("invalid memory", func(t *testing.T) {
+		_, err := runner.Run(ctx, ContainerSpec{
+			Image:  testImage,
+			Cmd:    []string{"true"},
+			Labels: map[string]string{"ai-shim": "test"},
+			Resources: &ResourceLimits{
+				Memory: "not-a-number",
+			},
+		})
+		require.Error(t, err, "invalid memory limit should return an error, not a warning")
+		assert.Contains(t, err.Error(), "not-a-number", "error should include the bad value")
+		assert.Contains(t, err.Error(), "memory", "error should mention which field failed")
+	})
+
+	t.Run("invalid cpus", func(t *testing.T) {
+		_, err := runner.Run(ctx, ContainerSpec{
+			Image:  testImage,
+			Cmd:    []string{"true"},
+			Labels: map[string]string{"ai-shim": "test"},
+			Resources: &ResourceLimits{
+				CPUs: "not-a-float",
+			},
+		})
+		require.Error(t, err, "invalid cpu limit should return an error, not a warning")
+		assert.Contains(t, err.Error(), "not-a-float", "error should include the bad value")
+		assert.Contains(t, err.Error(), "cpu", "error should mention which field failed")
+	})
+}
+
 func TestInspectImageUser_UbuntuImage(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()

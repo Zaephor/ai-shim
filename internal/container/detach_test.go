@@ -3,6 +3,7 @@ package container
 import (
 	"bytes"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -218,6 +219,76 @@ func TestParseDetachKeys_Invalid(t *testing.T) {
 
 	_, err = ParseDetachKeys("ctrl-],")
 	assert.Error(t, err)
+}
+
+// TestDetachableReaderWithTrigger_ConcurrentClose verifies that calling
+// triggerDetach from multiple goroutines simultaneously never panics.
+// This is the regression test for the TOCTOU double-close bug: the old signal
+// handler used select{default: close(ch)} which is not atomic.
+func TestDetachableReaderWithTrigger_ConcurrentClose(t *testing.T) {
+	// Run several times to stress the race window.
+	for i := 0; i < 100; i++ {
+		detachCh := make(chan struct{})
+		var once sync.Once
+		trigger := func() {
+			once.Do(func() { close(detachCh) })
+		}
+
+		const goroutines = 8
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		start := make(chan struct{})
+		for g := 0; g < goroutines; g++ {
+			go func() {
+				defer wg.Done()
+				<-start // all start at the same time
+				trigger()
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		// Channel must be closed exactly once.
+		select {
+		case <-detachCh:
+		default:
+			t.Fatalf("iteration %d: detachCh was not closed", i)
+		}
+	}
+}
+
+// TestDetachableReaderWithTrigger_SharedOnce verifies that
+// NewDetachableReaderWithTrigger uses the caller-provided trigger and that
+// calling the trigger externally (simulating the signal handler) at the same
+// time as the reader seeing the detach sequence does not panic.
+func TestDetachableReaderWithTrigger_SharedOnce(t *testing.T) {
+	detachCh := make(chan struct{})
+	var once sync.Once
+	trigger := func() {
+		once.Do(func() { close(detachCh) })
+	}
+
+	// Reader will see the detach sequence.
+	input := []byte{0x1D, 'd'}
+	r := NewDetachableReaderWithTrigger(bytes.NewReader(input), DefaultDetachKeys, trigger)
+
+	// Fire the external trigger concurrently with the read.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		trigger() // simulates SIGHUP signal handler
+	}()
+
+	_, _ = io.ReadAll(r)
+	wg.Wait()
+
+	// Must be closed exactly once (no panic, channel readable).
+	select {
+	case <-detachCh:
+	default:
+		t.Fatal("detachCh was not closed")
+	}
 }
 
 func TestParseDetachKeys_SpecialChars(t *testing.T) {

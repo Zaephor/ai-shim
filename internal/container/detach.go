@@ -12,15 +12,13 @@ import (
 var DefaultDetachKeys = [2]byte{0x1D, 0x64}
 
 // DetachableReader wraps an io.Reader and watches for a 2-byte detach
-// sequence. When the sequence is detected, detachCh is closed and Read
+// sequence. When the sequence is detected, triggerDetach is called and Read
 // returns io.EOF without forwarding the escape bytes.
 type DetachableReader struct {
-	reader  io.Reader
-	keys    [2]byte
-	timeout time.Duration // max wait between escape bytes
-
-	detachCh   chan struct{}
-	detachOnce sync.Once
+	reader        io.Reader
+	keys          [2]byte
+	timeout       time.Duration // max wait between escape bytes
+	triggerDetach func()        // called exactly once when the detach sequence is seen
 
 	mu         sync.Mutex
 	sawEscape  bool      // true if first key was seen
@@ -30,17 +28,36 @@ type DetachableReader struct {
 
 // NewDetachableReader creates a DetachableReader with the default keys and
 // a 500ms timeout between the two key presses.
+//
+// Deprecated: prefer NewDetachableReaderWithTrigger for safe concurrent use.
+// This wrapper remains for backward compatibility with tests that pass a raw
+// channel; it wraps the channel close in a sync.Once internally.
 func NewDetachableReader(r io.Reader, detachCh chan struct{}) *DetachableReader {
 	return NewDetachableReaderWithKeys(r, detachCh, DefaultDetachKeys)
 }
 
 // NewDetachableReaderWithKeys creates a DetachableReader with custom keys.
+//
+// It wraps the channel close in a local sync.Once so that calling the detach
+// sequence twice (or concurrently) never panics. Callers that need to share
+// a Once across multiple close sites should use NewDetachableReaderWithTrigger.
 func NewDetachableReaderWithKeys(r io.Reader, detachCh chan struct{}, keys [2]byte) *DetachableReader {
+	var once sync.Once
+	return NewDetachableReaderWithTrigger(r, keys, func() {
+		once.Do(func() { close(detachCh) })
+	})
+}
+
+// NewDetachableReaderWithTrigger creates a DetachableReader that calls
+// triggerDetach (at most once, enforced by the caller) when the detach key
+// sequence is recognised. Use this when a shared sync.Once governs all detach
+// close sites.
+func NewDetachableReaderWithTrigger(r io.Reader, keys [2]byte, triggerDetach func()) *DetachableReader {
 	return &DetachableReader{
-		reader:   r,
-		keys:     keys,
-		timeout:  500 * time.Millisecond,
-		detachCh: detachCh,
+		reader:        r,
+		keys:          keys,
+		timeout:       500 * time.Millisecond,
+		triggerDetach: triggerDetach,
 	}
 }
 
@@ -105,7 +122,7 @@ func (d *DetachableReader) Read(p []byte) (int, error) {
 				// Detach sequence complete.
 				d.sawEscape = false
 				d.mu.Unlock()
-				d.detachOnce.Do(func() { close(d.detachCh) })
+				d.triggerDetach()
 				if out > 0 {
 					return out, nil
 				}
