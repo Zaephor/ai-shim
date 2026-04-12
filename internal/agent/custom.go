@@ -78,6 +78,9 @@ func LoadCustomAgents(configDir string) map[string]Definition {
 
 		data, err := os.ReadFile(filepath.Join(agentsDir, name))
 		if err != nil {
+			if !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: skipping %s: %v\n", name, err)
+			}
 			continue
 		}
 		if len(data) == 0 {
@@ -86,6 +89,7 @@ func LoadCustomAgents(configDir string) map[string]Definition {
 
 		var f customAgentFile
 		if err := yaml.Unmarshal(data, &f); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: skipping %s: %v\n", name, err)
 			continue
 		}
 		if f.AgentDef == nil {

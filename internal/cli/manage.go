@@ -23,6 +23,7 @@ import (
 	"github.com/ai-shim/ai-shim/internal/parse"
 	"github.com/ai-shim/ai-shim/internal/security"
 	"github.com/ai-shim/ai-shim/internal/storage"
+	cerrdefs "github.com/containerd/errdefs"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	network_types "github.com/docker/docker/api/types/network"
@@ -141,7 +142,7 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	}
 
 	if len(cfg.Variables) > 0 {
-		b.WriteString("  variables:\n")
+		fmt.Fprintf(&b, "  variables:%s\n", src("variables"))
 		for k, v := range cfg.Variables {
 			fmt.Fprintf(&b, "    %s=%s\n", k, v)
 		}
@@ -774,7 +775,7 @@ func Cleanup() (CleanupResult, error) {
 		result.Errors = append(result.Errors, fmt.Sprintf("listing networks: %v", err))
 	} else {
 		for _, n := range networks {
-			if err := cli.NetworkRemove(ctx, n.ID); err != nil {
+			if err := cli.NetworkRemove(ctx, n.ID); err != nil && !cerrdefs.IsNotFound(err) {
 				result.Failed = append(result.Failed, fmt.Sprintf("network %s: %v", n.Name, err))
 			} else {
 				result.RemovedNetworks = append(result.RemovedNetworks, n.Name)
