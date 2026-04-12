@@ -35,7 +35,7 @@ func Init(layout storage.Layout) error {
 	// Write default config
 	defaultConfig := `# ai-shim default configuration
 # These settings apply to all agents and profiles.
-# See: https://github.com/ai-shim/ai-shim
+# See: https://github.com/Zaephor/ai-shim
 
 # Container image (default: ghcr.io/catthehacker/ubuntu:act-24.04)
 # image: "ghcr.io/catthehacker/ubuntu:act-24.04"
@@ -66,7 +66,7 @@ func Init(layout storage.Layout) error {
 
 # For more configuration options (tools, MCP servers, volumes, ports,
 # resource limits, network isolation, template variables), see:
-# https://github.com/ai-shim/ai-shim#configuration
+# https://github.com/Zaephor/ai-shim#configuration
 #
 # Example profiles for common development stacks (kubernetes, aws, python,
 # rust, etc.) are available in the repository at configs/examples/profiles/

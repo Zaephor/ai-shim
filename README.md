@@ -16,20 +16,22 @@ stdin/stdout, and exit codes pass through unchanged.
 
 ```bash
 # Download the latest binary for your platform
-curl -fsSL https://github.com/ai-shim/ai-shim/releases/latest/download/ai-shim_linux_amd64.tar.gz | tar xz
+curl -fsSL https://github.com/Zaephor/ai-shim/releases/latest/download/ai-shim_linux_amd64.tar.gz | tar xz
 sudo mv ai-shim /usr/local/bin/
 ```
 
 **Or install with Go:**
 
 ```bash
+# NOTE: This must match the Go module path in go.mod (github.com/ai-shim/ai-shim)
+# If the module is renamed, this command will need to be updated accordingly
 go install github.com/ai-shim/ai-shim/cmd/ai-shim@latest
 ```
 
 **Or build from source:**
 
 ```bash
-git clone https://github.com/ai-shim/ai-shim.git
+git clone https://github.com/Zaephor/ai-shim.git
 cd ai-shim
 make build
 sudo cp ai-shim /usr/local/bin/   # or add ./ai-shim to your PATH
