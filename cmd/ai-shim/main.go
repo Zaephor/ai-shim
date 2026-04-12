@@ -953,7 +953,7 @@ func runAgent(name string, args []string) (int, error) {
 	// 6.6 Detect home directory from container image
 	imageUser, err := runner.InspectImageUser(ctx, image)
 	if err != nil {
-		// Non-fatal: use defaults
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: could not inspect image user, defaulting to /home/user: %v\n", err)
 		imageUser = container.ImageUser{HomeDir: "/home/user", Username: "user"}
 	}
 
@@ -1179,7 +1179,9 @@ func handleReattach(ctx context.Context, runner *container.Runner, session *cont
 	}
 
 	// Container exited while we were attached — clean up.
-	_ = runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	if err := runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true}); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove container %s: %v\n", session.ContainerName, err)
+	}
 	logging.LogExit(logDir, session.ContainerName, result.ExitCode)
 
 	// Clean up DIND sidecar if present.
@@ -1212,10 +1214,14 @@ func showRecentLogs(ctx context.Context, cli *client.Client, containerID string)
 // stopSession stops a running container and its associated DIND sidecar.
 func stopSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
 	stopTimeout := 5
-	_ = cli.ContainerStop(ctx, session.ContainerID, container_types.StopOptions{
+	if err := cli.ContainerStop(ctx, session.ContainerID, container_types.StopOptions{
 		Timeout: &stopTimeout,
-	})
-	_ = cli.ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to stop container %s: %v\n", session.ContainerName, err)
+	}
+	if err := cli.ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true}); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove container %s: %v\n", session.ContainerName, err)
+	}
 	stopDINDForSession(ctx, cli, session)
 }
 
@@ -1232,6 +1238,7 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 	)
 	list, err := cli.ContainerList(ctx, container_types.ListOptions{Filters: f})
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to list DIND containers for %s/%s: %v\n", session.AgentName, session.Profile, err)
 		return
 	}
 	for _, c := range list {
@@ -1243,11 +1250,14 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 		}
 
 		stopTimeout := 5
-		_ = cli.ContainerStop(ctx, c.ID, container_types.StopOptions{Timeout: &stopTimeout})
-		_ = cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true})
+		if err := cli.ContainerStop(ctx, c.ID, container_types.StopOptions{Timeout: &stopTimeout}); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to stop DIND container %s: %v\n", c.ID, err)
+		}
+		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove DIND container %s: %v\n", c.ID, err)
+		}
 
-		// Remove associated volumes. Errors are silently ignored — if the volumes
-		// are already gone (e.g. removed by a previous cleanup pass) that is fine.
+		// Remove associated volumes. Not-found is fine (previous cleanup pass).
 		if containerName != "" {
 			_ = cli.VolumeRemove(ctx, containerName+"-socket", true)
 			_ = cli.VolumeRemove(ctx, containerName+"-certs", true)
@@ -1312,7 +1322,9 @@ func manageAttach(agentName, profile string) (int, error) {
 	}
 
 	// Container exited — clean up.
-	_ = runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true})
+	if err := runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true}); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove container %s: %v\n", session.ContainerName, err)
+	}
 	return result.ExitCode, nil
 }
 
