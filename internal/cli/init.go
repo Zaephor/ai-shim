@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ai-shim/ai-shim/internal/agent"
-	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/Zaephor/ai-shim/internal/agent"
+	"github.com/Zaephor/ai-shim/internal/storage"
 )
 
 // IsFirstRun checks if ai-shim has been set up.

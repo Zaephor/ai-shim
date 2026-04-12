@@ -1,6 +1,6 @@
 package container
 
-import "github.com/ai-shim/ai-shim/internal/parse"
+import "github.com/Zaephor/ai-shim/internal/parse"
 
 // ValidateImageDigest checks that if an image reference contains a @sha256: digest,
 // the digest is exactly 64 hex characters. Returns nil for tag-only references.

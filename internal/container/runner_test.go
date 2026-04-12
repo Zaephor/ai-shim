@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

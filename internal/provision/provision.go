@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ai-shim/ai-shim/internal/shell"
+	"github.com/Zaephor/ai-shim/internal/shell"
 )
 
 var hexPattern = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)

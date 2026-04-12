@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	ai_container "github.com/ai-shim/ai-shim/internal/container"
-	"github.com/ai-shim/ai-shim/internal/parse"
+	ai_container "github.com/Zaephor/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/parse"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"

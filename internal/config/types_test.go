@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 

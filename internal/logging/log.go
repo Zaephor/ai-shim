@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/security"
+	"github.com/Zaephor/ai-shim/internal/security"
 )
 
 var verbose bool

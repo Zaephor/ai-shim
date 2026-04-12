@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/Zaephor/ai-shim/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

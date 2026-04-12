@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ai-shim/ai-shim/internal/docker"
+	"github.com/Zaephor/ai-shim/internal/docker"
 )
 
 // SkipIfNoDocker skips the test if Docker is not available or if running

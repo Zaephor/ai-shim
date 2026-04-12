@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/container"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/stretchr/testify/assert"

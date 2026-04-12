@@ -107,7 +107,7 @@ jobs:
             echo ""
             echo "| Package | Coverage |"
             echo "|---------|----------|"
-            grep -E "^ok\s+github.com/ai-shim/ai-shim/" test-output.log | \
+            grep -E "^ok\s+github.com/Zaephor/ai-shim/" test-output.log | \
               awk '{
                 pkg=$2
                 sub(/^github\.com\/ai-shim\/ai-shim\//, "", pkg)
@@ -295,7 +295,7 @@ jobs:
             echo ""
             echo "| Package | Duration |"
             echo "|---------|----------|"
-            grep -E "^ok\s+github.com/ai-shim/ai-shim/" e2e-output.log | \
+            grep -E "^ok\s+github.com/Zaephor/ai-shim/" e2e-output.log | \
               awk '{
                 pkg=$2; sub(/^github\.com\/ai-shim\/ai-shim\//, "", pkg)
                 printf "| %s | %s |\n", pkg, $3

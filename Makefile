@@ -1,7 +1,7 @@
 .PHONY: build test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures test-journey
 
 BINARY := ai-shim
-MODULE := github.com/ai-shim/ai-shim
+MODULE := github.com/Zaephor/ai-shim
 VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 

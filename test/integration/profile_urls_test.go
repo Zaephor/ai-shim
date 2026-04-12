@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/config"
+	"github.com/Zaephor/ai-shim/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

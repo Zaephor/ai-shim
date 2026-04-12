@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/agent"
-	"github.com/ai-shim/ai-shim/internal/container"
-	"github.com/ai-shim/ai-shim/internal/install"
-	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/Zaephor/ai-shim/internal/agent"
+	"github.com/Zaephor/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/install"
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

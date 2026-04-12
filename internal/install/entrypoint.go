@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ai-shim/ai-shim/internal/shell"
+	"github.com/Zaephor/ai-shim/internal/shell"
 )
 
 type EntrypointParams struct {

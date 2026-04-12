@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/container"
-	"github.com/ai-shim/ai-shim/internal/docker"
+	"github.com/Zaephor/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/docker"
 	container_types "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"

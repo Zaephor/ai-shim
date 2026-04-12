@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ai-shim/ai-shim/internal/invocation"
-	"github.com/ai-shim/ai-shim/internal/storage"
+	"github.com/Zaephor/ai-shim/internal/invocation"
+	"github.com/Zaephor/ai-shim/internal/storage"
 )
 
 // switchProfileSeq disambiguates temp marker filenames across concurrent

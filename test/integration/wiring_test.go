@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ai-shim/ai-shim/internal/agent"
-	"github.com/ai-shim/ai-shim/internal/config"
-	"github.com/ai-shim/ai-shim/internal/container"
-	"github.com/ai-shim/ai-shim/internal/platform"
-	"github.com/ai-shim/ai-shim/internal/storage"
-	"github.com/ai-shim/ai-shim/internal/testutil"
+	"github.com/Zaephor/ai-shim/internal/agent"
+	"github.com/Zaephor/ai-shim/internal/config"
+	"github.com/Zaephor/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/platform"
+	"github.com/Zaephor/ai-shim/internal/storage"
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +53,7 @@ func TestAllPackagesReachableFromMain(t *testing.T) {
 	// Packages that are legitimately test-only or utility-only
 	// (not expected to be in the main binary's import graph)
 	testOnlyPackages := map[string]bool{
-		"github.com/ai-shim/ai-shim/internal/testutil": true, // test helpers only
+		"github.com/Zaephor/ai-shim/internal/testutil": true, // test helpers only
 	}
 
 	for _, pkg := range allPackages {

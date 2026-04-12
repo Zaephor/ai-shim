@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ai-shim/ai-shim/internal/parse"
+	"github.com/Zaephor/ai-shim/internal/parse"
 )
 
 // validToolTypes are the recognized tool provisioning types.

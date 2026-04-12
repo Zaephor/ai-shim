@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ai-shim/ai-shim/internal/docker"
-	"github.com/ai-shim/ai-shim/internal/logging"
-	"github.com/ai-shim/ai-shim/internal/parse"
+	"github.com/Zaephor/ai-shim/internal/docker"
+	"github.com/Zaephor/ai-shim/internal/logging"
+	"github.com/Zaephor/ai-shim/internal/parse"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	image_types "github.com/docker/docker/api/types/image"

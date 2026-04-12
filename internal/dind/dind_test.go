@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	ai_container "github.com/ai-shim/ai-shim/internal/container"
-	"github.com/ai-shim/ai-shim/internal/network"
-	"github.com/ai-shim/ai-shim/internal/testutil"
+	ai_container "github.com/Zaephor/ai-shim/internal/container"
+	"github.com/Zaephor/ai-shim/internal/network"
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"

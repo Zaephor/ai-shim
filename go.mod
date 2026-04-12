@@ -1,4 +1,4 @@
-module github.com/ai-shim/ai-shim
+module github.com/Zaephor/ai-shim
 
 go 1.25.9
 
