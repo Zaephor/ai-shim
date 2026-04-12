@@ -72,19 +72,23 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	// Set every known AI_SHIM_* env var
 	envVars := map[string]string{
-		"AI_SHIM_IMAGE":            "env-image",
-		"AI_SHIM_VERSION":          "1.0.0",
-		"AI_SHIM_DIND":             "1",
-		"AI_SHIM_DIND_GPU":         "1",
-		"AI_SHIM_GPU":              "1",
-		"AI_SHIM_NETWORK_SCOPE":    "profile",
-		"AI_SHIM_DIND_HOSTNAME":    "dind-host",
-		"AI_SHIM_DIND_CACHE":       "1",
-		"AI_SHIM_DIND_TLS":         "1",
-		"AI_SHIM_SECURITY_PROFILE": "strict",
-		"AI_SHIM_UPDATE_INTERVAL":  "7d",
-		"AI_SHIM_GIT_NAME":         "Test User",
-		"AI_SHIM_GIT_EMAIL":        "test@example.com",
+		"AI_SHIM_IMAGE":                 "env-image",
+		"AI_SHIM_VERSION":               "1.0.0",
+		"AI_SHIM_DIND":                  "1",
+		"AI_SHIM_DIND_GPU":              "1",
+		"AI_SHIM_GPU":                   "1",
+		"AI_SHIM_NETWORK_SCOPE":         "profile",
+		"AI_SHIM_DIND_HOSTNAME":         "dind-host",
+		"AI_SHIM_DIND_CACHE":            "1",
+		"AI_SHIM_DIND_TLS":              "1",
+		"AI_SHIM_SECURITY_PROFILE":      "strict",
+		"AI_SHIM_UPDATE_INTERVAL":       "7d",
+		"AI_SHIM_GIT_NAME":              "Test User",
+		"AI_SHIM_GIT_EMAIL":             "test@example.com",
+		"AI_SHIM_SELFUPDATE_REPOSITORY": "owner/repo",
+		"AI_SHIM_SELFUPDATE_API_URL":    "https://api.github.com",
+		"AI_SHIM_SELFUPDATE_ENABLED":    "1",
+		"AI_SHIM_SELFUPDATE_PRERELEASE": "1",
 	}
 	for k, v := range envVars {
 		t.Setenv(k, v)
@@ -107,6 +111,11 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	require.NotNil(t, cfg.Git, "AI_SHIM_GIT_NAME/EMAIL")
 	assert.Equal(t, "Test User", cfg.Git.Name, "AI_SHIM_GIT_NAME")
 	assert.Equal(t, "test@example.com", cfg.Git.Email, "AI_SHIM_GIT_EMAIL")
+	require.NotNil(t, cfg.SelfUpdate, "AI_SHIM_SELFUPDATE_*")
+	assert.Equal(t, "owner/repo", cfg.SelfUpdate.Repository, "AI_SHIM_SELFUPDATE_REPOSITORY")
+	assert.Equal(t, "https://api.github.com", cfg.SelfUpdate.APIURL, "AI_SHIM_SELFUPDATE_API_URL")
+	assert.True(t, *cfg.SelfUpdate.Enabled, "AI_SHIM_SELFUPDATE_ENABLED")
+	assert.True(t, *cfg.SelfUpdate.Prerelease, "AI_SHIM_SELFUPDATE_PRERELEASE")
 }
 
 // TestComputeSources_AllFieldsTracked verifies that computeSources tracks every
