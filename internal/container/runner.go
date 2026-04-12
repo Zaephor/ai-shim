@@ -337,7 +337,11 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 				triggerDetach()
 				return
 			}
-			_ = r.client.ContainerKill(ctx, containerID, sig.String())
+			if err := r.client.ContainerKill(ctx, containerID, sig.String()); err != nil {
+				// The container may have already exited; this is expected on normal
+				// shutdown, so log at debug level rather than treating as an error.
+				logging.Debug("signal %s forwarding failed: %v", sig, err)
+			}
 		}
 	}()
 	defer func() {
@@ -366,6 +370,12 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 	}
 
 	if spec.Stdin {
+		// NOTE: this goroutine may outlive streamAttached when blocked on
+		// os.Stdin.Read(). This is a known Go limitation (os.Stdin reads
+		// cannot be cancelled). It is benign because the process exits
+		// shortly after streamAttached returns. If streamAttached is ever
+		// called multiple times in a single process (e.g. watch mode with
+		// in-process retry), this would need to be addressed.
 		go func() {
 			var stdin io.Reader = os.Stdin
 			if spec.Persistent && spec.TTY {
@@ -516,17 +526,20 @@ func (r *Runner) InspectImageUser(ctx context.Context, image string) (ImageUser,
 }
 
 // saveExitLog appends an exit log entry to a log file for the container.
+// Exit logging is best-effort: failures are warned on stderr but never fatal.
 func (r *Runner) saveExitLog(logDir, name string, exitCode int) {
 	if logDir == "" {
 		return
 	}
 	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: exit log: cannot create log dir %s: %v\n", logDir, err)
 		return
 	}
 	logFile := filepath.Join(logDir, name+".log")
 	entry := fmt.Sprintf("%s container=%s exit_code=%d\n", time.Now().Format(time.RFC3339), name, exitCode)
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: exit log: cannot open %s: %v\n", logFile, err)
 		return
 	}
 	defer func() { _ = f.Close() }()
@@ -534,11 +547,14 @@ func (r *Runner) saveExitLog(logDir, name string, exitCode int) {
 	// Advisory exclusive lock prevents concurrent processes from interleaving
 	// exit-log entries. flock(2) is available on Linux and macOS.
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: exit log: cannot lock %s: %v\n", logFile, err)
 		return
 	}
 	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
 
-	_, _ = f.WriteString(entry)
+	if _, err := f.WriteString(entry); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: exit log: cannot write to %s: %v\n", logFile, err)
+	}
 }
 
 // Client returns the underlying Docker client for DIND integration.

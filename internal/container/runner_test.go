@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -247,18 +248,31 @@ func TestSaveExitLog_Appends(t *testing.T) {
 
 func TestSaveExitLog_LogDirIsFile(t *testing.T) {
 	// If logDir points to a regular file (not a directory), saveExitLog should
-	// not panic — it should silently fail because MkdirAll will error.
+	// warn on stderr (MkdirAll will error) but not panic.
 	tmpDir := t.TempDir()
 	fakeDir := filepath.Join(tmpDir, "not-a-dir")
 	require.NoError(t, os.WriteFile(fakeDir, []byte("I am a file"), 0644))
 
-	r := &Runner{}
-	// Must not panic
-	r.saveExitLog(fakeDir, "test-container", 42)
+	// Capture stderr to verify the warning is emitted.
+	origStderr := os.Stderr
+	r2, w2, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w2
+
+	runner := &Runner{}
+	runner.saveExitLog(fakeDir, "test-container", 42)
+
+	w2.Close()
+	os.Stderr = origStderr
+	var buf strings.Builder
+	_, _ = io.Copy(&buf, r2)
+
+	assert.Contains(t, buf.String(), "ai-shim: warning: exit log:", "should warn when logDir is unwritable")
+	assert.Contains(t, buf.String(), fakeDir, "warning should include the path")
 
 	// The file should still be a regular file, not replaced
-	info, err := os.Stat(fakeDir)
-	require.NoError(t, err)
+	info, statErr := os.Stat(fakeDir)
+	require.NoError(t, statErr)
 	assert.False(t, info.IsDir(), "file should not have been replaced with a directory")
 }
 

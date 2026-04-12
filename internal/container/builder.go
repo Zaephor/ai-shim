@@ -317,12 +317,14 @@ func parsePorts(ports []string) (nat.PortMap, nat.PortSet) {
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port %q: expected hostPort:containerPort format\n", p)
 			continue
 		}
 		hostPort := parts[0]
 		containerPort := parts[1]
 		port, err := nat.NewPort("tcp", containerPort)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port %q: %v\n", p, err)
 			continue
 		}
 		portMap[port] = []nat.PortBinding{

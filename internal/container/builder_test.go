@@ -1,6 +1,8 @@
 package container
 
 import (
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -484,6 +486,28 @@ func TestParsePorts_InvalidFormat(t *testing.T) {
 	_, ok := portMap["80/tcp"]
 	assert.True(t, ok, "valid port should still be parsed")
 	assert.Len(t, portSet, 1, "only valid port should be in set")
+}
+
+// TestParsePorts_MalformedWarnsOnStderr verifies that parsePorts emits a
+// warning to stderr for each skipped port mapping rather than silently dropping
+// it. Without a warning, the user configures port forwarding and gets no
+// feedback that it was ignored.
+func TestParsePorts_MalformedWarnsOnStderr(t *testing.T) {
+	// Capture stderr.
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	parsePorts([]string{"invalid-port", "8080:80"})
+
+	w.Close()
+	os.Stderr = origStderr
+	var buf strings.Builder
+	_, _ = io.Copy(&buf, r)
+
+	assert.Contains(t, buf.String(), "ai-shim: skipping invalid port", "should warn about malformed port")
+	assert.Contains(t, buf.String(), "invalid-port", "warning should include the malformed port string")
 }
 
 func TestBuildSpec_NoResourceLimits(t *testing.T) {
