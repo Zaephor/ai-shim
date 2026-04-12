@@ -18,13 +18,16 @@ func isValidChecksum(s string) bool {
 
 // ToolDef mirrors config.ToolDef — the tool definition from config.
 type ToolDef struct {
-	Type     string // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
-	URL      string
-	Binary   string
-	Files    []string // additional files for tar-extract-selective
-	Package  string   // for apt/go-install
-	Install  string   // shell script for custom type
-	Checksum string   // optional sha256 checksum
+	Type       string // binary-download, tar-extract, tar-extract-selective, apt, go-install, custom
+	URL        string
+	Binary     string
+	Files      []string // additional files for tar-extract-selective
+	Package    string   // for apt/go-install
+	Install    string   // shell script for custom type
+	Checksum   string   // optional sha256 checksum
+	DataDir    bool     // request persistent dir mount
+	CacheScope string   // "global" (default), "profile", "agent"
+	EnvVar     string   // env var name exported with mount path
 }
 
 // GenerateInstallScript generates a shell script that provisions all tools.
@@ -39,6 +42,9 @@ func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
 
 	for name, tool := range tools {
 		fmt.Fprintf(&b, "\n# Install: %s\n", name)
+		if tool.DataDir && tool.EnvVar != "" {
+			fmt.Fprintf(&b, "export %s=\"/usr/local/share/ai-shim/cache/%s\"\n", tool.EnvVar, name)
+		}
 		b.WriteString(generateToolInstall(tool, targetDir))
 	}
 

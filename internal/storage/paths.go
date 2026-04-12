@@ -52,6 +52,22 @@ func (l Layout) ProfileHome(profile string) string {
 	return filepath.Join(l.Root, "profiles", profile, "home")
 }
 
+// ToolCachePath returns the host path for a tool's persistent cache directory.
+// The cacheScope controls where the directory lives:
+//   - "" or "global": ~/.ai-shim/shared/cache/{tool-name}/
+//   - "profile":      ~/.ai-shim/profiles/{profile}/cache/{tool-name}/
+//   - "agent":        ~/.ai-shim/agents/{agent}/cache/{tool-name}/
+func ToolCachePath(layout Layout, toolName, cacheScope, agent, profile string) string {
+	switch cacheScope {
+	case "profile":
+		return filepath.Join(layout.Root, "profiles", profile, "cache", toolName)
+	case "agent":
+		return filepath.Join(layout.Root, "agents", agent, "cache", toolName)
+	default: // "" or "global"
+		return filepath.Join(layout.SharedCache, toolName)
+	}
+}
+
 // EnsureDirectories creates all required directories for the given agent and profile.
 func (l Layout) EnsureDirectories(agent, profile string) error {
 	dirs := []string{

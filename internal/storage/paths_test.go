@@ -131,6 +131,34 @@ func TestLayout_EnsureAgentData_Idempotent(t *testing.T) {
 	require.NoError(t, layout.EnsureAgentData("work", []string{".claude"}, []string{".claude.json"}))
 }
 
+func TestToolCachePath_Global(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got := ToolCachePath(layout, "nvm", "global", "claude-code", "default")
+	assert.Equal(t, filepath.Join(root, "shared", "cache", "nvm"), got)
+}
+
+func TestToolCachePath_EmptyScopeDefaultsToGlobal(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got := ToolCachePath(layout, "nvm", "", "claude-code", "default")
+	assert.Equal(t, filepath.Join(root, "shared", "cache", "nvm"), got)
+}
+
+func TestToolCachePath_Profile(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got := ToolCachePath(layout, "gvm", "profile", "claude-code", "golang")
+	assert.Equal(t, filepath.Join(root, "profiles", "golang", "cache", "gvm"), got)
+}
+
+func TestToolCachePath_Agent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got := ToolCachePath(layout, "sdkman", "agent", "gemini-cli", "default")
+	assert.Equal(t, filepath.Join(root, "agents", "gemini-cli", "cache", "sdkman"), got)
+}
+
 func TestLayout_EnsureAgentData_NestedFileParentCreated(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)

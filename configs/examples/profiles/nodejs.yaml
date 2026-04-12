@@ -21,6 +21,18 @@ ports:
 
 # Useful CLI tools for Node.js development.
 tools:
+  # nvm -- Node.js version manager (persists installations across container launches)
+  nvm:
+    type: custom
+    data_dir: true
+    env_var: NVM_DIR
+    install: |
+      if [ ! -d "$NVM_DIR" ]; then
+        curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | NVM_DIR="$NVM_DIR" bash
+      fi
+      bash -c ". $NVM_DIR/nvm.sh && nvm install 22 && nvm alias default 22" || true
+      export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node/ | tail -1)/bin:$PATH"
+
   jq:
     type: binary-download
     url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"

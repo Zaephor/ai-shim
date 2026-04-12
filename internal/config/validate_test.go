@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -196,4 +197,52 @@ func TestValidate_MCPServers_EmptyCommand(t *testing.T) {
 	errs := cfg.Validate()
 	assert.NotEmpty(t, errs)
 	assert.Contains(t, errs[0], "missing command")
+}
+
+func TestValidate_Tools_DataDirWithoutEnvVar(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"nvm": {Type: "custom", Install: "echo hello", DataDir: true, EnvVar: ""},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "data_dir") && strings.Contains(e, "env_var") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should report data_dir without env_var error")
+}
+
+func TestValidate_Tools_DataDirWithEnvVar(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"nvm": {Type: "custom", Install: "echo hello", DataDir: true, EnvVar: "NVM_DIR"},
+	}}
+	errs := cfg.Validate()
+	assert.Empty(t, errs)
+}
+
+func TestValidate_Tools_InvalidCacheScope(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"nvm": {Type: "custom", Install: "echo hello", DataDir: true, EnvVar: "NVM_DIR", CacheScope: "invalid"},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "cache_scope") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should report invalid cache_scope error")
+}
+
+func TestValidate_Tools_ValidCacheScopes(t *testing.T) {
+	for _, scope := range []string{"", "global", "profile", "agent"} {
+		cfg := Config{Tools: map[string]ToolDef{
+			"nvm": {Type: "custom", Install: "echo hello", DataDir: true, EnvVar: "NVM_DIR", CacheScope: scope},
+		}}
+		errs := cfg.Validate()
+		assert.Empty(t, errs, "cache_scope %q should be valid", scope)
+	}
 }

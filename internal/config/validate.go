@@ -115,6 +115,14 @@ func validatePorts(ports []string) []string {
 	return warnings
 }
 
+// validCacheScopes are the recognized cache scope values for tool data directories.
+var validCacheScopes = map[string]bool{
+	"":        true, // empty = global (default)
+	"global":  true,
+	"profile": true,
+	"agent":   true,
+}
+
 // validateTools checks that tool definitions have valid types and required fields.
 func validateTools(tools map[string]ToolDef) []string {
 	var warnings []string
@@ -124,6 +132,12 @@ func validateTools(tools map[string]ToolDef) []string {
 		}
 		if td.Binary == "" && td.Type != "custom" {
 			warnings = append(warnings, fmt.Sprintf("tool %q: missing binary name", name))
+		}
+		if td.DataDir && td.EnvVar == "" {
+			warnings = append(warnings, fmt.Sprintf("tool %q has data_dir enabled but no env_var specified", name))
+		}
+		if !validCacheScopes[td.CacheScope] {
+			warnings = append(warnings, fmt.Sprintf("tool %q: invalid cache_scope %q (valid: global, profile, agent)", name, td.CacheScope))
 		}
 	}
 	return warnings

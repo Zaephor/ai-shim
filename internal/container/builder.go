@@ -82,6 +82,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 				Type: td.Type, URL: td.URL, Binary: td.Binary,
 				Files: td.Files, Package: td.Package,
 				Install: td.Install, Checksum: td.Checksum,
+				DataDir: td.DataDir, CacheScope: td.CacheScope, EnvVar: td.EnvVar,
 			}
 		}
 		toolScript = provision.GenerateInstallScript(provTools, "/usr/local/share/ai-shim/bin")
@@ -291,6 +292,23 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 			Type:   mount.TypeBind,
 			Source: parts[0],
 			Target: parts[1],
+		})
+	}
+
+	// Tool cache mounts for tools with data_dir enabled
+	for name, td := range p.Config.Tools {
+		if !td.DataDir {
+			continue
+		}
+		hostPath := storage.ToolCachePath(p.Layout, name, td.CacheScope, p.Agent.Name, p.Profile)
+		if err := os.MkdirAll(hostPath, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to create tool cache dir %s: %v\n", hostPath, err)
+			continue
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: hostPath,
+			Target: "/usr/local/share/ai-shim/cache/" + name,
 		})
 	}
 

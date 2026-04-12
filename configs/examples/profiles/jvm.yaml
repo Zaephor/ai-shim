@@ -16,14 +16,14 @@ tools:
   # sdkman -- JDK and JVM tool version manager (installs Java, Gradle, Maven)
   sdkman:
     type: custom
+    data_dir: true
+    env_var: SDKMAN_DIR
     install: |
-      if [ ! -d "$HOME/.sdkman" ]; then
-        curl -s "https://get.sdkman.io" | bash
-        source "$HOME/.sdkman/bin/sdkman-init.sh"
-        sdk install java
-        sdk install gradle
-        sdk install maven
+      if [ ! -d "$SDKMAN_DIR" ]; then
+        curl -s "https://get.sdkman.io" | SDKMAN_DIR="$SDKMAN_DIR" bash
+        bash -c ". $SDKMAN_DIR/bin/sdkman-init.sh && sdk install java && sdk install gradle && sdk install maven"
       fi
+      export PATH="$SDKMAN_DIR/candidates/java/current/bin:$SDKMAN_DIR/candidates/gradle/current/bin:$SDKMAN_DIR/candidates/maven/current/bin:$PATH"
 
   jq:
     type: binary-download

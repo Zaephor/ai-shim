@@ -18,6 +18,19 @@ env:
   CGO_ENABLED: "0"
 
 tools:
+  # gvm -- Go version manager (persists installations across container launches)
+  gvm:
+    type: custom
+    data_dir: true
+    env_var: GVM_ROOT
+    install: |
+      if [ ! -d "$GVM_ROOT" ]; then
+        curl -fsSL https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | GVM_ROOT="$GVM_ROOT" bash
+      fi
+      bash -c ". $GVM_ROOT/scripts/gvm && gvm install go1.24.2 -B && gvm use go1.24.2 --default" || true
+      export GOROOT="$GVM_ROOT/gos/go1.24.2"
+      export PATH="$GOROOT/bin:$GVM_ROOT/bin:$PATH"
+
   # golangci-lint for linting
   golangci-lint:
     type: custom

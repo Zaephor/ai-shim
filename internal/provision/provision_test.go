@@ -1,6 +1,7 @@
 package provision
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -181,4 +182,43 @@ func TestGenerateInstallScript_MultipleTools(t *testing.T) {
 	script := GenerateInstallScript(tools, "/opt/bin")
 	assert.Contains(t, script, "act")
 	assert.Contains(t, script, "helm")
+}
+
+func TestGenerateInstallScript_DataDirExportsEnvVar(t *testing.T) {
+	tools := map[string]ToolDef{
+		"nvm": {
+			Type:    "custom",
+			Install: "curl -fsSL https://install.sh | bash",
+			DataDir: true,
+			EnvVar:  "NVM_DIR",
+		},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	assert.Contains(t, script, `export NVM_DIR="/usr/local/share/ai-shim/cache/nvm"`)
+	// Export must appear before the install script content
+	exportIdx := strings.Index(script, "export NVM_DIR=")
+	installIdx := strings.Index(script, "curl -fsSL")
+	assert.True(t, exportIdx < installIdx, "env var export must appear before install script")
+}
+
+func TestGenerateInstallScript_DataDirOnBinaryDownload(t *testing.T) {
+	tools := map[string]ToolDef{
+		"mytool": {
+			Type:    "binary-download",
+			URL:     "https://example.com/mytool",
+			Binary:  "mytool",
+			DataDir: true,
+			EnvVar:  "MYTOOL_DIR",
+		},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	assert.Contains(t, script, `export MYTOOL_DIR="/usr/local/share/ai-shim/cache/mytool"`)
+}
+
+func TestGenerateInstallScript_NoDataDirNoExport(t *testing.T) {
+	tools := map[string]ToolDef{
+		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
+	}
+	script := GenerateInstallScript(tools, "/opt/bin")
+	assert.NotContains(t, script, "export ", "no env var should be exported when data_dir is false")
 }

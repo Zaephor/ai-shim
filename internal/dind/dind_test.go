@@ -591,16 +591,15 @@ func TestDetectSysbox_ReturnsFalseWithoutSysbox(t *testing.T) {
 // This test asserts that /certs/client is group-owned by SocketGID and that
 // the group has read+execute permission after Start returns.
 func TestStart_TLSCertPermissions(t *testing.T) {
-	cli := getClient(t)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-tls-perms", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-tls-perms", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
 	const targetGID = 1000
-	sidecar, err := Start(ctx, cli, Config{
+	sidecar, err := Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-tls-perms",
@@ -610,8 +609,8 @@ func TestStart_TLSCertPermissions(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = sidecar.Stop(ctx) }()
 
-	// Exec `stat -c '%g %a' /certs/client` inside DIND.
-	// %g = owning group ID, %a = octal permissions.
+	// Use the sidecar's exec helper to stat /certs/client.
+	cli := runner.Client()
 	execResp, err := cli.ContainerExecCreate(ctx, sidecar.ContainerID(), container.ExecOptions{
 		Cmd:          []string{"stat", "-c", "%g %a", "/certs/client"},
 		AttachStdout: true,
@@ -650,17 +649,14 @@ func TestStart_TLSCertPermissions(t *testing.T) {
 // the memory resource limit cannot be parsed, rather than silently continuing
 // with no limits applied (unbounded container).
 func TestStart_InvalidMemoryLimit(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	require.NoError(t, err)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-badmem", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-badmem", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	_, err = Start(ctx, cli, Config{
+	_, err = Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-badmem",
@@ -674,17 +670,14 @@ func TestStart_InvalidMemoryLimit(t *testing.T) {
 // the CPU resource limit cannot be parsed, rather than silently continuing
 // with no limits applied (unbounded container).
 func TestStart_InvalidCPULimit(t *testing.T) {
-	testutil.SkipIfNoDocker(t)
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	require.NoError(t, err)
-	defer cli.Close()
+	runner := getRunner(t)
 	ctx := context.Background()
 
-	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-badcpu", map[string]string{"ai-shim": "test"})
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-badcpu", map[string]string{"ai-shim": "test"})
 	require.NoError(t, err)
 	defer netHandle.Remove(ctx)
 
-	_, err = Start(ctx, cli, Config{
+	_, err = Start(ctx, runner, Config{
 		Labels:    map[string]string{"ai-shim": "test"},
 		NetworkID: netHandle.ID,
 		Hostname:  "test-dind-badcpu",

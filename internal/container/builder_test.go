@@ -649,6 +649,87 @@ func TestBuildSpec_SecurityProfileNone(t *testing.T) {
 	assert.Empty(t, spec.CapDrop)
 }
 
+func TestBuildSpec_ToolDataDirMount(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Config.Tools = map[string]config.ToolDef{
+		"nvm": {
+			Type:    "custom",
+			Install: "echo hello",
+			DataDir: true,
+			EnvVar:  "NVM_DIR",
+		},
+	}
+	spec := BuildSpec(p)
+
+	// Should have a bind mount for the tool cache
+	found := false
+	for _, m := range spec.Mounts {
+		if m.Target == "/usr/local/share/ai-shim/cache/nvm" {
+			found = true
+			assert.Equal(t, storage.ToolCachePath(p.Layout, "nvm", "", p.Agent.Name, p.Profile), m.Source)
+		}
+	}
+	assert.True(t, found, "tool data_dir mount should be present at /usr/local/share/ai-shim/cache/nvm")
+}
+
+func TestBuildSpec_ToolDataDirMountProfileScope(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Config.Tools = map[string]config.ToolDef{
+		"gvm": {
+			Type:       "custom",
+			Install:    "echo hello",
+			DataDir:    true,
+			EnvVar:     "GVM_ROOT",
+			CacheScope: "profile",
+		},
+	}
+	spec := BuildSpec(p)
+
+	found := false
+	for _, m := range spec.Mounts {
+		if m.Target == "/usr/local/share/ai-shim/cache/gvm" {
+			found = true
+			expected := storage.ToolCachePath(p.Layout, "gvm", "profile", p.Agent.Name, p.Profile)
+			assert.Equal(t, expected, m.Source)
+		}
+	}
+	assert.True(t, found, "tool data_dir mount with profile scope should be present")
+}
+
+func TestBuildSpec_ToolNoDataDirNoMount(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Tools = map[string]config.ToolDef{
+		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
+	}
+	spec := BuildSpec(p)
+
+	for _, m := range spec.Mounts {
+		assert.NotContains(t, m.Target, "/usr/local/share/ai-shim/cache/act",
+			"tool without data_dir should not have a cache mount")
+	}
+}
+
+func TestBuildSpec_ToolDataDirEnvVarInScript(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Tools = map[string]config.ToolDef{
+		"nvm": {
+			Type:    "custom",
+			Install: "echo nvm_install",
+			DataDir: true,
+			EnvVar:  "NVM_DIR",
+		},
+	}
+	spec := BuildSpec(p)
+
+	entrypoint := spec.Entrypoint[2]
+	assert.Contains(t, entrypoint, `export NVM_DIR="/usr/local/share/ai-shim/cache/nvm"`,
+		"entrypoint should export the env var for the tool cache path")
+}
+
 func TestResolveSecurityProfile(t *testing.T) {
 	tests := []struct {
 		profile     string

@@ -129,11 +129,14 @@ type MCPServerDef struct {
 
 // ToolDef defines a tool to provision in the container.
 type ToolDef struct {
-	Type     string   `yaml:"type" json:"type"`
-	URL      string   `yaml:"url,omitempty" json:"url,omitempty"`
-	Binary   string   `yaml:"binary,omitempty" json:"binary,omitempty"`
-	Files    []string `yaml:"files,omitempty" json:"files,omitempty"`
-	Package  string   `yaml:"package,omitempty" json:"package,omitempty"`
-	Install  string   `yaml:"install,omitempty" json:"install,omitempty"`
-	Checksum string   `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+	Type       string   `yaml:"type" json:"type"`
+	URL        string   `yaml:"url,omitempty" json:"url,omitempty"`
+	Binary     string   `yaml:"binary,omitempty" json:"binary,omitempty"`
+	Files      []string `yaml:"files,omitempty" json:"files,omitempty"`
+	Package    string   `yaml:"package,omitempty" json:"package,omitempty"`
+	Install    string   `yaml:"install,omitempty" json:"install,omitempty"`
+	Checksum   string   `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+	DataDir    bool     `yaml:"data_dir,omitempty" json:"data_dir,omitempty"`       // request persistent dir mount
+	CacheScope string   `yaml:"cache_scope,omitempty" json:"cache_scope,omitempty"` // "global" (default), "profile", "agent"
+	EnvVar     string   `yaml:"env_var,omitempty" json:"env_var,omitempty"`         // env var name exported with mount path
 }

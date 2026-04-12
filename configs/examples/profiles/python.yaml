@@ -19,9 +19,11 @@ tools:
     url: "https://github.com/astral-sh/ruff/releases/download/0.15.8/ruff-x86_64-unknown-linux-gnu.tar.gz"
     binary: ruff
 
-  # uv -- fast Python package manager
+  # uv -- fast Python package manager (persists cache across container launches)
   uv:
     type: custom
+    data_dir: true
+    env_var: UV_CACHE_DIR
     install: |
       if ! command -v uv >/dev/null 2>&1; then
         curl -LsSf https://astral.sh/uv/install.sh | sh
