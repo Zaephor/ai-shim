@@ -111,6 +111,7 @@ func TestE2E_ContainerLaunchWithEnvAndHostname(t *testing.T) {
 		Env:      []string{"TEST_KEY=test_value", "ANOTHER=123"},
 		Cmd:      []string{"sh", "-c", `test "$TEST_KEY" = test_value && test "$(hostname)" = ai-shim-test`},
 		Labels:   map[string]string{"ai-shim": "test"},
+		User:     fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode, "container should see env vars and hostname")
@@ -140,6 +141,7 @@ func TestE2E_ContainerMountsAccessible(t *testing.T) {
 		},
 		Cmd:    []string{"cat", "/usr/local/share/ai-shim/bin/test-marker"},
 		Labels: map[string]string{"ai-shim": "test"},
+		User:   fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode, "marker file should be readable inside container")
@@ -169,6 +171,7 @@ func TestE2E_ContainerWorkspaceMount(t *testing.T) {
 		},
 		Cmd:    []string{"cat", "workspace-marker.txt"},
 		Labels: map[string]string{"ai-shim": "test"},
+		User:   fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode, "workspace should be mounted and workdir set")
@@ -222,6 +225,7 @@ func TestE2E_AgentLaunchFailsGracefully(t *testing.T) {
 			exit 0
 		`},
 		Labels: map[string]string{"ai-shim": "test"},
+		User:   fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
@@ -278,6 +282,7 @@ echo "All checks passed"
 exit 0
 `},
 		Labels: map[string]string{"ai-shim": "test"},
+		User:   fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode, "entrypoint structure should work in target image")
@@ -427,6 +432,7 @@ func TestE2E_PersistentContainerNoAutoRemove(t *testing.T) {
 		Labels:     map[string]string{container.LabelBase: "test"},
 		Name:       containerName,
 		Persistent: true,
+		User:       fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
@@ -458,6 +464,7 @@ func TestE2E_NonPersistentContainerAutoRemove(t *testing.T) {
 		Labels:     map[string]string{container.LabelBase: "test"},
 		Name:       containerName,
 		Persistent: false,
+		User:       fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)

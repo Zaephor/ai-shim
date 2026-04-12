@@ -355,6 +355,7 @@ func TestJourney_ContainerStopsOnContext(t *testing.T) {
 			Image:  "alpine:latest",
 			Cmd:    []string{"sleep", "60"},
 			Labels: map[string]string{container.LabelBase: "true"},
+			User:   fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		})
 	}()
 
@@ -538,13 +539,13 @@ func TestJourney_DINDSidecar(t *testing.T) {
 			},
 		},
 		Entrypoint: []string{"sh", "-c", `
-for i in $(seq 1 30); do
+for i in $(seq 1 3); do
   if docker info 2>&1; then
     exit 0
   fi
   sleep 1
 done
-echo "ERROR: docker info failed after 30 retries"
+echo "ERROR: docker info failed after 3 retries"
 exit 1
 `},
 		NetworkID: netHandle.ID,

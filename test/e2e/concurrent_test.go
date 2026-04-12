@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 
@@ -87,6 +88,7 @@ func TestConcurrent_ParallelLaunch(t *testing.T) {
 				},
 				TTY:   false,
 				Stdin: false,
+				User:  fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 			}
 
 			result, err := runner.Run(ctx, spec)

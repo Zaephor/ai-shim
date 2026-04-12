@@ -199,6 +199,7 @@ func TestJourney_StatusWhileRunning(t *testing.T) {
 			},
 			TTY:   false,
 			Stdin: false,
+			User:  fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		})
 	}()
 

@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ func TestDefaultImage_HasRequiredTools(t *testing.T) {
 				Entrypoint: []string{"sh", "-c", tc.command},
 				Labels:     map[string]string{container.LabelBase: "test"},
 				Name:       fmt.Sprintf("e2e-imagecompat-%s-%d", tc.name, time.Now().UnixNano()%100000),
+				User:       fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 			})
 			require.NoError(t, runErr, "%s: container execution error", tc.name)
 			assert.Equal(t, 0, result.ExitCode, "%s: expected exit code 0", tc.name)

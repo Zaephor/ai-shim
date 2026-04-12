@@ -95,6 +95,10 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 				verifyScript = strings.Replace(verifyScript, "set +e\n", "set +e\n"+uvInstall, 1)
 			}
 
+			// NOTE: runs as root because the agent installer needs write access
+			// to /usr/local/share/ai-shim/agents/. Production uses the same path
+			// because the entrypoint runs the install step before dropping to the
+			// user's UID for the agent process itself.
 			result, err := runner.Run(ctx, container.ContainerSpec{
 				Image:      container.DefaultImage,
 				Entrypoint: []string{"sh", "-c", verifyScript},
