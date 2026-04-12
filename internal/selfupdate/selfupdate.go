@@ -1,6 +1,8 @@
 package selfupdate
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -113,10 +115,13 @@ func AssetName() string {
 }
 
 // FindAssetURL locates the download URL for the current platform in a release.
+// It matches the expected tar.gz archive name (e.g. ai-shim_linux_amd64.tar.gz)
+// to avoid false matches on checksums or signature files that may also contain
+// the platform string.
 func FindAssetURL(release Release) (string, error) {
-	name := AssetName()
+	name := AssetName() + ".tar.gz"
 	for _, asset := range release.Assets {
-		if strings.Contains(asset.Name, name) {
+		if asset.Name == name {
 			return asset.BrowserDownloadURL, nil
 		}
 	}
@@ -128,7 +133,40 @@ func BackupPath(currentPath string) string {
 	return currentPath + ".bak"
 }
 
-// DownloadAndReplace downloads a binary from url and replaces the file at currentPath.
+// extractBinaryFromTarGz reads a tar.gz archive from r and copies the first
+// entry whose base name is "ai-shim" into dst. It streams the archive without
+// loading it entirely into memory.
+func extractBinaryFromTarGz(r io.Reader, dst io.Writer) error {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("reading gzip stream: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar archive: %w", err)
+		}
+		// Match the binary by base name regardless of any leading directory
+		// component (GoReleaser places binaries at the archive root, but
+		// handle subdirectory layouts defensively).
+		if filepath.Base(hdr.Name) == "ai-shim" && hdr.Typeflag == tar.TypeReg {
+			if _, err := io.Copy(dst, tr); err != nil {
+				return fmt.Errorf("extracting ai-shim from archive: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("ai-shim binary not found in tar.gz archive")
+}
+
+// DownloadAndReplace downloads a tar.gz release archive from url, extracts
+// the ai-shim binary from it, and replaces the file at currentPath.
 // Creates a backup at currentPath.bak before replacing.
 func DownloadAndReplace(url, currentPath string) error {
 	resp, err := httpClient.Get(url)
@@ -148,9 +186,9 @@ func DownloadAndReplace(url, currentPath string) error {
 	tmpPath := tmpFile.Name()
 	defer func() { _ = os.Remove(tmpPath) }() // cleanup on error
 
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+	if err := extractBinaryFromTarGz(resp.Body, tmpFile); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("writing update: %w", err)
+		return fmt.Errorf("extracting update: %w", err)
 	}
 	_ = tmpFile.Close()
 

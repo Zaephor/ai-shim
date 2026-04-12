@@ -1,6 +1,9 @@
 package selfupdate
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +15,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// makeTarGz creates a tar.gz archive in memory containing a single file at
+// the given path within the archive with the given content.
+func makeTarGz(t *testing.T, filePath string, content []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	err := tw.WriteHeader(&tar.Header{
+		Name: filePath,
+		Mode: 0755,
+		Size: int64(len(content)),
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
 
 func TestNeedsUpdate_DifferentVersions(t *testing.T) {
 	assert.True(t, NeedsUpdate("1.0.0", "1.1.0"))
@@ -62,8 +86,12 @@ func TestBackupPath(t *testing.T) {
 
 func TestDownloadAndReplace_Success(t *testing.T) {
 	binaryContent := []byte("#!/bin/sh\necho updated\n")
+	// GoReleaser archives at root level: ai-shim_linux_amd64/ai-shim or just ai-shim.
+	// The archive name_template produces archives with the binary at root.
+	archive := makeTarGz(t, "ai-shim", binaryContent)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(binaryContent)
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
 	}))
 	defer srv.Close()
 
@@ -71,7 +99,7 @@ func TestDownloadAndReplace_Success(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim", currentPath)
+	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(currentPath)
@@ -82,6 +110,77 @@ func TestDownloadAndReplace_Success(t *testing.T) {
 	backupData, err := os.ReadFile(backupPath)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("old"), backupData)
+}
+
+// TestDownloadAndReplace_TarGzExtraction verifies that the binary is correctly
+// extracted from a real tar.gz archive (as GoReleaser produces) rather than
+// writing the raw archive bytes as the replacement binary.
+func TestDownloadAndReplace_TarGzExtraction(t *testing.T) {
+	binaryContent := []byte("\x7fELF fake binary content for testing")
+	// GoReleaser puts the binary at the root of the archive (no subdirectory).
+	archive := makeTarGz(t, "ai-shim", binaryContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old binary"), 0755))
+
+	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(currentPath)
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, got, "replaced binary should contain the extracted content, not raw tar.gz bytes")
+	assert.NotEqual(t, archive, got, "replaced binary must NOT be the raw tar.gz archive")
+}
+
+// TestDownloadAndReplace_TarGzWithSubdir verifies extraction works when the
+// binary is nested under a subdirectory inside the archive (e.g. ai-shim_linux_amd64/ai-shim).
+func TestDownloadAndReplace_TarGzWithSubdir(t *testing.T) {
+	binaryContent := []byte("\x7fELF binary in subdir")
+	archive := makeTarGz(t, "ai-shim_linux_amd64/ai-shim", binaryContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
+
+	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(currentPath)
+	require.NoError(t, err)
+	assert.Equal(t, binaryContent, got)
+}
+
+// TestDownloadAndReplace_TarGzBinaryNotFound verifies a clear error when the
+// archive does not contain an "ai-shim" binary.
+func TestDownloadAndReplace_TarGzBinaryNotFound(t *testing.T) {
+	archive := makeTarGz(t, "README.md", []byte("docs"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
+
+	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ai-shim")
 }
 
 func TestDownloadAndReplace_ServerError(t *testing.T) {
@@ -132,8 +231,12 @@ func TestFetchRelease_WithMockServer(t *testing.T) {
 }
 
 func TestDownloadAndReplace_NonExistentCurrentPath(t *testing.T) {
+	// The directory /nonexistent/path/ doesn't exist, so CreateTemp fails
+	// before we even try to extract the archive.
+	archive := makeTarGz(t, "ai-shim", []byte("binary"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("binary"))
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
 	}))
 	defer srv.Close()
 
@@ -143,8 +246,11 @@ func TestDownloadAndReplace_NonExistentCurrentPath(t *testing.T) {
 }
 
 func TestDownloadAndReplace_BackupFails(t *testing.T) {
+	// currentPath doesn't exist on disk so os.Rename(currentPath, backupPath) fails.
+	archive := makeTarGz(t, "ai-shim", []byte("binary"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("binary"))
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
 	}))
 	defer srv.Close()
 
