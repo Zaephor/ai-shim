@@ -168,6 +168,10 @@ Environment Variables:
   AI_SHIM_SECURITY_PROFILE Security profile (default/strict/none)
   AI_SHIM_GIT_NAME      Git user.name for container commits
   AI_SHIM_GIT_EMAIL     Git user.email for container commits
+  AI_SHIM_SELFUPDATE_REPOSITORY GitHub owner/repo for self-update
+  AI_SHIM_SELFUPDATE_API_URL GitHub API base URL (for Enterprise)
+  AI_SHIM_SELFUPDATE_ENABLED Enable/disable self-update (0/1)
+  AI_SHIM_SELFUPDATE_PRERELEASE Include pre-releases in update (0/1)
   AI_SHIM_VERBOSE       Enable debug output (0/1)
   AI_SHIM_JSON          Enable JSON output for management commands (0/1)
   AI_SHIM_NO_COLOR      Disable colored output (0/1)
@@ -213,7 +217,50 @@ func runManage(args []string) error {
 			fmt.Printf("ai-shim %s is a development build, skipping update check\n", version)
 			return nil
 		}
-		latest, err := selfupdate.CheckLatest()
+
+		// Load self-update config from default.yaml (global preference).
+		layout := storage.NewLayout(storage.DefaultRoot())
+		suOpts := selfupdate.Options{}
+		if cfg, err := config.LoadFile(filepath.Join(layout.ConfigDir, "default.yaml")); err == nil && cfg.SelfUpdate != nil {
+			su := cfg.SelfUpdate
+			if su.Repository != "" {
+				suOpts.Repository = su.Repository
+			}
+			if su.APIURL != "" {
+				suOpts.APIURL = su.APIURL
+			}
+			if su.Prerelease != nil && *su.Prerelease {
+				suOpts.Prerelease = true
+			}
+			if !cfg.IsSelfUpdateEnabled() {
+				fmt.Println("Self-update is disabled in ~/.ai-shim/config/default.yaml.")
+				fmt.Println("Set `selfupdate.enabled: true` or remove the override to re-enable.")
+				return nil
+			}
+		}
+		// Also check env var override (highest priority).
+		if envCfg := config.LoadEnvSelfUpdate(); envCfg != nil {
+			if envCfg.Repository != "" {
+				suOpts.Repository = envCfg.Repository
+			}
+			if envCfg.APIURL != "" {
+				suOpts.APIURL = envCfg.APIURL
+			}
+			if envCfg.Prerelease != nil && *envCfg.Prerelease {
+				suOpts.Prerelease = true
+			}
+			if envCfg.Enabled != nil && !*envCfg.Enabled {
+				fmt.Println("Self-update is disabled via AI_SHIM_SELFUPDATE_ENABLED=0.")
+				return nil
+			}
+		}
+
+		repo := suOpts.Repository
+		if repo == "" {
+			repo = selfupdate.DefaultRepository
+		}
+
+		latest, err := selfupdate.CheckLatest(suOpts)
 		if err != nil {
 			return fmt.Errorf("checking for updates: %w", err)
 		}
@@ -223,16 +270,15 @@ func runManage(args []string) error {
 		}
 		fmt.Printf("Update available: %s -> %s\n", version, latest)
 
-		// Fetch full release to find download URL
-		release, err := selfupdate.FetchRelease()
+		release, err := selfupdate.FetchRelease(suOpts)
 		if err != nil {
-			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", selfupdate.GitHubRepo)
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
 			return fmt.Errorf("fetching release info: %w", err)
 		}
 
 		downloadURL, err := selfupdate.FindAssetURL(release)
 		if err != nil {
-			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", selfupdate.GitHubRepo)
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
 			return fmt.Errorf("finding download for your platform: %w", err)
 		}
 
@@ -240,7 +286,6 @@ func runManage(args []string) error {
 		if err != nil {
 			return fmt.Errorf("cannot determine binary path: %w", err)
 		}
-		// Resolve symlinks to get the actual binary
 		exe, err = filepath.EvalSymlinks(exe)
 		if err != nil {
 			return fmt.Errorf("resolving binary path: %w", err)

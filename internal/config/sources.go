@@ -61,6 +61,9 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.SymlinkDir != "" {
 			sources.Fields["symlink_dir"] = name
 		}
+		if cfg.SelfUpdate != nil {
+			sources.Fields["selfupdate"] = name
+		}
 
 		if cfg.DIND != nil {
 			sources.Fields["dind"] = name

@@ -88,6 +88,10 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 //   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
 //   - AI_SHIM_SECURITY_PROFILE — container security profile (default/strict/none)
 //   - AI_SHIM_UPDATE_INTERVAL  — agent update interval (always/never/1d/7d/24h)
+//   - AI_SHIM_SELFUPDATE_REPOSITORY — GitHub owner/repo for self-update
+//   - AI_SHIM_SELFUPDATE_API_URL    — GitHub API base URL (for Enterprise)
+//   - AI_SHIM_SELFUPDATE_ENABLED    — enable/disable self-update (0/1/true/false)
+//   - AI_SHIM_SELFUPDATE_PRERELEASE — include pre-releases (0/1/true/false)
 //   - AI_SHIM_JSON          — enable JSON output for management commands (0/1)
 //   - AI_SHIM_NO_COLOR      — disable colored output (0/1)
 func loadEnvOverrides() Config {
@@ -139,10 +143,65 @@ func loadEnvOverrides() Config {
 		cfg.Git = &GitConfig{Name: gitName, Email: gitEmail}
 	}
 
+	// Self-update env vars.
+	suRepo := os.Getenv("AI_SHIM_SELFUPDATE_REPOSITORY")
+	suAPI := os.Getenv("AI_SHIM_SELFUPDATE_API_URL")
+	suEnabled := os.Getenv("AI_SHIM_SELFUPDATE_ENABLED")
+	suPrerelease := os.Getenv("AI_SHIM_SELFUPDATE_PRERELEASE")
+	if suRepo != "" || suAPI != "" || suEnabled != "" || suPrerelease != "" {
+		if cfg.SelfUpdate == nil {
+			cfg.SelfUpdate = &SelfUpdateConfig{}
+		}
+		if suRepo != "" {
+			cfg.SelfUpdate.Repository = suRepo
+		}
+		if suAPI != "" {
+			cfg.SelfUpdate.APIURL = suAPI
+		}
+		if suEnabled != "" {
+			b := suEnabled == "1" || suEnabled == "true"
+			cfg.SelfUpdate.Enabled = &b
+		}
+		if suPrerelease != "" {
+			b := suPrerelease == "1" || suPrerelease == "true"
+			cfg.SelfUpdate.Prerelease = &b
+		}
+	}
+
 	// Output formatting env vars (checked here for documentation consistency;
 	// actual logic lives in internal/color and internal/cli).
 	_ = os.Getenv("AI_SHIM_JSON")
 	_ = os.Getenv("AI_SHIM_NO_COLOR")
 
 	return cfg
+}
+
+// LoadEnvSelfUpdate returns self-update config from AI_SHIM_SELFUPDATE_*
+// environment variables, or nil if none are set. Exported so the `update`
+// command handler — which doesn't use the full 5-tier resolver — can apply
+// env overrides on top of the default.yaml selfupdate block.
+func LoadEnvSelfUpdate() *SelfUpdateConfig {
+	repo := os.Getenv("AI_SHIM_SELFUPDATE_REPOSITORY")
+	apiURL := os.Getenv("AI_SHIM_SELFUPDATE_API_URL")
+	enabled := os.Getenv("AI_SHIM_SELFUPDATE_ENABLED")
+	prerelease := os.Getenv("AI_SHIM_SELFUPDATE_PRERELEASE")
+	if repo == "" && apiURL == "" && enabled == "" && prerelease == "" {
+		return nil
+	}
+	su := &SelfUpdateConfig{}
+	if repo != "" {
+		su.Repository = repo
+	}
+	if apiURL != "" {
+		su.APIURL = apiURL
+	}
+	if enabled != "" {
+		b := enabled == "1" || enabled == "true"
+		su.Enabled = &b
+	}
+	if prerelease != "" {
+		b := prerelease == "1" || prerelease == "true"
+		su.Prerelease = &b
+	}
+	return su
 }

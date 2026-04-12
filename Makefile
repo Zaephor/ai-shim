@@ -2,9 +2,11 @@
 
 BINARY := ai-shim
 MODULE := github.com/ai-shim/ai-shim
+VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 build:
-	go build -trimpath -ldflags "-s -w" -o $(BINARY) ./cmd/ai-shim
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/ai-shim
 
 test:
 	go test ./... -v

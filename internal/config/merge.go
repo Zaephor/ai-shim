@@ -70,6 +70,23 @@ func Merge(base, over Config) Config {
 	if over.SymlinkDir != "" {
 		result.SymlinkDir = over.SymlinkDir
 	}
+	if over.SelfUpdate != nil {
+		if result.SelfUpdate == nil {
+			result.SelfUpdate = &SelfUpdateConfig{}
+		}
+		if over.SelfUpdate.Repository != "" {
+			result.SelfUpdate.Repository = over.SelfUpdate.Repository
+		}
+		if over.SelfUpdate.APIURL != "" {
+			result.SelfUpdate.APIURL = over.SelfUpdate.APIURL
+		}
+		if over.SelfUpdate.Enabled != nil {
+			result.SelfUpdate.Enabled = over.SelfUpdate.Enabled
+		}
+		if over.SelfUpdate.Prerelease != nil {
+			result.SelfUpdate.Prerelease = over.SelfUpdate.Prerelease
+		}
+	}
 	if over.Git != nil {
 		if result.Git == nil {
 			result.Git = &GitConfig{}

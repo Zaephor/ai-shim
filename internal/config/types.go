@@ -45,6 +45,39 @@ type Config struct {
 	// not resolved through the 5-tier agent/profile stack. Defaults to
 	// $HOME/.local/bin when unset.
 	SymlinkDir string `yaml:"symlink_dir,omitempty" json:"symlink_dir,omitempty"`
+	// SelfUpdate configures the `ai-shim update` command: which GitHub
+	// repository to check for releases, the API base URL (for Enterprise),
+	// and whether pre-release versions should be considered.
+	SelfUpdate *SelfUpdateConfig `yaml:"selfupdate,omitempty" json:"selfupdate,omitempty"`
+}
+
+// SelfUpdateConfig controls the behaviour of `ai-shim update`.
+type SelfUpdateConfig struct {
+	// Repository is the GitHub owner/repo to check for releases.
+	// Default: "Zaephor/ai-shim".
+	Repository string `yaml:"repository,omitempty" json:"repository,omitempty"`
+	// APIURL is the GitHub API base URL. Override for GitHub Enterprise
+	// (e.g. "https://ghe.example.com/api/v3").
+	// Default: "https://api.github.com".
+	APIURL string `yaml:"api_url,omitempty" json:"api_url,omitempty"`
+	// Enabled controls whether `ai-shim update` is allowed. When false
+	// the command refuses and hints that self-update is disabled.
+	// Default: true (nil treated as enabled).
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// Prerelease allows pre-release versions to be considered for update.
+	// When true, `ai-shim update` may offer a pre-release as the latest.
+	// Default: false (nil treated as disabled).
+	Prerelease *bool `yaml:"prerelease,omitempty" json:"prerelease,omitempty"`
+}
+
+// IsSelfUpdateEnabled returns true if self-update is allowed (default: true).
+func (c Config) IsSelfUpdateEnabled() bool {
+	return c.SelfUpdate == nil || c.SelfUpdate.Enabled == nil || *c.SelfUpdate.Enabled
+}
+
+// IsSelfUpdatePrerelease returns true if pre-release versions are allowed.
+func (c Config) IsSelfUpdatePrerelease() bool {
+	return c.SelfUpdate != nil && c.SelfUpdate.Prerelease != nil && *c.SelfUpdate.Prerelease
 }
 
 // GitConfig defines git user identity for commits inside the container.

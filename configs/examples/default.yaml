@@ -103,6 +103,13 @@
 # Enable TLS for the DIND Docker socket. Default: false
 # dind_tls: false
 
+# Self-update settings for the `ai-shim update` command.
+# selfupdate:
+#   repository: Zaephor/ai-shim       # GitHub owner/repo for release checks
+#   api_url: https://api.github.com    # Override for GitHub Enterprise
+#   enabled: true                       # Set to false to disable self-update
+#   prerelease: false                   # Set to true to include pre-releases
+
 # MCP servers exposed to the agent (serialized as MCP_SERVERS JSON env var).
 # mcp_servers:
 #   filesystem:

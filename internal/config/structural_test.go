@@ -46,6 +46,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
 		SymlinkDir:      "~/.local/bin",
+		SelfUpdate:      &SelfUpdateConfig{Repository: "test/repo", APIURL: "https://test", Enabled: boolPtr(true), Prerelease: boolPtr(true)},
 	}
 
 	result := Merge(Config{}, over)
@@ -141,6 +142,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
 		SymlinkDir:      "~/.local/bin",
+		SelfUpdate:      &SelfUpdateConfig{Repository: "test/repo", APIURL: "https://test", Enabled: boolPtr(true), Prerelease: boolPtr(true)},
 	}
 
 	tiers := []namedConfig{{name: "test-tier", config: over}}
