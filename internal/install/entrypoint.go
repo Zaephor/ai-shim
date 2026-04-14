@@ -45,7 +45,13 @@ func GenerateEntrypoint(p EntrypointParams) string {
 func generateInstallCheck(p EntrypointParams) string {
 	agentDir := shell.Quote(fmt.Sprintf("/usr/local/share/ai-shim/agents/%s", p.AgentName))
 	binary := shell.Quote(p.Binary)
+	// For npm/uv the package name is a clean identifier; for custom the
+	// "package" field holds a full shell command (curl | bash), so fall
+	// back to the binary name for user-facing echo output.
 	pkg := shell.Quote(p.Package)
+	if p.InstallType == "custom" {
+		pkg = binary
+	}
 
 	var b strings.Builder
 
@@ -173,10 +179,17 @@ func generateCustomInstall(p EntrypointParams) string {
 	// Custom installers often put binaries in user-local paths.
 	// Extend PATH so the exec line can find them.
 	b.WriteString("export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:$PATH\"\n")
+
+	b.WriteString(generateInstallCheck(p))
+
+	b.WriteString("if [ \"$need_install\" = true ]; then\n")
+	fmt.Fprintf(&b, "  echo \"Installing %s via custom script...\"\n", shell.Quote(p.Binary))
 	// Use set +e during install so post-install steps (config, telemetry)
 	// can fail without preventing the binary from being installed.
-	b.WriteString("set +e\n")
-	b.WriteString(p.Package + "\n")
-	b.WriteString("set -e\n")
+	b.WriteString("  set +e\n")
+	b.WriteString("  " + p.Package + "\n")
+	b.WriteString("  set -e\n")
+	b.WriteString(generatePostInstall(p))
+	b.WriteString("fi\n")
 	return b.String()
 }
