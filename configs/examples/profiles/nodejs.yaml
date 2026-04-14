@@ -22,16 +22,23 @@ ports:
 # Useful CLI tools for Node.js development.
 tools:
   # nvm -- Node.js version manager (persists installations across container launches)
+  # nvm is a shell function, not a binary. The install script runs in a
+  # throwaway subshell, so we append a source line to ~/.bashrc (which lives
+  # under the bind-mounted profile home) so every interactive agent shell
+  # loads `nvm` automatically. Idempotent: appends only if absent.
   nvm:
     type: custom
     data_dir: true
     env_var: NVM_DIR
     install: |
-      if [ ! -d "$NVM_DIR" ]; then
+      if [ ! -s "$NVM_DIR/nvm.sh" ]; then
         curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | NVM_DIR="$NVM_DIR" bash
       fi
+      # Auto-source nvm in future agent shells.
+      grep -qxF ". \"\$NVM_DIR/nvm.sh\"" "$HOME/.bashrc" 2>/dev/null || \
+        printf '\n# ai-shim: load nvm\nexport NVM_DIR="%s"\n. "$NVM_DIR/nvm.sh"\n' "$NVM_DIR" >> "$HOME/.bashrc"
+      # Optional preload: install a default Node version. Remove/comment to skip.
       bash -c ". $NVM_DIR/nvm.sh && nvm install 22 && nvm alias default 22" || true
-      export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node/ | tail -1)/bin:$PATH"
 
   jq:
     type: binary-download

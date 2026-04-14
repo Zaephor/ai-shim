@@ -14,16 +14,23 @@ packages:
 
 tools:
   # sdkman -- JDK and JVM tool version manager (installs Java, Gradle, Maven)
+  # sdkman exposes `sdk` as a shell function, not a binary. The install
+  # script runs in a throwaway subshell, so we append a source line to
+  # ~/.bashrc (bind-mounted profile home) so every interactive agent shell
+  # picks up `sdk` automatically. Idempotent: appends only if absent.
   sdkman:
     type: custom
     data_dir: true
     env_var: SDKMAN_DIR
     install: |
-      if [ ! -d "$SDKMAN_DIR" ]; then
+      if [ ! -f "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
         curl -s "https://get.sdkman.io" | SDKMAN_DIR="$SDKMAN_DIR" bash
-        bash -c ". $SDKMAN_DIR/bin/sdkman-init.sh && sdk install java && sdk install gradle && sdk install maven"
       fi
-      export PATH="$SDKMAN_DIR/candidates/java/current/bin:$SDKMAN_DIR/candidates/gradle/current/bin:$SDKMAN_DIR/candidates/maven/current/bin:$PATH"
+      # Auto-source sdkman in future agent shells.
+      grep -qxF ". \"\$SDKMAN_DIR/bin/sdkman-init.sh\"" "$HOME/.bashrc" 2>/dev/null || \
+        printf '\n# ai-shim: load sdkman\nexport SDKMAN_DIR="%s"\n. "$SDKMAN_DIR/bin/sdkman-init.sh"\n' "$SDKMAN_DIR" >> "$HOME/.bashrc"
+      # Optional preload: install default JDK/Gradle/Maven. Remove/comment to skip.
+      bash -c ". $SDKMAN_DIR/bin/sdkman-init.sh && sdk install java && sdk install gradle && sdk install maven" || true
 
   jq:
     type: binary-download

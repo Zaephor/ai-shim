@@ -19,17 +19,59 @@ env:
 
 tools:
   # gvm -- Go version manager (persists installations across container launches)
+  # Notes:
+  #  - gvm-installer reads GVM_DEST from positional arg $2, NOT env. And
+  #    GVM_NAME is hardcoded "gvm" (forced to ".gvm" only when dest=$HOME).
+  #    It then aborts if "$GVM_DEST/$GVM_NAME" already exists — our bind
+  #    mount is that path and exists empty. So: stage into a temp dir,
+  #    then relocate into the bind-mount and rewrite the absolute paths
+  #    that the installer bakes into its emitted files.
+  #  - Installer also appends its own source line to ~/.bashrc. We pass
+  #    GVM_NO_UPDATE_PROFILE=1 to suppress that and add our own idempotent
+  #    line instead.
+  #  - gvm-installer depends on `hexdump`, which is not in the default
+  #    image and cannot be apt-installed without root. We bootstrap a
+  #    busybox applet symlink into the shared bin dir; self-contained so
+  #    this tool has no dependency on map iteration order.
+  #  - gvm is a shell function, not a binary, so we append
+  #    `. "$GVM_ROOT/scripts/gvm"` to ~/.bashrc (bind-mounted profile home)
+  #    for every interactive agent shell. Idempotent: only if absent.
   gvm:
     type: custom
     data_dir: true
     env_var: GVM_ROOT
     install: |
-      if [ ! -d "$GVM_ROOT" ]; then
-        curl -fsSL https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | GVM_ROOT="$GVM_ROOT" bash
+      # Bootstrap hexdump shim (gvm installer needs it, no root for apt).
+      SHIM_BIN="/usr/local/share/ai-shim/bin"
+      if ! command -v hexdump >/dev/null 2>&1; then
+        if [ ! -x "$SHIM_BIN/busybox" ]; then
+          curl -fsSL -o "$SHIM_BIN/busybox" \
+            https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
+          chmod +x "$SHIM_BIN/busybox"
+        fi
+        ln -sf "$SHIM_BIN/busybox" "$SHIM_BIN/hexdump"
       fi
+      export PATH="$SHIM_BIN:$PATH"
+
+      if [ ! -f "$GVM_ROOT/scripts/gvm" ]; then
+        STAGE="$(mktemp -d)"
+        # Installer clones to $STAGE/gvm (GVM_NAME hardcoded "gvm", != $HOME).
+        curl -fsSL https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | \
+          GVM_NO_UPDATE_PROFILE=1 bash -s master "$STAGE"
+        if [ -d "$STAGE/gvm" ]; then
+          cp -a "$STAGE/gvm/." "$GVM_ROOT/"
+          # Installer bakes $STAGE/gvm into scripts/gvm and any environment
+          # files. Rewrite to our bind-mount path so gvm's internals agree.
+          find "$GVM_ROOT" -type f -exec grep -l "$STAGE/gvm" {} + 2>/dev/null \
+            | xargs -r sed -i "s|$STAGE/gvm|$GVM_ROOT|g"
+        fi
+        rm -rf "$STAGE"
+      fi
+      # Auto-source gvm in future agent shells.
+      grep -qxF ". \"\$GVM_ROOT/scripts/gvm\"" "$HOME/.bashrc" 2>/dev/null || \
+        printf '\n# ai-shim: load gvm\nexport GVM_ROOT="%s"\n. "$GVM_ROOT/scripts/gvm"\n' "$GVM_ROOT" >> "$HOME/.bashrc"
+      # Optional preload: install a default Go version. Remove/comment to skip.
       bash -c ". $GVM_ROOT/scripts/gvm && gvm install go1.24.2 -B && gvm use go1.24.2 --default" || true
-      export GOROOT="$GVM_ROOT/gos/go1.24.2"
-      export PATH="$GOROOT/bin:$GVM_ROOT/bin:$PATH"
 
   # golangci-lint for linting
   golangci-lint:
