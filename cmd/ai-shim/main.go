@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -923,24 +924,48 @@ func runAgent(name string, args []string) (int, error) {
 	// with the new container's name. Ignore errors — this is housekeeping.
 	cleanupStaleContainers(ctx, runner, agentName, profileName)
 
-	// 6.2 Check for existing running session (reattach support)
+	// 6.2 Check for existing running session(s) (reattach support)
 	if container.IsTTY() {
 		wsHash := workspace.HashPath(platInfo.Hostname, pwd)
-		session, lookupErr := container.FindRunningSession(ctx, runner.Client(), agentName, profileName, wsHash)
+		sessions, lookupErr := container.FindRunningSessionsInWorkspace(ctx, runner.Client(), agentName, profileName, wsHash)
 		if lookupErr != nil {
 			logging.Debug("session lookup failed: %v", lookupErr)
 		}
-		if session != nil {
-			action := promptReattach(session)
+		// Loop so that "kill <N>" can prune one sibling and re-prompt
+		// against the survivors without bouncing the user back out to
+		// the shell. Any other action exits the loop.
+		for len(sessions) > 0 {
+			action, idx := promptReattach(sessions)
 			switch action {
 			case "reattach":
-				return handleReattach(ctx, runner, session, cfg, filepath.Join(layout.Root, "logs"))
+				return handleReattach(ctx, runner, &sessions[idx], cfg, filepath.Join(layout.Root, "logs"))
 			case "new":
-				stopSession(ctx, runner.Client(), session)
-				// fall through to create new container
+				// Stop every existing session for this scope before
+				// starting fresh; "new" means "clean slate", not "stop
+				// only one arbitrary sibling".
+				for i := range sessions {
+					stopSession(ctx, runner.Client(), &sessions[i])
+				}
+				sessions = nil // fall through to create new container
+			case "parallel":
+				// Leave existing sessions running; fall through to create
+				// an additional container. generateContainerName appends
+				// a random suffix so the name doesn't collide; labels
+				// stay identical so all siblings remain discoverable.
+				fmt.Fprintf(os.Stderr, "ai-shim: starting parallel session alongside %d existing\n", len(sessions))
+				sessions = nil
+			case "kill":
+				stopSession(ctx, runner.Client(), &sessions[idx])
+				fmt.Fprintf(os.Stderr, "ai-shim: stopped session %s\n", sessions[idx].ContainerName)
+				sessions = append(sessions[:idx], sessions[idx+1:]...)
+				// loop: re-prompt with one less entry. When the last
+				// session is killed the loop exits naturally and falls
+				// through to container creation.
+				continue
 			case "exit":
 				return 0, nil
 			}
+			break
 		}
 	}
 
@@ -1123,9 +1148,29 @@ func runAgent(name string, args []string) (int, error) {
 	return result.ExitCode, nil
 }
 
-// promptReattach asks the user what to do with an existing running session.
-// Returns "reattach", "new", or "exit".
-func promptReattach(session *container.RunningSession) string {
+// promptReattach asks the user what to do with one or more existing running
+// sessions for this agent+profile+workspace. Sessions must be provided
+// most-recently-created first so index 1 maps to the most likely target.
+// Returns (action, index):
+//
+//   - "reattach": connect to sessions[index]
+//   - "new":      stop all listed sessions and start a fresh one
+//   - "parallel": leave listed sessions running and start an additional one
+//   - "exit":     do nothing and return to the shell
+//
+// index is only meaningful for "reattach" and is always 0 for the
+// single-session case.
+func promptReattach(sessions []container.RunningSession) (action string, index int) {
+	if len(sessions) == 0 {
+		return "exit", 0
+	}
+	if len(sessions) == 1 {
+		return promptReattachSingle(&sessions[0]), 0
+	}
+	return promptReattachMulti(sessions)
+}
+
+func promptReattachSingle(session *container.RunningSession) string {
 	age := time.Since(session.CreatedAt).Truncate(time.Second)
 	dir := session.WorkspaceDir
 	if dir == "" {
@@ -1134,14 +1179,30 @@ func promptReattach(session *container.RunningSession) string {
 	fmt.Fprintf(os.Stderr, "ai-shim: running session found for %s/%s\n", session.AgentName, session.Profile)
 	fmt.Fprintf(os.Stderr, "  container: %s (running %s)\n", session.ContainerName, age)
 	fmt.Fprintf(os.Stderr, "  workspace: %s\n", dir)
-	fmt.Fprintf(os.Stderr, "\n  [Y] Reattach  [n] Exit  [new] Stop old and start fresh\n")
-	fmt.Fprintf(os.Stderr, "  Choice [Y/n/new]: ")
+	fmt.Fprintf(os.Stderr, "\n  [Y] Reattach  [n] Exit  [new] Stop old, start fresh  [p] Start in parallel\n")
+	fmt.Fprintf(os.Stderr, "  Choice [Y/n/new/p]: ")
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
 		return "exit"
 	}
 	input := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	action := parseSingleChoice(input)
+	if action == "exit" && input != "" && input != "n" && input != "no" {
+		fmt.Fprintf(os.Stderr, "ai-shim: unrecognized choice %q, exiting\n", input)
+	}
+	return action
+}
+
+// parseSingleChoice is the pure parser behind promptReattachSingle. It maps a
+// user-entered string to one of: "reattach", "exit", "new", "parallel". The
+// input is expected to already be lowercased and trimmed by the caller; this
+// function additionally trims/lowercases defensively so tests can exercise it
+// with raw variants. Unknown input maps to "exit" — the stderr warning for
+// unrecognized choices lives at the prompt layer so this parser stays
+// side-effect-free.
+func parseSingleChoice(input string) string {
+	input = strings.TrimSpace(strings.ToLower(input))
 	switch input {
 	case "", "y", "yes":
 		return "reattach"
@@ -1149,10 +1210,77 @@ func promptReattach(session *container.RunningSession) string {
 		return "exit"
 	case "new":
 		return "new"
+	case "p", "parallel":
+		return "parallel"
 	default:
-		fmt.Fprintf(os.Stderr, "ai-shim: unrecognized choice %q, exiting\n", input)
 		return "exit"
 	}
+}
+
+func promptReattachMulti(sessions []container.RunningSession) (string, int) {
+	first := sessions[0]
+	dir := first.WorkspaceDir
+	if dir == "" {
+		dir = "(unknown)"
+	}
+	fmt.Fprintf(os.Stderr, "ai-shim: %d running sessions found for %s/%s\n",
+		len(sessions), first.AgentName, first.Profile)
+	fmt.Fprintf(os.Stderr, "  workspace: %s\n\n", dir)
+	for i, s := range sessions {
+		age := time.Since(s.CreatedAt).Truncate(time.Second)
+		fmt.Fprintf(os.Stderr, "  [%d] %s  (running %s)\n", i+1, s.ContainerName, age)
+	}
+	fmt.Fprintf(os.Stderr, "\n  1-%d = reattach, [k<N>] kill session N, [n] Exit, [new] Stop ALL and start fresh, [p] Start another in parallel\n",
+		len(sessions))
+	fmt.Fprintf(os.Stderr, "  Choice: ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return "exit", 0
+	}
+	input := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	action, idx := parseMultiChoice(input, len(sessions))
+	if action == "exit" && input != "" && input != "n" && input != "no" {
+		fmt.Fprintf(os.Stderr, "ai-shim: unrecognized choice %q, exiting\n", input)
+	}
+	return action, idx
+}
+
+// parseMultiChoice is the pure parser behind promptReattachMulti. Given a
+// user-entered string and the number of running sessions, it returns one of:
+//
+//   - ("reattach", idx) for a numeric 1..n choice (idx is zero-based)
+//   - ("kill", idx)     for "k<N>", "k <N>", or "kill <N>" with N in 1..n
+//   - ("new", 0)        for "new"
+//   - ("parallel", 0)   for "p" / "parallel"
+//   - ("exit", 0)       for "", "n", "no", out-of-range numbers, or garbage
+//
+// The function is case-insensitive and whitespace-tolerant. Unknown input
+// maps to "exit"; any stderr warning is the prompt layer's responsibility.
+func parseMultiChoice(input string, n int) (string, int) {
+	input = strings.TrimSpace(strings.ToLower(input))
+	switch input {
+	case "", "n", "no":
+		return "exit", 0
+	case "new":
+		return "new", 0
+	case "p", "parallel":
+		return "parallel", 0
+	}
+	// Kill a specific session: accept "k<N>", "k <N>", or "kill <N>".
+	// Example: "k2" stops session 2 without affecting the rest; the caller
+	// loops and re-renders the picker with the survivors.
+	if strings.HasPrefix(input, "k") {
+		rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(input, "kill"), "k"))
+		if idx, err := strconv.Atoi(rest); err == nil && idx >= 1 && idx <= n {
+			return "kill", idx - 1
+		}
+		return "exit", 0
+	}
+	if idx, err := strconv.Atoi(input); err == nil && idx >= 1 && idx <= n {
+		return "reattach", idx - 1
+	}
+	return "exit", 0
 }
 
 // handleReattach reconnects to an existing container session.
