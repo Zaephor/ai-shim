@@ -36,6 +36,20 @@ tools:
     install: |
       npm install -g pyright
 
+  # pre-commit -- multi-language git hooks framework (no native binary release;
+  # installed via `uv tool` so the entry point lands in $HOME/.local/bin which
+  # is on PATH and persists via the profile-home bind mount).
+  pre-commit:
+    type: custom
+    install: |
+      export PATH="$HOME/.local/bin:$PATH"
+      if ! command -v pre-commit >/dev/null 2>&1; then
+        if ! command -v uv >/dev/null 2>&1; then
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        fi
+        uv tool install pre-commit
+      fi
+
   jq:
     type: binary-download
     url: "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
