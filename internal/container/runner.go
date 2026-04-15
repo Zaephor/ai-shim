@@ -26,6 +26,46 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+// reattachResetSequence is the ANSI escape sequence written to stdout on
+// reattach: clear the screen (ESC[2J), home the cursor (ESC[H), and make it
+// visible (ESC[?25h). Previous sessions may have left the terminal with an
+// invisible cursor or stale glyphs; this resets it to a known state before
+// the inner TUI repaints.
+const reattachResetSequence = "\033[2J\033[H\033[?25h"
+
+// containerResizer issues TTY resize calls. Runner satisfies this against the
+// Docker API; tests substitute a fake so reattach-terminal logic can be
+// exercised without a live daemon.
+type containerResizer interface {
+	Resize(ctx context.Context, containerID string, width, height uint) error
+}
+
+// Resize implements containerResizer by delegating to the Docker client.
+func (r *Runner) Resize(ctx context.Context, containerID string, width, height uint) error {
+	return r.client.ContainerResize(ctx, containerID, container.ResizeOptions{
+		Height: height,
+		Width:  width,
+	})
+}
+
+// prepareReattachTerminal writes the ANSI reset sequence to out and then
+// forces a SIGWINCH inside the container by resizing to height+1 and back to
+// height. Docker only signals the container pty on a real dimension change,
+// so re-sending the current size is a no-op — the intermediate off-by-one
+// resize guarantees the inner TUI receives SIGWINCH and redraws against the
+// freshly cleared canvas.
+//
+// When the host terminal size cannot be determined (width or height is 0)
+// the function is a no-op: no bytes are written and no resize is issued.
+func prepareReattachTerminal(ctx context.Context, out io.Writer, resizer containerResizer, containerID string, width, height uint) {
+	if width == 0 || height == 0 {
+		return
+	}
+	_, _ = io.WriteString(out, reattachResetSequence)
+	_ = resizer.Resize(ctx, containerID, width, height+1)
+	_ = resizer.Resize(ctx, containerID, width, height)
+}
+
 // ResourceLimits defines container resource constraints.
 type ResourceLimits struct {
 	Memory string
@@ -55,6 +95,7 @@ type ContainerSpec struct {
 	CapDrop      []string        // Linux capabilities to drop
 	LogDir       string          // directory for exit logs (empty = no logging)
 	Persistent   bool            // when true, container supports detach/reattach (AutoRemove disabled)
+	Reattach     bool            // true when attaching to an already-running container (not initial run)
 }
 
 // AttachResult describes how an attach session ended.
@@ -266,6 +307,7 @@ func (r *Runner) Reattach(ctx context.Context, containerID string, tty bool) (At
 		TTY:        tty,
 		Stdin:      tty,
 		Persistent: true,
+		Reattach:   true,
 	}
 	attachResp, err := r.client.ContainerAttach(ctx, containerID, container.AttachOptions{
 		Stream: true,
@@ -354,7 +396,18 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 			defer restore()
 		}
 
-		r.resizeContainer(ctx, containerID)
+		if spec.Reattach {
+			// Reset the host terminal on reattach: clear the screen, home
+			// the cursor, make sure it is visible, and force a SIGWINCH
+			// inside the container so its TUI redraws against the fresh
+			// canvas. The previous attach left the terminal in whatever
+			// state the inner TUI last drew — without this users see
+			// stale output with an invisible cursor on reconnect.
+			width, height := getTerminalSize()
+			prepareReattachTerminal(ctx, os.Stdout, r, containerID, width, height)
+		} else {
+			r.resizeContainer(ctx, containerID)
+		}
 
 		winchCh := make(chan os.Signal, 1)
 		signal.Notify(winchCh, syscall.SIGWINCH)
