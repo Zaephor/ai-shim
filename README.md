@@ -137,6 +137,11 @@ dind_cache: false            # enable pull-through registry cache
 # allow_agents:
 #   - gemini-cli
 
+# apt-installed packages. Requires the container to run as root OR the
+# non-root agent user to have passwordless sudo. When neither is true the
+# entrypoint fails loudly with a hint to convert these to self-contained
+# tools: (binary-download / tar-extract / custom). Prefer tools: when the
+# base image does not grant root.
 packages:
   - tmux
   - git

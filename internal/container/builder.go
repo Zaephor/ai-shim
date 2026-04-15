@@ -89,14 +89,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	}
 
 	// Package installation script
-	var packageScript string
-	if len(p.Config.Packages) > 0 {
-		quoted := make([]string, len(p.Config.Packages))
-		for i, pkg := range p.Config.Packages {
-			quoted[i] = shell.Quote(pkg)
-		}
-		packageScript = "echo \"Installing packages: " + strings.Join(quoted, " ") + "\"\napt-get update -qq && apt-get install -y -qq " + strings.Join(quoted, " ") + " || { echo \"ERROR: package installation failed\"; exit 1; }\n"
-	}
+	packageScript := generatePackageScript(p.Config.Packages)
 
 	// Merge config args with passthrough args
 	allArgs := append(p.Config.Args, p.Args...)
@@ -390,6 +383,41 @@ func mcpServersJSON(servers map[string]config.MCPServerDef) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+// generatePackageScript builds the shell snippet that installs apt packages
+// inside the container. Returns an empty string when packages is empty.
+//
+// apt-get requires root. Images that run the agent as a non-root UID
+// (e.g. ghcr.io/catthehacker/ubuntu runs as `ubuntu`) would have the
+// install fail silently-ish with a permission error, leaving the user
+// confused about why their declared packages weren't actually
+// installed. Detect the effective UID at runtime and route through
+// passwordless sudo when available; fail loudly with a clear hint
+// when neither path is possible.
+func generatePackageScript(packages []string) string {
+	if len(packages) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(packages))
+	for i, pkg := range packages {
+		quoted[i] = shell.Quote(pkg)
+	}
+	pkgs := strings.Join(quoted, " ")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "echo \"Installing packages: %s\"\n", pkgs)
+	sb.WriteString("if [ \"$(id -u)\" = \"0\" ]; then\n")
+	fmt.Fprintf(&sb, "  apt-get update -qq && apt-get install -y -qq %s || { echo \"ERROR: package installation failed\"; exit 1; }\n", pkgs)
+	sb.WriteString("elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then\n")
+	fmt.Fprintf(&sb, "  sudo apt-get update -qq && sudo apt-get install -y -qq %s || { echo \"ERROR: package installation failed\"; exit 1; }\n", pkgs)
+	sb.WriteString("else\n")
+	fmt.Fprintf(&sb, "  echo \"ERROR: profile requests apt packages (%s) but the container is running as uid $(id -u) without passwordless sudo.\" >&2\n", pkgs)
+	sb.WriteString("  echo \"       apt-get requires root. Options:\" >&2\n")
+	sb.WriteString("  echo \"         - use a base image that runs as root, or that grants passwordless sudo to this user\" >&2\n")
+	sb.WriteString("  echo \"         - rewrite these deps as self-contained tools: entries (binary-download / tar-extract / custom)\" >&2\n")
+	sb.WriteString("  exit 1\n")
+	sb.WriteString("fi\n")
+	return sb.String()
 }
 
 // resolveSecurityProfile returns SecurityOpt and CapDrop based on the profile.

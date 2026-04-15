@@ -75,6 +75,36 @@ var goldenCases = map[string]EntrypointParams{
 		AgentArgs:      []string{"--verbose", "--no-telemetry"},
 		UpdateInterval: 86400,
 	},
+	"custom_version_pinned": {
+		InstallType:    "custom",
+		Package:        "curl -fsSL https://claude.ai/install.sh | bash",
+		Binary:         "claude",
+		Version:        "1.0.0",
+		AgentName:      "claude-code",
+		UpdateInterval: 86400,
+	},
+	"custom_always_update": {
+		InstallType:    "custom",
+		Package:        "curl -fsSL https://claude.ai/install.sh | bash",
+		Binary:         "claude",
+		AgentName:      "claude-code",
+		UpdateInterval: 0,
+	},
+	"custom_never_update": {
+		InstallType:    "custom",
+		Package:        "curl -fsSL https://claude.ai/install.sh | bash",
+		Binary:         "claude",
+		AgentName:      "claude-code",
+		UpdateInterval: -1,
+	},
+	"custom_with_args": {
+		InstallType:    "custom",
+		Package:        "curl -fsSL https://claude.ai/install.sh | bash",
+		Binary:         "claude",
+		AgentName:      "claude-code",
+		AgentArgs:      []string{"--verbose", "--no-telemetry"},
+		UpdateInterval: 86400,
+	},
 }
 
 // TestEntrypoint_Golden compares generated entrypoint scripts against golden
