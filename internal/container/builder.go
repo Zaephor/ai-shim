@@ -85,7 +85,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 				DataDir: td.DataDir, CacheScope: td.CacheScope, EnvVar: td.EnvVar,
 			}
 		}
-		toolScript = provision.GenerateInstallScript(provTools, "/usr/local/share/ai-shim/bin")
+		toolScript = provision.GenerateInstallScript(p.Config.ToolsOrder, provTools, "/usr/local/share/ai-shim/bin")
 	}
 
 	// Package installation script

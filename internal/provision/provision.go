@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/Zaephor/ai-shim/internal/shell"
@@ -31,16 +32,49 @@ type ToolDef struct {
 }
 
 // GenerateInstallScript generates a shell script that provisions all tools.
-// The script checks if each tool already exists (cache-aware) before downloading.
-func GenerateInstallScript(tools map[string]ToolDef, targetDir string) string {
+// The script checks if each tool already exists (cache-aware) before
+// downloading.
+//
+// order is the sequence of tool names to install in. When provided (typically
+// the YAML declaration order captured by Config.UnmarshalYAML) it is honored
+// verbatim — names absent from the tools map are skipped and names in the map
+// that are not listed in order are appended alphabetically so nothing is
+// silently dropped. When order is empty the keys are sorted alphabetically,
+// giving callers (including tests) deterministic output without requiring
+// explicit ordering.
+func GenerateInstallScript(order []string, tools map[string]ToolDef, targetDir string) string {
 	if len(tools) == 0 {
 		return ""
+	}
+
+	names := make([]string, 0, len(tools))
+	seen := make(map[string]struct{}, len(tools))
+	for _, n := range order {
+		if _, ok := tools[n]; !ok {
+			continue
+		}
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	if len(names) < len(tools) {
+		remainder := make([]string, 0, len(tools)-len(names))
+		for n := range tools {
+			if _, ok := seen[n]; !ok {
+				remainder = append(remainder, n)
+			}
+		}
+		sort.Strings(remainder)
+		names = append(names, remainder...)
 	}
 
 	var b strings.Builder
 	b.WriteString("# Tool provisioning\n")
 
-	for name, tool := range tools {
+	for _, name := range names {
+		tool := tools[name]
 		fmt.Fprintf(&b, "\n# Install: %s\n", name)
 		if tool.DataDir && tool.EnvVar != "" {
 			fmt.Fprintf(&b, "export %s=\"/usr/local/share/ai-shim/cache/%s\"\n", tool.EnvVar, name)

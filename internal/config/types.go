@@ -34,6 +34,10 @@ type Config struct {
 	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
 	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
 	Tools           map[string]ToolDef      `yaml:"tools,omitempty" json:"tools,omitempty"`
+	// ToolsOrder holds tool names in the order they appear in YAML so the
+	// provisioning script can install them in declaration order. Populated
+	// by Config.UnmarshalYAML — not a YAML input field itself.
+	ToolsOrder []string `yaml:"-" json:"-"`
 	Resources       *ResourceLimits         `yaml:"resources,omitempty" json:"resources,omitempty"`
 	DINDResources   *ResourceLimits         `yaml:"dind_resources,omitempty" json:"dind_resources,omitempty"`
 	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`

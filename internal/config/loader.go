@@ -28,7 +28,47 @@ func LoadFile(path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, err
 	}
+	cfg.ToolsOrder = extractToolsOrder(data)
 	return cfg, nil
+}
+
+// extractToolsOrder parses a raw YAML document and returns the ordered list
+// of keys under the top-level `tools` mapping. This captures the declaration
+// order so the provisioning script can install tools in the sequence the
+// user wrote them rather than in Go map-iteration (random) order.
+//
+// It is invoked alongside yaml.Unmarshal rather than via a custom
+// UnmarshalYAML method on Config so that yaml.Decoder's KnownFields/strict
+// mode (used by LoadFileStrict) still sees the full document structure and
+// can still surface unknown-key warnings.
+func extractToolsOrder(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil
+	}
+	// Documents wrap their root mapping in a DocumentNode.
+	root := &doc
+	if root.Kind == yaml.DocumentNode && len(root.Content) == 1 {
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		k, v := root.Content[i], root.Content[i+1]
+		if k.Value != "tools" || v.Kind != yaml.MappingNode {
+			continue
+		}
+		order := make([]string, 0, len(v.Content)/2)
+		for j := 0; j+1 < len(v.Content); j += 2 {
+			order = append(order, v.Content[j].Value)
+		}
+		return order
+	}
+	return nil
 }
 
 // LoadFileStrict loads a Config from a YAML file and returns warnings for any
@@ -71,6 +111,7 @@ func LoadFileStrict(path string) (Config, []string, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, nil, err
 	}
+	cfg.ToolsOrder = extractToolsOrder(data)
 	return cfg, warnings, nil
 }
 

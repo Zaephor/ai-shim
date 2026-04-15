@@ -102,6 +102,7 @@ func Merge(base, over Config) Config {
 	result.Env = mergeMaps(result.Env, over.Env)
 	result.Variables = mergeMaps(result.Variables, over.Variables)
 	result.Tools = mergeToolMaps(result.Tools, over.Tools)
+	result.ToolsOrder = mergeOrder(result.ToolsOrder, over.ToolsOrder)
 	result.MCPServers = mergeMCPServerMaps(result.MCPServers, over.MCPServers)
 
 	result.Volumes = appendUnique(result.Volumes, over.Volumes)
@@ -145,6 +146,38 @@ func mergeMaps(base, over map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// mergeOrder concatenates two ordered key lists while preserving the first
+// occurrence of each key. Used for ToolsOrder so that lower-precedence
+// tiers (default → agent → profile → agent-profile) contribute the install
+// order of their distinct tools and overrides don't reshuffle the list.
+func mergeOrder(base, over []string) []string {
+	if len(over) == 0 {
+		return base
+	}
+	if len(base) == 0 {
+		out := make([]string, len(over))
+		copy(out, over)
+		return out
+	}
+	seen := make(map[string]struct{}, len(base)+len(over))
+	out := make([]string, 0, len(base)+len(over))
+	for _, k := range base {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, k)
+	}
+	for _, k := range over {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, k)
+	}
+	return out
 }
 
 func mergeToolMaps(base, over map[string]ToolDef) map[string]ToolDef {
