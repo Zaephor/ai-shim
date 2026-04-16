@@ -11,6 +11,7 @@ import (
 	"github.com/Zaephor/ai-shim/internal/platform"
 	"github.com/Zaephor/ai-shim/internal/storage"
 	"github.com/Zaephor/ai-shim/internal/testutil"
+	"github.com/Zaephor/ai-shim/internal/workspace"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -881,4 +882,128 @@ func TestResolveSecurityProfile(t *testing.T) {
 			assert.Equal(t, tt.wantCapDrop, capDrop)
 		})
 	}
+}
+
+// TestBuildSpec_PwdFromParams verifies that BuildSpec honors the caller's
+// explicit Pwd instead of re-reading os.Getwd(). In nested invocations
+// (agent → inner BuildSpec) the inner process may see a bind-mounted
+// container path that does not match the outer host path, so the caller
+// must be able to pin pwd at the top level and have it flow through.
+func TestBuildSpec_PwdFromParams(t *testing.T) {
+	// Any path that differs from the test process's actual cwd works.
+	explicit := "/tmp/ai-shim-pwd-from-params"
+
+	p := defaultBuildParams()
+	p.Pwd = explicit
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	assert.Equal(t, explicit, spec.Labels[LabelWorkspaceDir],
+		"workspace-dir label should reflect the caller-provided Pwd")
+
+	sawWorkspaceBind := false
+	for _, m := range spec.Mounts {
+		if m.Source == explicit {
+			sawWorkspaceBind = true
+			break
+		}
+	}
+	assert.True(t, sawWorkspaceBind,
+		"a bind mount with Source == Pwd should exist; builder must not fall back to os.Getwd when Pwd is set")
+}
+
+// TestBuildSpec_PwdParamOverridesOsGetwd is the nested-invocation regression
+// test: the agent process's cwd (what os.Getwd returns) points at the inner,
+// container-side bind path, while the caller pins Pwd to the outer host
+// path. Every workspace-derived field — the hash label, the human-readable
+// dir label, the container WorkingDir, and the workspace bind mount source
+// — must be computed from Pwd, never from os.Getwd().
+func TestBuildSpec_PwdParamOverridesOsGetwd(t *testing.T) {
+	// Chdir the test process somewhere that is NOT the Pwd we will pin.
+	// t.Chdir auto-restores on test completion so this cannot leak.
+	cwdDir := t.TempDir()
+	t.Chdir(cwdDir)
+
+	// A path deliberately distinct from cwdDir — represents the host-side
+	// workspace as seen from outside the nested container.
+	pinnedPwd := "/tmp/ai-shim-nested-host-pwd"
+
+	p := defaultBuildParams()
+	p.Pwd = pinnedPwd
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	hostname := p.Platform.Hostname
+	wantHash := workspace.HashPath(hostname, pinnedPwd)
+	wantWorkdir := workspace.ContainerWorkdir(hostname, pinnedPwd)
+
+	// Sanity: the cwd-derived values must differ from the Pwd-derived values,
+	// otherwise this test would tautologically pass.
+	cwdHash := workspace.HashPath(hostname, cwdDir)
+	require.NotEqual(t, wantHash, cwdHash,
+		"test setup invariant: cwd hash must differ from Pwd hash")
+
+	assert.Equal(t, wantHash, spec.Labels[LabelWorkspace],
+		"workspace hash label must be computed from Pwd, not os.Getwd()")
+	assert.Equal(t, pinnedPwd, spec.Labels[LabelWorkspaceDir],
+		"workspace-dir label must be the caller-provided Pwd, not os.Getwd()")
+	assert.Equal(t, wantWorkdir, spec.WorkingDir,
+		"container WorkingDir must be derived from Pwd, not os.Getwd()")
+
+	// The workspace bind mount must source from the pinned Pwd. The mount
+	// whose Target equals spec.WorkingDir is the workspace bind.
+	var wsMount *mount.Mount
+	for i := range spec.Mounts {
+		if spec.Mounts[i].Target == wantWorkdir {
+			wsMount = &spec.Mounts[i]
+			break
+		}
+	}
+	require.NotNil(t, wsMount, "workspace bind mount (Target == container workdir) must exist")
+	assert.Equal(t, pinnedPwd, wsMount.Source,
+		"workspace bind mount Source must be Pwd, not os.Getwd()")
+
+	// Belt-and-braces: no mount should source from the process cwd.
+	for _, m := range spec.Mounts {
+		assert.NotEqual(t, cwdDir, m.Source,
+			"no bind mount should source from os.Getwd() when Pwd is pinned")
+	}
+}
+
+// TestBuildSpec_PwdFallbackToOsGetwdWhenEmpty documents the fallback
+// contract: when BuildParams.Pwd is empty, BuildSpec falls back to
+// os.Getwd() and derives all workspace labels/mounts from that cwd.
+func TestBuildSpec_PwdFallbackToOsGetwdWhenEmpty(t *testing.T) {
+	cwdDir := t.TempDir()
+	t.Chdir(cwdDir)
+
+	p := defaultBuildParams()
+	// Pwd intentionally left empty — exercise the os.Getwd() fallback.
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	hostname := p.Platform.Hostname
+	wantHash := workspace.HashPath(hostname, cwdDir)
+	wantWorkdir := workspace.ContainerWorkdir(hostname, cwdDir)
+
+	assert.Equal(t, wantHash, spec.Labels[LabelWorkspace],
+		"with Pwd empty, workspace hash label should be derived from os.Getwd()")
+	assert.Equal(t, cwdDir, spec.Labels[LabelWorkspaceDir],
+		"with Pwd empty, workspace-dir label should be os.Getwd()")
+	assert.Equal(t, wantWorkdir, spec.WorkingDir,
+		"with Pwd empty, container WorkingDir should be derived from os.Getwd()")
+
+	var wsMount *mount.Mount
+	for i := range spec.Mounts {
+		if spec.Mounts[i].Target == wantWorkdir {
+			wsMount = &spec.Mounts[i]
+			break
+		}
+	}
+	require.NotNil(t, wsMount, "workspace bind mount (Target == container workdir) must exist")
+	assert.Equal(t, cwdDir, wsMount.Source,
+		"with Pwd empty, workspace bind mount Source should be os.Getwd()")
 }

@@ -37,6 +37,15 @@ type BuildParams struct {
 	Args     []string
 	HomeDir  string // container-side home directory (from image inspect)
 	LogDir   string // directory for exit logs (empty = no logging)
+	// Pwd is the host-side working directory to bind-mount as the
+	// container's workspace. When empty, BuildSpec falls back to
+	// os.Getwd() — that fallback is only correct when BuildSpec is
+	// invoked by a process running on the same host the sidecar will
+	// see. In nested invocations (a process inside an agent container
+	// calling BuildSpec for an inner container) os.Getwd() returns the
+	// agent-internal view, not the host path, so callers must pin Pwd
+	// at the outermost layer and pass it through.
+	Pwd string
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
@@ -65,10 +74,14 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		homeDir = "/home/user"
 	}
 
-	pwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: cannot determine working directory: %v\n", err)
-		pwd = "/tmp"
+	pwd := p.Pwd
+	if pwd == "" {
+		got, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: cannot determine working directory: %v\n", err)
+			got = "/tmp"
+		}
+		pwd = got
 	}
 	workdir := workspace.ContainerWorkdir(p.Platform.Hostname, pwd)
 

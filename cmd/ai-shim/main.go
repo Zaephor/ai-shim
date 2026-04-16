@@ -1085,6 +1085,9 @@ func runAgent(name string, args []string) (int, error) {
 		Args:     args,
 		HomeDir:  imageUser.HomeDir,
 		LogDir:   logDir,
+		// Pin pwd at this layer so BuildSpec does not re-read
+		// os.Getwd() and risk divergence in nested scenarios.
+		Pwd: pwd,
 	})
 	if err != nil {
 		return 1, fmt.Errorf("building container spec: %w", err)
