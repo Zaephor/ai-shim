@@ -998,7 +998,7 @@ func runAgent(name string, args []string) (int, error) {
 		}
 	}
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
 		Profile:  profileName,
@@ -1008,6 +1008,9 @@ func runAgent(name string, args []string) (int, error) {
 		HomeDir:  imageUser.HomeDir,
 		LogDir:   logDir,
 	})
+	if err != nil {
+		return 1, fmt.Errorf("building container spec: %w", err)
+	}
 
 	logging.Debug("workdir=%s", spec.WorkingDir)
 	if logging.IsVerbose() {

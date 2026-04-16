@@ -67,13 +67,14 @@ func TestE2E_EntrypointContainsInstallCommand(t *testing.T) {
 			require.NoError(t, layout.EnsureDirectories(name, "default"))
 			require.NoError(t, layout.EnsureAgentData("default", def.DataDirs, def.DataFiles))
 
-			spec := container.BuildSpec(container.BuildParams{
+			spec, err := container.BuildSpec(container.BuildParams{
 				Config:   config.Config{},
 				Agent:    def,
 				Profile:  "default",
 				Layout:   layout,
 				Platform: plat,
 			})
+			require.NoError(t, err)
 
 			entrypoint := spec.Entrypoint[2] // the shell script
 
@@ -331,7 +332,7 @@ env:
 
 	plat := platform.Detect()
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
 		Profile:  "test",
@@ -340,6 +341,7 @@ env:
 		HomeDir:  "/home/user",
 		LogDir:   filepath.Join(root, "logs"),
 	})
+	require.NoError(t, err)
 
 	// Override entrypoint to verify config was applied
 	spec.Image = "alpine:latest"
@@ -390,13 +392,14 @@ func TestE2E_FullBuildSpecProducesValidContainer(t *testing.T) {
 
 	plat := platform.Detect()
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
 		Profile:  "default",
 		Layout:   layout,
 		Platform: plat,
 	})
+	require.NoError(t, err)
 
 	// Override entrypoint to just verify the config was applied correctly
 	// (we can't actually run npm install in alpine)

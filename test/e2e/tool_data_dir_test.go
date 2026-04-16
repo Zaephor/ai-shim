@@ -49,7 +49,7 @@ func TestToolDataDir_EnvVarAndMount(t *testing.T) {
 
 	plat := platform.Info{UID: os.Getuid(), GID: os.Getgid(), Hostname: "testhost", Username: "testuser"}
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
 		Profile:  "default",
@@ -57,6 +57,7 @@ func TestToolDataDir_EnvVarAndMount(t *testing.T) {
 		Platform: plat,
 		HomeDir:  "/home/user",
 	})
+	require.NoError(t, err)
 
 	// The entrypoint script is spec.Entrypoint[2] — the sh -c argument.
 	require.Len(t, spec.Entrypoint, 3, "entrypoint should be [sh, -c, <script>]")
@@ -158,7 +159,7 @@ func TestToolDataDir_CacheScopes(t *testing.T) {
 				},
 			}
 
-			spec := container.BuildSpec(container.BuildParams{
+			spec, err := container.BuildSpec(container.BuildParams{
 				Config:   cfg,
 				Agent:    agentDef,
 				Profile:  profile,
@@ -166,6 +167,7 @@ func TestToolDataDir_CacheScopes(t *testing.T) {
 				Platform: plat,
 				HomeDir:  "/home/user",
 			})
+			require.NoError(t, err)
 
 			wantTarget := "/usr/local/share/ai-shim/cache/" + toolName
 			var foundMount *mount.Mount
@@ -246,7 +248,7 @@ fi`
 
 		require.NoError(t, runner.EnsureImage(ctx, cfg.Image))
 
-		spec := container.BuildSpec(container.BuildParams{
+		spec, err := container.BuildSpec(container.BuildParams{
 			Config:   cfg,
 			Agent:    agentDef,
 			Profile:  "default",
@@ -254,6 +256,7 @@ fi`
 			Platform: plat,
 			HomeDir:  "/home/user",
 		})
+		require.NoError(t, err)
 
 		// Replace the entrypoint: keep the tool provisioning script that sets
 		// UV_CACHE_DIR and installs uv, then run the verification command.
@@ -289,7 +292,7 @@ echo "uv-installed" > %s
 		require.NoError(t, err)
 		defer runner.Close()
 
-		spec := container.BuildSpec(container.BuildParams{
+		spec, err := container.BuildSpec(container.BuildParams{
 			Config:   cfg,
 			Agent:    agentDef,
 			Profile:  "default",
@@ -297,6 +300,7 @@ echo "uv-installed" > %s
 			Platform: plat,
 			HomeDir:  "/home/user",
 		})
+		require.NoError(t, err)
 
 		script := fmt.Sprintf(`test -f %s && cat %s`, markerInContainer, markerInContainer)
 		spec.Entrypoint = []string{"sh", "-c", script}
@@ -368,7 +372,7 @@ export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node/ | tail -1)/bin:
 
 		require.NoError(t, runner.EnsureImage(ctx, cfg.Image))
 
-		spec := container.BuildSpec(container.BuildParams{
+		spec, err := container.BuildSpec(container.BuildParams{
 			Config:   cfg,
 			Agent:    agentDef,
 			Profile:  "default",
@@ -376,6 +380,7 @@ export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node/ | tail -1)/bin:
 			Platform: plat,
 			HomeDir:  "/home/user",
 		})
+		require.NoError(t, err)
 
 		toolScript := extractToolScript(t, spec.Entrypoint[2])
 		script := fmt.Sprintf(`%s
@@ -409,7 +414,7 @@ echo "node-ok" > %s
 		require.NoError(t, err)
 		defer runner.Close()
 
-		spec := container.BuildSpec(container.BuildParams{
+		spec, err := container.BuildSpec(container.BuildParams{
 			Config:   cfg,
 			Agent:    agentDef,
 			Profile:  "default",
@@ -417,6 +422,7 @@ echo "node-ok" > %s
 			Platform: plat,
 			HomeDir:  "/home/user",
 		})
+		require.NoError(t, err)
 
 		// NVM_DIR is set by the tool provisioning preamble; we just need to
 		// add the node bin dir to PATH and verify the marker.

@@ -209,7 +209,8 @@ func TestJourney_BuildSpecFromConfig(t *testing.T) {
 		HomeDir:  "/home/user",
 	}
 
-	spec := container.BuildSpec(p)
+	spec, err := container.BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, "test-image:latest", spec.Image)
 	assert.Equal(t, "test-host", spec.Hostname)
@@ -650,7 +651,7 @@ func TestJourney_DetachLabelsInBuildSpec(t *testing.T) {
 	layout := storage.NewLayout(t.TempDir())
 	require.NoError(t, layout.EnsureDirectories("claude-code", "default"))
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    agentDef,
 		Profile:  "default",
@@ -658,6 +659,7 @@ func TestJourney_DetachLabelsInBuildSpec(t *testing.T) {
 		Platform: platform.Detect(),
 		HomeDir:  "/home/user",
 	})
+	require.NoError(t, err)
 
 	assert.NotEmpty(t, spec.Labels[container.LabelWorkspace],
 		"BuildSpec must set workspace hash label")

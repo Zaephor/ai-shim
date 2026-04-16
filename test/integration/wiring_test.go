@@ -96,7 +96,8 @@ func TestBuildSpecUsesAllBuildParamsFields(t *testing.T) {
 		LogDir:   "/tmp/logs",
 	}
 
-	spec := container.BuildSpec(p)
+	spec, err := container.BuildSpec(p)
+	require.NoError(t, err)
 
 	// Verify each BuildParams field influenced the spec
 	assert.Equal(t, "test-image", spec.Image)

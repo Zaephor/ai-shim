@@ -71,7 +71,7 @@ func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string,
 
 	plat := platform.Detect()
 
-	spec := container.BuildSpec(container.BuildParams{
+	spec, err := container.BuildSpec(container.BuildParams{
 		Config:   cfg,
 		Agent:    def,
 		Profile:  profile,
@@ -79,6 +79,7 @@ func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string,
 		Platform: plat,
 		HomeDir:  "/home/user",
 	})
+	require.NoError(t, err)
 
 	// Modify the entrypoint: keep install/cache logic but replace exec line
 	// with verifyCmd that writes output to a marker file.
