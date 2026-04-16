@@ -132,3 +132,47 @@ func TestLoadFileStrict_CommentedKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, warnings, "commented keys should not produce warnings")
 }
+
+// TestLoadFile_MCPServersOrderPreserved verifies that the declaration order of
+// mcp_servers in YAML is captured in Config.MCPServersOrder, even though the
+// Go map iteration itself is non-deterministic. Mirrors tools ordering.
+func TestLoadFile_MCPServersOrderPreserved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp.yaml")
+	content := []byte(`
+mcp_servers:
+  zeta:
+    command: "z-cmd"
+  alpha:
+    command: "a-cmd"
+  middle:
+    command: "m-cmd"
+  beta:
+    command: "b-cmd"
+`)
+	require.NoError(t, os.WriteFile(path, content, 0644))
+	cfg, err := LoadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"zeta", "alpha", "middle", "beta"}, cfg.MCPServersOrder)
+}
+
+// TestLoadFileStrict_MCPServersOrderPreserved verifies strict-mode loader also
+// populates MCPServersOrder alongside yaml.Unmarshal.
+func TestLoadFileStrict_MCPServersOrderPreserved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp.yaml")
+	content := []byte(`
+mcp_servers:
+  first:
+    command: "f"
+  second:
+    command: "s"
+  third:
+    command: "t"
+`)
+	require.NoError(t, os.WriteFile(path, content, 0644))
+	cfg, warnings, err := LoadFileStrict(path)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+	assert.Equal(t, []string{"first", "second", "third"}, cfg.MCPServersOrder)
+}

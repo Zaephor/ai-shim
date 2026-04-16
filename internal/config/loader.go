@@ -29,6 +29,7 @@ func LoadFile(path string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.ToolsOrder = extractToolsOrder(data)
+	cfg.MCPServersOrder = extractMCPServersOrder(data)
 	return cfg, nil
 }
 
@@ -42,6 +43,22 @@ func LoadFile(path string) (Config, error) {
 // mode (used by LoadFileStrict) still sees the full document structure and
 // can still surface unknown-key warnings.
 func extractToolsOrder(data []byte) []string {
+	return extractTopLevelMappingOrder(data, "tools")
+}
+
+// extractMCPServersOrder parses a raw YAML document and returns the ordered
+// list of keys under the top-level `mcp_servers` mapping. Mirrors
+// extractToolsOrder so the MCP_SERVERS JSON blob emitted to agents preserves
+// the user's declaration order rather than Go map-iteration (random) order.
+func extractMCPServersOrder(data []byte) []string {
+	return extractTopLevelMappingOrder(data, "mcp_servers")
+}
+
+// extractTopLevelMappingOrder walks a raw YAML document and returns the
+// ordered list of keys under the named top-level mapping, or nil if the key
+// is absent or the document is not a mapping. Shared by extractToolsOrder
+// and extractMCPServersOrder.
+func extractTopLevelMappingOrder(data []byte, key string) []string {
 	if len(data) == 0 {
 		return nil
 	}
@@ -59,7 +76,7 @@ func extractToolsOrder(data []byte) []string {
 	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		k, v := root.Content[i], root.Content[i+1]
-		if k.Value != "tools" || v.Kind != yaml.MappingNode {
+		if k.Value != key || v.Kind != yaml.MappingNode {
 			continue
 		}
 		order := make([]string, 0, len(v.Content)/2)
@@ -112,6 +129,7 @@ func LoadFileStrict(path string) (Config, []string, error) {
 		return Config{}, nil, err
 	}
 	cfg.ToolsOrder = extractToolsOrder(data)
+	cfg.MCPServersOrder = extractMCPServersOrder(data)
 	return cfg, warnings, nil
 }
 

@@ -39,6 +39,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		AllowAgents:     []string{"agent"},
 		Isolated:        boolPtr(false),
 		MCPServers:      map[string]MCPServerDef{"s": {Command: "cmd"}},
+		MCPServersOrder: []string{"s"},
 		Tools:           map[string]ToolDef{"t": {Type: "apt"}},
 		ToolsOrder:      []string{"t"},
 		Resources:       &ResourceLimits{Memory: "4g", CPUs: "2.0"},
@@ -145,6 +146,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		AllowAgents:     []string{"agent"},
 		Isolated:        boolPtr(false),
 		MCPServers:      map[string]MCPServerDef{"s": {Command: "cmd"}},
+		MCPServersOrder: []string{"s"},
 		Tools:           map[string]ToolDef{"t": {Type: "apt"}},
 		ToolsOrder:      []string{"t"},
 		Resources:       &ResourceLimits{Memory: "4g", CPUs: "2.0"},
@@ -170,8 +172,8 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		yamlTag := field.Tag.Get("yaml")
 		if yamlTag == "" || yamlTag == "-" {
 			// yamlTag "-" means the field is explicitly not serialized
-			// (e.g. computed/derived state such as ToolsOrder); it has no
-			// corresponding source tier.
+			// (e.g. computed/derived state such as ToolsOrder or
+			// MCPServersOrder); it has no corresponding source tier.
 			continue
 		}
 		// Extract the yaml key name (before comma)

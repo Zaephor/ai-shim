@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,7 +40,13 @@ type BuildParams struct {
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
-func BuildSpec(p BuildParams) ContainerSpec {
+//
+// Returns an error if a required host-side directory (e.g. a tool's
+// persistent cache for a tool with data_dir:true) cannot be created.
+// Callers must refuse to start the container in that case — running
+// with a missing persistent mount silently drops the tool's state onto
+// an ephemeral layer.
+func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	image := p.Config.GetImage()
 	hostname := p.Config.GetHostname()
 
@@ -71,7 +78,10 @@ func BuildSpec(p BuildParams) ContainerSpec {
 	labels[LabelWorkspace] = wsHash
 	labels[LabelWorkspaceDir] = pwd
 
-	mounts := buildMounts(p, pwd, workdir, homeDir)
+	mounts, mountsErr := buildMounts(p, pwd, workdir, homeDir)
+	if mountsErr != nil {
+		return ContainerSpec{}, mountsErr
+	}
 
 	// Tool provisioning script
 	var toolScript string
@@ -143,9 +153,11 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		env = append(env, "COLORTERM="+val)
 	}
 
-	// MCP server config as env var (JSON format for agent consumption)
+	// MCP server config as env var (JSON format for agent consumption).
+	// Pass the YAML declaration order so the emitted JSON lists servers in
+	// the order the user wrote them rather than Go map-iteration order.
 	if len(p.Config.MCPServers) > 0 {
-		env = append(env, "MCP_SERVERS="+mcpServersJSON(p.Config.MCPServers))
+		env = append(env, "MCP_SERVERS="+mcpServersJSON(p.Config.MCPServers, p.Config.MCPServersOrder))
 	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
@@ -192,7 +204,7 @@ func BuildSpec(p BuildParams) ContainerSpec {
 		CapDrop:      capDrop,
 		LogDir:       p.LogDir,
 		Persistent:   persistent,
-	}
+	}, nil
 }
 
 // IsTTY reports whether stdin is connected to a terminal.
@@ -204,7 +216,7 @@ func IsTTY() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
+func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, error) {
 	profileHome := p.Layout.ProfileHome(p.Profile)
 
 	mounts := []mount.Mount{
@@ -295,8 +307,10 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		}
 		hostPath := storage.ToolCachePath(p.Layout, name, td.CacheScope, p.Agent.Name, p.Profile)
 		if err := os.MkdirAll(hostPath, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to create tool cache dir %s: %v\n", hostPath, err)
-			continue
+			// Refuse to proceed: silently dropping the mount would run
+			// the tool against an empty ephemeral layer, losing the
+			// user's persisted state with no actionable feedback.
+			return nil, fmt.Errorf("creating tool cache dir %s for tool %q: %w", hostPath, name, err)
 		}
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
@@ -305,7 +319,7 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) []mount.Mount {
 		})
 	}
 
-	return mounts
+	return mounts, nil
 }
 
 func buildEnv(envMap map[string]string) []string {
@@ -362,27 +376,73 @@ func randomSuffix(n int) string {
 
 // mcpServersJSON serializes MCP server definitions to JSON for the MCP_SERVERS
 // env var. The format matches what claude-code and other agents expect.
-func mcpServersJSON(servers map[string]config.MCPServerDef) string {
+//
+// When `order` is non-empty, entries are emitted in that sequence so the JSON
+// preserves the YAML declaration order captured by Config.MCPServersOrder.
+// Any keys present in the map but not in `order` are appended alphabetically
+// so nothing is silently dropped. When `order` is empty, all keys are emitted
+// in alphabetical order for deterministic output.
+func mcpServersJSON(servers map[string]config.MCPServerDef, order []string) string {
 	type mcpEntry struct {
 		Command string            `json:"command"`
 		Args    []string          `json:"args,omitempty"`
 		Env     map[string]string `json:"env,omitempty"`
 	}
-	m := make(map[string]mcpEntry, len(servers))
-	for name, srv := range servers {
-		m[name] = mcpEntry{
+	if len(servers) == 0 {
+		return "{}"
+	}
+	// Build the final key sequence: honored-order keys first (skipping any
+	// not present in the map), then any leftover map keys alphabetically so
+	// nothing is silently dropped.
+	seen := make(map[string]bool, len(servers))
+	keys := make([]string, 0, len(servers))
+	for _, k := range order {
+		if _, ok := servers[k]; !ok {
+			continue
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		keys = append(keys, k)
+	}
+	leftover := make([]string, 0, len(servers))
+	for k := range servers {
+		if !seen[k] {
+			leftover = append(leftover, k)
+		}
+	}
+	sort.Strings(leftover)
+	keys = append(keys, leftover...)
+
+	var buf strings.Builder
+	buf.WriteByte('{')
+	for i, name := range keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		srv := servers[name]
+		entry := mcpEntry{
 			Command: srv.Command,
 			Args:    srv.Args,
 			Env:     srv.Env,
 		}
+		nameJSON, err := json.Marshal(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP server name %q: %v\n", name, err)
+			return "{}"
+		}
+		valJSON, err := json.Marshal(entry)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP server %q: %v\n", name, err)
+			return "{}"
+		}
+		buf.Write(nameJSON)
+		buf.WriteByte(':')
+		buf.Write(valJSON)
 	}
-	data, err := json.Marshal(m)
-	if err != nil {
-		// Should not happen with string maps, but be safe
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP servers: %v\n", err)
-		return "{}"
-	}
-	return string(data)
+	buf.WriteByte('}')
+	return buf.String()
 }
 
 // generatePackageScript builds the shell snippet that installs apt packages

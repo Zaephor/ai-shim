@@ -33,6 +33,12 @@ type Config struct {
 	AllowAgents     []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
 	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
 	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+	// MCPServersOrder holds mcp_servers names in the order they appear in
+	// YAML so the MCP_SERVERS JSON blob handed to agents can be emitted in
+	// declaration order rather than Go map-iteration (random) order.
+	// Populated alongside yaml.Unmarshal in LoadFile/LoadFileStrict — not a
+	// YAML input field itself.
+	MCPServersOrder []string                `yaml:"-" json:"-"`
 	Tools           map[string]ToolDef      `yaml:"tools,omitempty" json:"tools,omitempty"`
 	// ToolsOrder holds tool names in the order they appear in YAML so the
 	// provisioning script can install them in declaration order. Populated

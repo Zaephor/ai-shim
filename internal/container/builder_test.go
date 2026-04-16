@@ -35,7 +35,8 @@ func defaultBuildParams() BuildParams {
 
 func TestBuildSpec_DefaultImageAndHostname(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, DefaultImage, spec.Image)
 	assert.Equal(t, DefaultHostname, spec.Hostname)
@@ -44,7 +45,8 @@ func TestBuildSpec_DefaultImageAndHostname(t *testing.T) {
 func TestBuildSpec_ConfigOverridesImage(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Image = "custom/image:latest"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, "custom/image:latest", spec.Image)
 }
@@ -52,7 +54,8 @@ func TestBuildSpec_ConfigOverridesImage(t *testing.T) {
 func TestBuildSpec_ConfigOverridesHostname(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Hostname = "my-host"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, "my-host", spec.Hostname)
 }
@@ -62,7 +65,8 @@ func TestBuildSpec_ConfigEnv(t *testing.T) {
 	p.Config.Env = map[string]string{
 		"FOO": "bar",
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Contains(t, spec.Env, "FOO=bar")
 }
@@ -70,21 +74,24 @@ func TestBuildSpec_ConfigEnv(t *testing.T) {
 func TestBuildSpec_GPU(t *testing.T) {
 	t.Run("nil GPU defaults to false", func(t *testing.T) {
 		p := defaultBuildParams()
-		spec := BuildSpec(p)
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
 		assert.False(t, spec.GPU)
 	})
 
 	t.Run("GPU enabled", func(t *testing.T) {
 		p := defaultBuildParams()
 		p.Config.GPU = testutil.BoolPtr(true)
-		spec := BuildSpec(p)
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
 		assert.True(t, spec.GPU)
 	})
 
 	t.Run("GPU disabled", func(t *testing.T) {
 		p := defaultBuildParams()
 		p.Config.GPU = testutil.BoolPtr(false)
-		spec := BuildSpec(p)
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
 		assert.False(t, spec.GPU)
 	})
 }
@@ -93,7 +100,8 @@ func TestBuildSpec_User(t *testing.T) {
 	p := defaultBuildParams()
 	p.Platform.UID = 501
 	p.Platform.GID = 20
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, "501:20", spec.User)
 }
@@ -102,7 +110,8 @@ func TestBuildSpec_Labels(t *testing.T) {
 	p := defaultBuildParams()
 	p.Agent.Name = "gemini-cli"
 	p.Profile = "work"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Equal(t, "true", spec.Labels["ai-shim"])
 	assert.Equal(t, "gemini-cli", spec.Labels["ai-shim.agent"])
@@ -115,7 +124,8 @@ func TestBuildSpec_Labels(t *testing.T) {
 
 func TestBuildSpec_PersistentMatchesTTY(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Persistent flag and label must be consistent with the TTY detection.
 	tty := IsTTY()
@@ -131,7 +141,8 @@ func TestBuildSpec_PersistentMatchesTTY(t *testing.T) {
 func TestBuildSpec_RequiredMountsPresent(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	mountTargets := make(map[string]string)
 	for _, m := range spec.Mounts {
@@ -156,7 +167,8 @@ func TestBuildSpec_RequiredMountsPresent(t *testing.T) {
 func TestBuildSpec_PortParsing(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Ports = []string{"8080:80", "3000:3000"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	require.NotNil(t, spec.Ports)
 	require.NotNil(t, spec.ExposedPorts)
@@ -177,7 +189,8 @@ func TestBuildSpec_PortParsing(t *testing.T) {
 func TestBuildSpec_PortParsingInvalid(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Ports = []string{"invalid-port"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Invalid ports should be skipped
 	assert.Empty(t, spec.Ports)
@@ -185,7 +198,8 @@ func TestBuildSpec_PortParsingInvalid(t *testing.T) {
 
 func TestBuildSpec_Entrypoint(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	require.Len(t, spec.Entrypoint, 3)
 	assert.Equal(t, "sh", spec.Entrypoint[0])
@@ -195,7 +209,8 @@ func TestBuildSpec_Entrypoint(t *testing.T) {
 
 func TestBuildSpec_WorkingDir(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Contains(t, spec.WorkingDir, "/workspace/")
 }
@@ -203,7 +218,8 @@ func TestBuildSpec_WorkingDir(t *testing.T) {
 func TestBuildSpec_CustomVolumesFromConfig(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Volumes = []string{"/host/data:/container/data", "/host/logs:/container/logs"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	targets := map[string]bool{}
 	for _, m := range spec.Mounts {
@@ -218,7 +234,8 @@ func TestBuildSpec_ToolProvisioningInEntrypoint(t *testing.T) {
 	p.Config.Tools = map[string]config.ToolDef{
 		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2] // the shell script
 	assert.Contains(t, entrypoint, "act", "tool provisioning should be in entrypoint")
@@ -229,7 +246,8 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.AllowAgents = []string{"gemini-cli"}
 	p.Config.Isolated = testutil.BoolPtr(true)
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	targets := map[string]bool{}
 	for _, m := range spec.Mounts {
@@ -243,7 +261,8 @@ func TestBuildSpec_CrossAgentMountsIsolated(t *testing.T) {
 func TestBuildSpec_CrossAgentMountsNonIsolated(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Isolated = testutil.BoolPtr(false)
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Should have mounts for agents other than the primary
 	hasOtherAgentBin := false
@@ -268,7 +287,8 @@ func TestBuildSpec_ProfileHomeMountedInAllModes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := defaultBuildParams()
 			p.Config.Isolated = testutil.BoolPtr(isolated)
-			spec := BuildSpec(p)
+			spec, err := BuildSpec(p)
+			require.NoError(t, err)
 
 			var homeMount *mount.Mount
 			for i, m := range spec.Mounts {
@@ -288,7 +308,8 @@ func TestBuildSpec_ProfileHomeMountedInAllModes(t *testing.T) {
 func TestBuildSpec_IsolatedExcludesOtherAgentData(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Isolated = testutil.BoolPtr(true)
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	for _, m := range spec.Mounts {
 		assert.NotContains(t, m.Target, ".gemini", "isolated mode should not mount other agent data dirs")
@@ -299,7 +320,8 @@ func TestBuildSpec_IsolatedExcludesOtherAgentData(t *testing.T) {
 func TestBuildSpec_PackagesInEntrypoint(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Packages = []string{"tmux", "jq"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, "tmux", "packages should be installed in entrypoint")
@@ -311,7 +333,8 @@ func TestBuildSpec_CustomHomeDir(t *testing.T) {
 	p := defaultBuildParams()
 	p.HomeDir = "/home/runner"
 	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home mount
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	hasRunnerHome := false
 	for _, m := range spec.Mounts {
@@ -326,7 +349,8 @@ func TestBuildSpec_CustomHomeDir_Isolated(t *testing.T) {
 	p := defaultBuildParams()
 	p.HomeDir = "/home/runner"
 	// Default isolated mode
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Profile home should mount at custom home dir
 	hasCustomHome := false
@@ -341,7 +365,8 @@ func TestBuildSpec_CustomHomeDir_Isolated(t *testing.T) {
 func TestBuildSpec_DefaultHomeDir(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Isolated = testutil.BoolPtr(false) // shared mode for full home mount
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	hasDefaultHome := false
 	for _, m := range spec.Mounts {
@@ -356,7 +381,8 @@ func TestBuildSpec_ConfigArgsAndPassthroughMerged(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Args = []string{"--no-telemetry"}
 	p.Args = []string{"--verbose"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, "--no-telemetry", "config args should be in entrypoint")
@@ -371,7 +397,8 @@ func TestBuildSpec_VolumeValidationSkipsTraversal(t *testing.T) {
 		"/etc/passwd:/container/passwd",
 		"/host/ok:/container/ok",
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	targets := map[string]bool{}
 	for _, m := range spec.Mounts {
@@ -386,7 +413,8 @@ func TestBuildSpec_VolumeValidationSkipsTraversal(t *testing.T) {
 func TestBuildSpec_VolumeValidationSkipsMalformed(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Volumes = []string{"no-colon-here"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Should only have the base mounts, no custom ones
 	for _, m := range spec.Mounts {
@@ -398,7 +426,8 @@ func TestBuildSpec_ContainerName(t *testing.T) {
 	p := defaultBuildParams()
 	p.Agent.Name = "claude-code"
 	p.Profile = "work"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.NotEmpty(t, spec.Name, "container should have a name")
 	assert.Contains(t, spec.Name, "claude-code-work-", "name should contain agent-profile prefix")
@@ -412,8 +441,10 @@ func TestBuildSpec_ContainerNameDeterministicPrefix(t *testing.T) {
 	p := defaultBuildParams()
 	p.Agent.Name = "gemini-cli"
 	p.Profile = "personal"
-	spec1 := BuildSpec(p)
-	spec2 := BuildSpec(p)
+	spec1, err := BuildSpec(p)
+	require.NoError(t, err)
+	spec2, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Prefix should be the same (deterministic), but suffix differs (random)
 	prefix1 := spec1.Name[:strings.LastIndex(spec1.Name, "-")]
@@ -444,7 +475,8 @@ func TestGenerateContainerName_SuffixLength(t *testing.T) {
 
 func TestBuildSpec_WorkdirUsesRealPwd(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 	// WorkingDir should start with /workspace/ and have a hash
 	assert.True(t, len(spec.WorkingDir) > len("/workspace/"), "workdir should have hash suffix")
 }
@@ -453,7 +485,8 @@ func TestBuildSpec_ContainerNameUnder63Chars(t *testing.T) {
 	p := defaultBuildParams()
 	p.Agent.Name = "claude-code"
 	p.Profile = "work"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 	assert.True(t, len(spec.Name) <= 63, "container name should not exceed Docker's 63-char limit, got %d: %s", len(spec.Name), spec.Name)
 }
 
@@ -461,7 +494,8 @@ func TestBuildSpec_ContainerNameLongInputs(t *testing.T) {
 	p := defaultBuildParams()
 	p.Agent.Name = "my-extremely-long-custom-agent-name-that-is-ridiculous"
 	p.Profile = "production-with-extra-context-for-no-reason"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 	// Name must stay within Docker's limits regardless of input length
 	assert.True(t, len(spec.Name) <= 128,
 		"container name should fit Docker's 128-char limit even with long inputs, got %d: %s",
@@ -512,14 +546,16 @@ func TestParsePorts_MalformedWarnsOnStderr(t *testing.T) {
 
 func TestBuildSpec_NoResourceLimits(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 	assert.Nil(t, spec.Resources, "resources should be nil when not configured")
 }
 
 func TestBuildSpec_WithResourceLimits(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Resources = &config.ResourceLimits{Memory: "4g", CPUs: "2.0"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 	require.NotNil(t, spec.Resources)
 	assert.Equal(t, "4g", spec.Resources.Memory)
 	assert.Equal(t, "2.0", spec.Resources.CPUs)
@@ -528,7 +564,8 @@ func TestBuildSpec_WithResourceLimits(t *testing.T) {
 func TestBuildSpec_GitConfigInEntrypoint(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Git = &config.GitConfig{Name: "Test User", Email: "test@example.com"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, "git config --global user.name", "should set git user.name")
@@ -540,7 +577,8 @@ func TestBuildSpec_GitConfigInEntrypoint(t *testing.T) {
 func TestBuildSpec_GitConfigPartial(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Git = &config.GitConfig{Name: "Only Name"}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, "git config --global user.name", "should set git user.name")
@@ -549,7 +587,8 @@ func TestBuildSpec_GitConfigPartial(t *testing.T) {
 
 func TestBuildSpec_NoGitConfig(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.NotContains(t, entrypoint, "git config --global", "should not set git config when not configured")
@@ -564,7 +603,8 @@ func TestBuildSpec_MCPServersEnvVar(t *testing.T) {
 			Env:     map[string]string{"MCP_ROOT": "/workspace"},
 		},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	var mcpEnv string
 	for _, e := range spec.Env {
@@ -581,7 +621,8 @@ func TestBuildSpec_MCPServersEnvVar(t *testing.T) {
 
 func TestBuildSpec_NoMCPServers(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	for _, e := range spec.Env {
 		assert.False(t, strings.HasPrefix(e, "MCP_SERVERS="), "MCP_SERVERS should not be set when no MCP servers configured")
@@ -592,14 +633,14 @@ func TestMCPServersJSON(t *testing.T) {
 	servers := map[string]config.MCPServerDef{
 		"test": {Command: "cmd", Args: []string{"arg1"}, Env: map[string]string{"K": "V"}},
 	}
-	result := mcpServersJSON(servers)
+	result := mcpServersJSON(servers, nil)
 	assert.Contains(t, result, `"command":"cmd"`)
 	assert.Contains(t, result, `"args":["arg1"]`)
 	assert.Contains(t, result, `"K":"V"`)
 }
 
 func TestMCPServersJSON_Empty(t *testing.T) {
-	result := mcpServersJSON(map[string]config.MCPServerDef{})
+	result := mcpServersJSON(map[string]config.MCPServerDef{}, nil)
 	assert.Equal(t, "{}", result)
 }
 
@@ -607,7 +648,7 @@ func TestMCPServersJSON_OmitsEmptyFields(t *testing.T) {
 	servers := map[string]config.MCPServerDef{
 		"minimal": {Command: "echo"},
 	}
-	result := mcpServersJSON(servers)
+	result := mcpServersJSON(servers, nil)
 	assert.Contains(t, result, `"command":"echo"`)
 	assert.NotContains(t, result, `"args"`, "nil args should be omitted")
 	assert.NotContains(t, result, `"env"`, "nil env should be omitted")
@@ -618,14 +659,64 @@ func TestMCPServersJSON_MultipleServers(t *testing.T) {
 		"fs":  {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem"}},
 		"git": {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-git"}},
 	}
-	result := mcpServersJSON(servers)
+	result := mcpServersJSON(servers, nil)
 	assert.Contains(t, result, `"fs"`)
 	assert.Contains(t, result, `"git"`)
 }
 
+// TestMCPServersJSON_HonorsOrder verifies that when an order slice is
+// provided, mcpServersJSON emits entries in declaration order (not map
+// iteration order).
+func TestMCPServersJSON_HonorsOrder(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"zeta":  {Command: "z"},
+		"alpha": {Command: "a"},
+		"mid":   {Command: "m"},
+	}
+	order := []string{"zeta", "alpha", "mid"}
+	result := mcpServersJSON(servers, order)
+	zIdx := strings.Index(result, `"zeta"`)
+	aIdx := strings.Index(result, `"alpha"`)
+	mIdx := strings.Index(result, `"mid"`)
+	require.True(t, zIdx >= 0 && aIdx >= 0 && mIdx >= 0, "all keys present: %s", result)
+	assert.Less(t, zIdx, aIdx, "zeta should precede alpha per declaration order")
+	assert.Less(t, aIdx, mIdx, "alpha should precede mid per declaration order")
+}
+
+// TestMCPServersJSON_AlphabeticalFallback verifies that with an empty order
+// slice, mcpServersJSON falls back to sorted alphabetical order for
+// deterministic output.
+func TestMCPServersJSON_AlphabeticalFallback(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"zeta":  {Command: "z"},
+		"alpha": {Command: "a"},
+		"mid":   {Command: "m"},
+	}
+	result := mcpServersJSON(servers, nil)
+	aIdx := strings.Index(result, `"alpha"`)
+	mIdx := strings.Index(result, `"mid"`)
+	zIdx := strings.Index(result, `"zeta"`)
+	require.True(t, aIdx >= 0 && mIdx >= 0 && zIdx >= 0, "all keys present: %s", result)
+	assert.Less(t, aIdx, mIdx, "alpha should precede mid alphabetically")
+	assert.Less(t, mIdx, zIdx, "mid should precede zeta alphabetically")
+}
+
+// TestMCPServersJSON_OrderKeyMissing verifies that if the order slice references
+// a key not in the map, it is skipped (no crash, no empty entry).
+func TestMCPServersJSON_OrderKeyMissing(t *testing.T) {
+	servers := map[string]config.MCPServerDef{
+		"a": {Command: "a"},
+	}
+	order := []string{"ghost", "a"}
+	result := mcpServersJSON(servers, order)
+	assert.Contains(t, result, `"a"`)
+	assert.NotContains(t, result, `"ghost"`)
+}
+
 func TestBuildSpec_SecurityProfileDefault(t *testing.T) {
 	p := defaultBuildParams()
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Empty(t, spec.SecurityOpt, "default profile should not set SecurityOpt")
 	assert.Empty(t, spec.CapDrop, "default profile should not drop capabilities")
@@ -634,7 +725,8 @@ func TestBuildSpec_SecurityProfileDefault(t *testing.T) {
 func TestBuildSpec_SecurityProfileStrict(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.SecurityProfile = "strict"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Contains(t, spec.SecurityOpt, "no-new-privileges:true")
 	assert.Contains(t, spec.CapDrop, "ALL")
@@ -643,7 +735,8 @@ func TestBuildSpec_SecurityProfileStrict(t *testing.T) {
 func TestBuildSpec_SecurityProfileNone(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.SecurityProfile = "none"
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	assert.Contains(t, spec.SecurityOpt, "seccomp=unconfined")
 	assert.Empty(t, spec.CapDrop)
@@ -661,7 +754,8 @@ func TestBuildSpec_ToolDataDirMount(t *testing.T) {
 			EnvVar:  "NVM_DIR",
 		},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	// Should have a bind mount for the tool cache
 	found := false
@@ -687,7 +781,8 @@ func TestBuildSpec_ToolDataDirMountProfileScope(t *testing.T) {
 			CacheScope: "profile",
 		},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	found := false
 	for _, m := range spec.Mounts {
@@ -705,7 +800,8 @@ func TestBuildSpec_ToolNoDataDirNoMount(t *testing.T) {
 	p.Config.Tools = map[string]config.ToolDef{
 		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	for _, m := range spec.Mounts {
 		assert.NotContains(t, m.Target, "/usr/local/share/ai-shim/cache/act",
@@ -723,11 +819,48 @@ func TestBuildSpec_ToolDataDirEnvVarInScript(t *testing.T) {
 			EnvVar:  "NVM_DIR",
 		},
 	}
-	spec := BuildSpec(p)
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
 
 	entrypoint := spec.Entrypoint[2]
 	assert.Contains(t, entrypoint, `export NVM_DIR="/usr/local/share/ai-shim/cache/nvm"`,
 		"entrypoint should export the env var for the tool cache path")
+}
+
+// TestBuildSpec_ToolCacheMkdirFailureReturnsError verifies that when the
+// tool-cache directory cannot be created on the host (e.g. because a file
+// exists where a directory is expected), BuildSpec returns an error instead
+// of silently dropping the mount. Starting the container with a broken
+// persistent-cache mount is worse than refusing to start — the tool would
+// run on an empty ephemeral layer and its state would be lost.
+func TestBuildSpec_ToolCacheMkdirFailureReturnsError(t *testing.T) {
+	root := t.TempDir()
+
+	// Force the cache parent path to be a regular file so MkdirAll for a
+	// directory underneath it fails with ENOTDIR. ToolCachePath for
+	// "global" scope returns {root}/shared/cache/{tool}.
+	sharedDir := root + "/shared"
+	require.NoError(t, os.MkdirAll(sharedDir, 0755))
+	// Create "cache" as a file to block MkdirAll on "cache/<tool>".
+	f, err := os.Create(sharedDir + "/cache")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Config.Tools = map[string]config.ToolDef{
+		"broken-tool": {
+			Type:    "custom",
+			Install: "echo hello",
+			DataDir: true,
+			EnvVar:  "BROKEN_DIR",
+			// Empty CacheScope → global → layout.SharedCache/{tool}.
+		},
+	}
+
+	spec, err := BuildSpec(p)
+	assert.Error(t, err, "BuildSpec must return an error when the tool cache dir cannot be created")
+	assert.Zero(t, spec, "returned spec should be zero-valued on error")
 }
 
 func TestResolveSecurityProfile(t *testing.T) {
