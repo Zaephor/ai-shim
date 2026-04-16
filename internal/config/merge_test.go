@@ -76,6 +76,168 @@ func TestMerge_ToolsPerKeyReplace(t *testing.T) {
 	assert.Equal(t, "helm-url", result.Tools["helm"].URL, "untouched tool preserved")
 }
 
+func TestMerge_ToolsFieldByField(t *testing.T) {
+	base := Config{
+		Tools: map[string]ToolDef{
+			"nvm": {
+				Type:    "custom",
+				URL:     "base-url",
+				DataDir: true,
+				EnvVar:  "NVM_DIR",
+				Install: "base-install",
+			},
+		},
+	}
+	over := Config{
+		Tools: map[string]ToolDef{
+			"nvm": {URL: "override-url"},
+		},
+	}
+	result := Merge(base, over)
+	nvm := result.Tools["nvm"]
+	assert.Equal(t, "override-url", nvm.URL, "URL should be overridden")
+	assert.True(t, nvm.DataDir, "DataDir from base should be preserved")
+	assert.Equal(t, "NVM_DIR", nvm.EnvVar, "EnvVar from base should be preserved")
+	assert.Equal(t, "base-install", nvm.Install, "Install from base should be preserved")
+	assert.Equal(t, "custom", nvm.Type, "Type from base should be preserved")
+}
+
+// TestMerge_ToolsOrderAndFieldByField covers the interaction between
+// ToolsOrder first-occurrence preservation and per-tool field-by-field
+// merging. A profile tier that both partially overrides an existing tool
+// and introduces a new tool should (a) preserve the base order with the
+// new tool appended, and (b) keep the base tool's untouched fields.
+func TestMerge_ToolsOrderAndFieldByField(t *testing.T) {
+	base := Config{
+		Tools: map[string]ToolDef{
+			"nvm": {
+				Type:    "custom",
+				URL:     "base-nvm-url",
+				DataDir: true,
+				EnvVar:  "NVM_DIR",
+				Install: "base-nvm-install",
+			},
+			"ruff": {
+				Type:    "binary",
+				URL:     "base-ruff-url",
+				Binary:  "ruff",
+				Install: "base-ruff-install",
+			},
+		},
+		ToolsOrder: []string{"nvm", "ruff"},
+	}
+	over := Config{
+		Tools: map[string]ToolDef{
+			"nvm": {URL: "override-nvm-url"},
+			"pre-commit": {
+				Type:    "pip",
+				Package: "pre-commit",
+				Install: "pre-commit-install",
+			},
+		},
+		ToolsOrder: []string{"nvm", "pre-commit"},
+	}
+	result := Merge(base, over)
+
+	assert.Equal(t, []string{"nvm", "ruff", "pre-commit"}, result.ToolsOrder,
+		"base order preserved; new entries appended in over's declaration order")
+
+	nvm := result.Tools["nvm"]
+	assert.Equal(t, "override-nvm-url", nvm.URL, "URL should be overridden")
+	assert.Equal(t, "custom", nvm.Type, "Type from base preserved on partial override")
+	assert.True(t, nvm.DataDir, "DataDir from base preserved on partial override")
+	assert.Equal(t, "NVM_DIR", nvm.EnvVar, "EnvVar from base preserved on partial override")
+	assert.Equal(t, "base-nvm-install", nvm.Install, "Install from base preserved on partial override")
+
+	ruff := result.Tools["ruff"]
+	assert.Equal(t, "base-ruff-url", ruff.URL, "untouched tool unchanged")
+	assert.Equal(t, "ruff", ruff.Binary, "untouched tool unchanged")
+	assert.Equal(t, "base-ruff-install", ruff.Install, "untouched tool unchanged")
+
+	preCommit := result.Tools["pre-commit"]
+	assert.Equal(t, "pip", preCommit.Type, "new tool inserted with full def")
+	assert.Equal(t, "pre-commit", preCommit.Package, "new tool inserted with full def")
+	assert.Equal(t, "pre-commit-install", preCommit.Install, "new tool inserted with full def")
+}
+
+// TestMerge_MCPServersOrderAndFieldByField mirrors the tools interaction
+// test for MCP servers. mergeMCPServerMaps is currently total-replace per
+// key (no field-by-field merge), so this test asserts the current
+// behavior: a partial override on an existing server replaces the entire
+// definition, while a new server is appended to MCPServersOrder.
+//
+// TODO: mirror tool per-field merge if we ever need partial MCP overrides.
+func TestMerge_MCPServersOrderAndFieldByField(t *testing.T) {
+	base := Config{
+		MCPServers: map[string]MCPServerDef{
+			"filesystem": {
+				Command: "npx",
+				Args:    []string{"-y", "@modelcontextprotocol/server-filesystem"},
+				Env:     map[string]string{"FS_ROOT": "/workspace"},
+			},
+			"git": {
+				Command: "npx",
+				Args:    []string{"-y", "@modelcontextprotocol/server-git"},
+			},
+		},
+		MCPServersOrder: []string{"filesystem", "git"},
+	}
+	over := Config{
+		MCPServers: map[string]MCPServerDef{
+			"filesystem": {Command: "override-cmd"},
+			"postgres": {
+				Command: "npx",
+				Args:    []string{"-y", "@modelcontextprotocol/server-postgres"},
+			},
+		},
+		MCPServersOrder: []string{"filesystem", "postgres"},
+	}
+	result := Merge(base, over)
+
+	assert.Equal(t, []string{"filesystem", "git", "postgres"}, result.MCPServersOrder,
+		"base order preserved; new entries appended in over's declaration order")
+
+	// Current behavior: total-replace per key. Base fields (Args, Env) are
+	// NOT preserved when over supplies a partial definition.
+	fs := result.MCPServers["filesystem"]
+	assert.Equal(t, "override-cmd", fs.Command, "Command replaced by over")
+	assert.Nil(t, fs.Args, "total-replace: base Args not preserved (current behavior)")
+	assert.Nil(t, fs.Env, "total-replace: base Env not preserved (current behavior)")
+
+	// Untouched base entry is preserved as-is.
+	gitSrv := result.MCPServers["git"]
+	assert.Equal(t, "npx", gitSrv.Command)
+	assert.Equal(t, []string{"-y", "@modelcontextprotocol/server-git"}, gitSrv.Args)
+
+	// New entry is inserted with its full definition.
+	pg := result.MCPServers["postgres"]
+	assert.Equal(t, "npx", pg.Command)
+	assert.Equal(t, []string{"-y", "@modelcontextprotocol/server-postgres"}, pg.Args)
+}
+
+// TestMerge_MCPServersOrderPreserved verifies that MCPServersOrder from both
+// base and over configs are concatenated with first-occurrence wins, mirroring
+// how ToolsOrder is merged so overrides don't reshuffle declaration order.
+func TestMerge_MCPServersOrderPreserved(t *testing.T) {
+	base := Config{
+		MCPServers: map[string]MCPServerDef{
+			"filesystem": {Command: "npx"},
+			"git":        {Command: "npx"},
+		},
+		MCPServersOrder: []string{"filesystem", "git"},
+	}
+	over := Config{
+		MCPServers: map[string]MCPServerDef{
+			"git":      {Command: "npx-override"},
+			"postgres": {Command: "npx"},
+		},
+		MCPServersOrder: []string{"git", "postgres"},
+	}
+	result := Merge(base, over)
+	assert.Equal(t, []string{"filesystem", "git", "postgres"}, result.MCPServersOrder,
+		"first-occurrence order preserved; duplicates not reshuffled")
+}
+
 func TestMergeAll_FiveTiers(t *testing.T) {
 	tiers := []Config{
 		{Image: "default-image", Env: map[string]string{"A": "1"}, Volumes: []string{"/default"}},

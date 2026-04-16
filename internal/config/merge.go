@@ -104,6 +104,7 @@ func Merge(base, over Config) Config {
 	result.Tools = mergeToolMaps(result.Tools, over.Tools)
 	result.ToolsOrder = mergeOrder(result.ToolsOrder, over.ToolsOrder)
 	result.MCPServers = mergeMCPServerMaps(result.MCPServers, over.MCPServers)
+	result.MCPServersOrder = mergeOrder(result.MCPServersOrder, over.MCPServersOrder)
 
 	result.Volumes = appendUnique(result.Volumes, over.Volumes)
 	result.Args = append(result.Args, over.Args...)
@@ -196,7 +197,48 @@ func mergeToolMaps(base, over map[string]ToolDef) map[string]ToolDef {
 		result[k] = v
 	}
 	for k, v := range over {
-		result[k] = v
+		existing, ok := result[k]
+		if !ok {
+			result[k] = v
+			continue
+		}
+		result[k] = mergeToolDef(existing, v)
+	}
+	return result
+}
+
+// mergeToolDef merges two ToolDef values field-by-field. For each scalar
+// field, `over`'s value wins only when it is non-zero / set; otherwise the
+// base value is preserved. Files uses appendUnique to combine both sides.
+func mergeToolDef(base, over ToolDef) ToolDef {
+	result := base
+	if over.Type != "" {
+		result.Type = over.Type
+	}
+	if over.URL != "" {
+		result.URL = over.URL
+	}
+	if over.Binary != "" {
+		result.Binary = over.Binary
+	}
+	result.Files = appendUnique(result.Files, over.Files)
+	if over.Package != "" {
+		result.Package = over.Package
+	}
+	if over.Install != "" {
+		result.Install = over.Install
+	}
+	if over.Checksum != "" {
+		result.Checksum = over.Checksum
+	}
+	if over.DataDir {
+		result.DataDir = over.DataDir
+	}
+	if over.CacheScope != "" {
+		result.CacheScope = over.CacheScope
+	}
+	if over.EnvVar != "" {
+		result.EnvVar = over.EnvVar
 	}
 	return result
 }
