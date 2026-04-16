@@ -56,9 +56,10 @@ func TestCleanupStaleContainers(t *testing.T) {
 			Image: "alpine:latest",
 			Cmd:   []string{"true"},
 			Labels: map[string]string{
-				container.LabelBase:    "true",
-				container.LabelAgent:   "test-stale-agent",
-				container.LabelProfile: "test-stale-profile",
+				container.LabelBase:      "true",
+				container.LabelAgent:     "test-stale-agent",
+				container.LabelProfile:   "test-stale-profile",
+				container.LabelWorkspace: "test-ws-hash",
 			},
 		},
 		&container_types.HostConfig{},
@@ -89,7 +90,7 @@ func TestCleanupStaleContainers(t *testing.T) {
 	require.NotEmpty(t, listBefore, "stale container should exist before cleanup")
 
 	// Run the cleanup.
-	cleanupStaleContainers(ctx, runner, "test-stale-agent", "test-stale-profile")
+	cleanupStaleContainers(ctx, runner, "test-stale-agent", "test-stale-profile", "test-ws-hash")
 
 	// The stale container should now be gone.
 	listAfter, err := cli.ContainerList(ctx, container_types.ListOptions{

@@ -30,25 +30,37 @@ import (
 	"github.com/docker/docker/client"
 )
 
+// staleContainerFilters builds the filter for cleanupStaleContainers. It is
+// scoped by agent+profile+workspace so that parallel sessions running out
+// of other workspaces (same agent+profile, different wsHash) are not reaped
+// when this workspace starts up.
+func staleContainerFilters(agentName, profileName, wsHash, status string) filters.Args {
+	return filters.NewArgs(
+		filters.Arg("label", container.LabelBase+"=true"),
+		filters.Arg("label", container.LabelAgent+"="+agentName),
+		filters.Arg("label", container.LabelProfile+"="+profileName),
+		filters.Arg("label", container.LabelWorkspace+"="+wsHash),
+		filters.Arg("status", status),
+	)
+}
+
 // cleanupStaleContainers removes any non-running ai-shim containers for the
-// given agent+profile. This handles the SIGKILL/OOM/reboot orphan case
-// where AutoRemove never fired and a stale container blocks the next launch.
-// For persistent containers that exited while detached, reports their exit code.
-// All errors are silently ignored — this is best-effort housekeeping.
-func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agentName, profileName string) {
+// given agent+profile+workspace. This handles the SIGKILL/OOM/reboot orphan
+// case where AutoRemove never fired and a stale container blocks the next
+// launch. For persistent containers that exited while detached, reports
+// their exit code. All errors are silently ignored — this is best-effort
+// housekeeping. The workspace filter is load-bearing: without it, a launch
+// in one workspace can reap a sibling workspace's stopped-but-not-yet-
+// reattached container.
+func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agentName, profileName, wsHash string) {
 	cli := runner.Client()
 	if cli == nil {
 		return
 	}
 	for _, status := range []string{"exited", "dead", "created"} {
 		list, err := cli.ContainerList(ctx, container_types.ListOptions{
-			All: true,
-			Filters: filters.NewArgs(
-				filters.Arg("label", container.LabelBase+"=true"),
-				filters.Arg("label", container.LabelAgent+"="+agentName),
-				filters.Arg("label", container.LabelProfile+"="+profileName),
-				filters.Arg("status", status),
-			),
+			All:     true,
+			Filters: staleContainerFilters(agentName, profileName, wsHash, status),
 		})
 		if err != nil {
 			logging.Debug("stale container list (%s) failed: %v", status, err)
@@ -69,6 +81,69 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 			logging.Debug("cleaned up stale container %s (status=%s)", c.ID[:12], status)
 		}
 	}
+}
+
+// buildDINDSharedMounts assembles the list of bind mounts that must be
+// propagated from the host into the DIND sidecar at identical paths. The
+// agent container invokes `docker run -v <host>:<target>` against the
+// DIND daemon, and Docker resolves <host> in DIND's own filesystem —
+// so any host path the agent will hand to DIND must also exist at that
+// same path inside DIND.
+//
+// Three payloads are propagated:
+//   - Workspace (pwd → containerWorkdir): so docker-against-DIND against
+//     files in the repo resolves correctly.
+//   - Registry cache directory (same-path): so EnsureCache inside DIND
+//     can bind-mount it. Only included when cacheBind is non-empty.
+//   - Tool caches (same-path): every tool with data_dir=true gets its
+//     host ToolCachePath bound at an identical path inside DIND. Without
+//     this, an install script that calls `docker -v $TOOL_CACHE_DIR:/x`
+//     from the agent hits an empty overlay in DIND and silently drops
+//     the tool's persisted state (same bug class as commit 78c975b).
+//
+// ToolsOrder is consulted when non-empty so mount order is deterministic;
+// otherwise the tools map is iterated directly.
+func buildDINDSharedMounts(pwd, workdir, cacheBind string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) []mount.Mount {
+	mounts := []mount.Mount{
+		{
+			Type:   mount.TypeBind,
+			Source: pwd,
+			Target: workdir,
+		},
+	}
+	if cacheBind != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: cacheBind,
+			Target: cacheBind,
+		})
+	}
+	// Walk tools in a deterministic order when possible so the mount
+	// slice has a stable shape (matters for tests and for diffability).
+	order := toolsOrder
+	if len(order) == 0 {
+		for name := range tools {
+			order = append(order, name)
+		}
+	}
+	seen := make(map[string]bool, len(tools))
+	for _, name := range order {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		td, ok := tools[name]
+		if !ok || !td.DataDir {
+			continue
+		}
+		hostPath := storage.ToolCachePath(layout, name, td.CacheScope, agentName, profileName)
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: hostPath,
+			Target: hostPath,
+		})
+	}
+	return mounts
 }
 
 // dirOnPath reports whether the given directory appears in the current
@@ -919,14 +994,17 @@ func runAgent(name string, args []string) (int, error) {
 	defer func() { _ = runner.Close() }()
 
 	// 6.1 Best-effort cleanup of stopped containers from previous aborted runs
-	// for this same agent+profile. Aborted runs (SIGKILL, OOM, host reboot)
-	// can leave containers in "exited" or "dead" state which will collide
-	// with the new container's name. Ignore errors — this is housekeeping.
-	cleanupStaleContainers(ctx, runner, agentName, profileName)
+	// for this same agent+profile+workspace. Aborted runs (SIGKILL, OOM,
+	// host reboot) can leave containers in "exited" or "dead" state which
+	// will collide with the new container's name. Scope by workspace hash
+	// so cleanups from one workspace do not reap sibling containers
+	// running in another workspace for the same agent+profile. Ignore
+	// errors — this is housekeeping.
+	wsHash := workspace.HashPath(platInfo.Hostname, pwd)
+	cleanupStaleContainers(ctx, runner, agentName, profileName, wsHash)
 
 	// 6.2 Check for existing running session(s) (reattach support)
 	if container.IsTTY() {
-		wsHash := workspace.HashPath(platInfo.Hostname, pwd)
 		sessions, lookupErr := container.FindRunningSessionsInWorkspace(ctx, runner.Client(), agentName, profileName, wsHash)
 		if lookupErr != nil {
 			logging.Debug("session lookup failed: %v", lookupErr)
@@ -1034,7 +1112,6 @@ func runAgent(name string, args []string) (int, error) {
 			dindHostname = cfg.DINDHostname
 		}
 
-		wsHash := workspace.HashPath(platInfo.Hostname, pwd)
 		networkName := network.ResolveName(cfg.NetworkScope, agentName, profileName, wsHash)
 
 		netHandle, err := network.EnsureNetwork(ctx, runner.Client(), networkName, spec.Labels)
@@ -1086,25 +1163,23 @@ func runAgent(name string, args []string) (int, error) {
 		// daemon, Docker resolves <path> in DIND's own filesystem. If
 		// those paths are not bind-mounted into DIND at the same path
 		// they exist in the agent, the bind source either doesn't exist
-		// or resolves to an empty overlay. Propagate the workspace
-		// mount (so commands against repo files work) and the pull-
-		// through registry cache directory (so EnsureCache can bind
-		// mount it) at identical paths.
-		dindSharedMounts := []mount.Mount{
-			{
-				Type:   mount.TypeBind,
-				Source: pwd,
-				Target: workspace.ContainerWorkdir(platInfo.Hostname, pwd),
-			},
-		}
+		// or resolves to an empty overlay. Propagate the workspace, the
+		// pull-through registry cache directory, and every tool cache
+		// (for tools with data_dir:true) at identical paths.
+		var cacheBind string
 		if cacheAddr != "" {
-			cacheBind := filepath.Join(layout.Root, "shared", "registry-cache")
-			dindSharedMounts = append(dindSharedMounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: cacheBind,
-				Target: cacheBind,
-			})
+			cacheBind = filepath.Join(layout.Root, "shared", "registry-cache")
 		}
+		dindSharedMounts := buildDINDSharedMounts(
+			pwd,
+			workspace.ContainerWorkdir(platInfo.Hostname, pwd),
+			cacheBind,
+			cfg.Tools,
+			cfg.ToolsOrder,
+			layout,
+			agentName,
+			profileName,
+		)
 
 		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,
@@ -1339,6 +1414,14 @@ func handleReattach(ctx context.Context, runner *container.Runner, session *cont
 	if cfg.IsDINDEnabled() {
 		stopDINDForSession(ctx, runner.Client(), session)
 	}
+	// Garbage-collect the shared registry cache if no other sessions are
+	// using it. Without this, the cache container outlives every consumer
+	// on natural exit from a reattached session. This cleanup path is
+	// only reached when the container exited on its own — the detach
+	// path returns earlier and deliberately leaves the cache in place.
+	if cfg.IsCacheEnabled() {
+		dind.MaybeStopCache(ctx, runner.Client())
+	}
 
 	return result.ExitCode, nil
 }
@@ -1362,7 +1445,13 @@ func showRecentLogs(ctx context.Context, cli *client.Client, containerID string)
 	fmt.Fprintf(os.Stderr, "--- reattached ---\n\n")
 }
 
-// stopSession stops a running container and its associated DIND sidecar.
+// stopSession stops a running container and its associated DIND sidecar,
+// then asks the registry cache to garbage-collect itself if no other cache
+// consumers remain. Without the final MaybeStopCache call, killing the
+// last consumer through the picker (k<N>) leaves the shared registry cache
+// container running indefinitely. MaybeStopCache is safe to invoke
+// unconditionally: it no-ops if cache consumers are still running or if
+// no cache container exists.
 func stopSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
 	stopTimeout := 5
 	if err := cli.ContainerStop(ctx, session.ContainerID, container_types.StopOptions{
@@ -1374,20 +1463,29 @@ func stopSession(ctx context.Context, cli *client.Client, session *container.Run
 		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove container %s: %v\n", session.ContainerName, err)
 	}
 	stopDINDForSession(ctx, cli, session)
+	dind.MaybeStopCache(ctx, cli)
+}
+
+// dindSessionFilters builds the filter used to locate the DIND sidecar that
+// belongs to the given session. It must be scoped by workspace hash as well
+// as agent+profile: when parallel sessions for the same agent+profile run
+// in different workspaces, each has its own DIND sidecar, and stopping one
+// session must not touch the other's DIND.
+func dindSessionFilters(session *container.RunningSession) filters.Args {
+	return filters.NewArgs(
+		filters.Arg("label", container.LabelBase+"=true"),
+		filters.Arg("label", container.LabelDIND+"=true"),
+		filters.Arg("label", container.LabelAgent+"="+session.AgentName),
+		filters.Arg("label", container.LabelProfile+"="+session.Profile),
+		filters.Arg("label", container.LabelWorkspace+"="+session.WorkspaceHash),
+		filters.Arg("status", "running"),
+	)
 }
 
 // stopDINDForSession finds and stops the DIND sidecar associated with a session,
 // including removing its socket and certs volumes to avoid leaking Docker volumes.
 func stopDINDForSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
-	// Find DIND sidecar by labels
-	f := filters.NewArgs(
-		filters.Arg("label", container.LabelBase+"=true"),
-		filters.Arg("label", container.LabelDIND+"=true"),
-		filters.Arg("label", container.LabelAgent+"="+session.AgentName),
-		filters.Arg("label", container.LabelProfile+"="+session.Profile),
-		filters.Arg("status", "running"),
-	)
-	list, err := cli.ContainerList(ctx, container_types.ListOptions{Filters: f})
+	list, err := cli.ContainerList(ctx, container_types.ListOptions{Filters: dindSessionFilters(session)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to list DIND containers for %s/%s: %v\n", session.AgentName, session.Profile, err)
 		return
