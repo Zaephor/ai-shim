@@ -1078,6 +1078,31 @@ func runAgent(name string, args []string) (int, error) {
 				CPUs:   cfg.DINDResources.CPUs,
 			}
 		}
+		// Shared mounts between agent and DIND sidecar. When the agent
+		// invokes `docker run -v <path>:<target>` against the DIND
+		// daemon, Docker resolves <path> in DIND's own filesystem. If
+		// those paths are not bind-mounted into DIND at the same path
+		// they exist in the agent, the bind source either doesn't exist
+		// or resolves to an empty overlay. Propagate the workspace
+		// mount (so commands against repo files work) and the pull-
+		// through registry cache directory (so EnsureCache can bind
+		// mount it) at identical paths.
+		dindSharedMounts := []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: pwd,
+				Target: workspace.ContainerWorkdir(platInfo.Hostname, pwd),
+			},
+		}
+		if cacheAddr != "" {
+			cacheBind := filepath.Join(layout.Root, "shared", "registry-cache")
+			dindSharedMounts = append(dindSharedMounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: cacheBind,
+				Target: cacheBind,
+			})
+		}
+
 		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,
 			UseSysbox:     useSysbox,
@@ -1094,7 +1119,8 @@ func runAgent(name string, args []string) (int, error) {
 			// this the socket ends up root:2375 mode 660 and any docker
 			// CLI call from inside the agent fails with "permission
 			// denied" (docker:dind's "docker" group has GID 2375).
-			SocketGID: platInfo.GID,
+			SocketGID:    platInfo.GID,
+			SharedMounts: dindSharedMounts,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)

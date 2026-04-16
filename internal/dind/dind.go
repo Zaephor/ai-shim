@@ -59,6 +59,15 @@ type Config struct {
 	// use the DIND socket — the docker:dind image creates the socket with
 	// group "docker" (GID 2375), which the agent's GID is not a member of.
 	SocketGID int
+
+	// SharedMounts are bind mounts the DIND sidecar must see at the same
+	// paths the agent sees. When the agent issues `docker run -v X:Y`
+	// against DIND, Docker resolves X in DIND's filesystem — not the
+	// agent's. Propagating the agent's workspace mount (and any
+	// registry-cache directory) here keeps those paths consistent so
+	// bind mounts from inside the sandbox resolve against the intended
+	// host content instead of an empty overlay directory.
+	SharedMounts []mount.Mount
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -157,6 +166,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 			Target: "/certs",
 		})
 	}
+	mounts = append(mounts, cfg.SharedMounts...)
 
 	hostCfg := &container.HostConfig{
 		Privileged:  true,
