@@ -129,7 +129,7 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 
 	case "go-install":
 		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
-		fmt.Fprintf(&b, "  GOBIN=\"%s\" go install %s@latest\n", targetDir, pkg)
+		fmt.Fprintf(&b, "  GOBIN=\"%s\" go install %s@latest || { echo \"ERROR: go install failed for %s\"; exit 1; }\n", targetDir, pkg, pkg)
 		b.WriteString("fi\n")
 
 	case "custom":

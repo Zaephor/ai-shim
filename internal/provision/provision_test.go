@@ -73,6 +73,16 @@ func TestGenerateInstallScript_GoInstall(t *testing.T) {
 	assert.Contains(t, script, "github.com/user/tool")
 }
 
+func TestGenerateInstallScript_GoInstallErrorGuard(t *testing.T) {
+	tools := map[string]ToolDef{
+		"tool": {Type: "go-install", Package: "github.com/user/tool", Binary: "tool"},
+	}
+	script := GenerateInstallScript(nil, tools, "/opt/bin")
+	// go install failures must propagate, matching the pattern used by
+	// other install types (e.g. "ERROR: apt install failed for ...").
+	assert.Contains(t, script, "ERROR: go install failed for")
+}
+
 func TestGenerateInstallScript_Custom(t *testing.T) {
 	tools := map[string]ToolDef{
 		"custom": {Type: "custom", Install: "curl -fsSL https://example.com/install.sh | bash"},
