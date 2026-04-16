@@ -222,6 +222,21 @@ func TestValidate_Tools_DataDirWithEnvVar(t *testing.T) {
 	assert.Empty(t, errs)
 }
 
+func TestValidate_Tools_EnvVarWithoutDataDir(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"nvm": {Type: "custom", Install: "echo hello", EnvVar: "MY_VAR", DataDir: false},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "env_var") && strings.Contains(e, "data_dir") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should report env_var without data_dir error")
+}
+
 func TestValidate_Tools_InvalidCacheScope(t *testing.T) {
 	cfg := Config{Tools: map[string]ToolDef{
 		"nvm": {Type: "custom", Install: "echo hello", DataDir: true, EnvVar: "NVM_DIR", CacheScope: "invalid"},

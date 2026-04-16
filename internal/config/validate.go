@@ -136,6 +136,9 @@ func validateTools(tools map[string]ToolDef) []string {
 		if td.DataDir && td.EnvVar == "" {
 			warnings = append(warnings, fmt.Sprintf("tool %q has data_dir enabled but no env_var specified", name))
 		}
+		if !td.DataDir && td.EnvVar != "" {
+			warnings = append(warnings, fmt.Sprintf("tool %q has env_var set but data_dir is not enabled; env_var is only exported when data_dir=true", name))
+		}
 		if !validCacheScopes[td.CacheScope] {
 			warnings = append(warnings, fmt.Sprintf("tool %q: invalid cache_scope %q (valid: global, profile, agent)", name, td.CacheScope))
 		}
