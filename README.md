@@ -23,9 +23,9 @@ sudo mv ai-shim /usr/local/bin/
 **Or install with Go:**
 
 ```bash
-# NOTE: This must match the Go module path in go.mod (github.com/ai-shim/ai-shim)
+# NOTE: This must match the Go module path in go.mod (github.com/Zaephor/ai-shim)
 # If the module is renamed, this command will need to be updated accordingly
-go install github.com/ai-shim/ai-shim/cmd/ai-shim@latest
+go install github.com/Zaephor/ai-shim/cmd/ai-shim@latest
 ```
 
 **Or build from source:**
@@ -37,21 +37,31 @@ make build
 sudo cp ai-shim /usr/local/bin/   # or add ./ai-shim to your PATH
 ```
 
+### Prerequisites
+
+> - Docker daemon running (`docker info`)
+> - `~/.local/bin` on PATH: `export PATH="$HOME/.local/bin:$PATH"`
+> - API key for your agent (e.g. `ANTHROPIC_API_KEY` for claude-code -- set in `~/.ai-shim/config/agents/claude-code.yaml`)
+
 ## Quick Start
 
 ```bash
-# 1. Initialize config directory
+# Install (Linux/macOS, amd64/arm64)
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && ARCH="amd64"; [ "$ARCH" = "aarch64" ] && ARCH="arm64"
+curl -fsSL "https://github.com/Zaephor/ai-shim/releases/latest/download/ai-shim_${OS}_${ARCH}.tar.gz" | tar xz -C ~/.local/bin/
+
+# Initialize
 ai-shim init
 
-# 2. Check that Docker is working
+# Verify Docker is working
 ai-shim manage doctor
 
-# 3. Create a symlink for your agent (e.g., claude-code with "work" profile)
-ai-shim manage symlinks create claude-code work ~/bin
-# Make sure ~/bin is in your PATH
+# Create agent symlink (replace claude-code/personal with your agent/profile)
+ai-shim manage symlinks create claude-code personal
 
-# 4. Use it exactly like the native agent
-claude-code_work "explain this codebase"
+# Launch (first run pulls the container image ~500MB)
+claude-code_personal
 ```
 
 On first launch, ai-shim pulls the container image (~500MB) and installs the
@@ -237,6 +247,19 @@ See `configs/examples/` for annotated example files and
   DIND sidecar
 - **DIND health check** -- DIND sidecar startup includes automatic readiness
   polling before the agent container launches
+- **Parallel sessions** -- multiple concurrent sessions for the same
+  agent+profile+workspace; picker to select which to reattach; `k<N>` to
+  kill individual sessions
+- **DIND workspace sharing** -- sidecar sees the agent's workspace and tool
+  caches at matching paths so `docker -v` works inside the sandbox
+- **YAML declaration order** -- tools and MCP servers are provisioned/injected
+  in the order they appear in config, not random map iteration
+- **Dev build identification** -- `ai-shim version` shows `dev-<commit-hash>`
+  for builds without release tags
+- **Terminal reset on reattach** -- clear screen and forced SIGWINCH on
+  reconnect so TUI redraws cleanly
+- **Non-root package gate** -- `packages:` detects uid, routes through sudo
+  when available, fails with actionable diagnostic when neither root nor sudo
 
 ## CLI Reference
 
