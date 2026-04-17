@@ -968,6 +968,42 @@ func TestReinstall_Success(t *testing.T) {
 	assert.Empty(t, entries, "bin dir should be empty after reinstall")
 }
 
+func TestReinstall_ClearsCacheMarkers(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create bin dir with a file so Reinstall considers agent installed
+	binDir := layout.AgentBin("claude-code")
+	require.NoError(t, os.MkdirAll(binDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"), []byte("binary"), 0755))
+
+	// Create cache dir with marker files and an unrelated file
+	cacheDir := layout.AgentCache("claude-code")
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, ".last-update"), []byte("1713200000"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, ".installed-version"), []byte("1.0.0"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "npm-cache.tgz"), []byte("precious"), 0644))
+
+	err := Reinstall(layout, "claude-code")
+	require.NoError(t, err)
+
+	// Marker files must be gone
+	_, err = os.Stat(filepath.Join(cacheDir, ".last-update"))
+	assert.True(t, os.IsNotExist(err), ".last-update should be removed")
+
+	_, err = os.Stat(filepath.Join(cacheDir, ".installed-version"))
+	assert.True(t, os.IsNotExist(err), ".installed-version should be removed")
+
+	// Cache dir itself must still exist
+	_, err = os.Stat(cacheDir)
+	assert.NoError(t, err, "cache dir should still exist")
+
+	// Unrelated cache files must survive
+	data, err := os.ReadFile(filepath.Join(cacheDir, "npm-cache.tgz"))
+	require.NoError(t, err)
+	assert.Equal(t, "precious", string(data), "unrelated cache files should be preserved")
+}
+
 func TestReinstall_UnknownAgent(t *testing.T) {
 	root := t.TempDir()
 	layout := storage.NewLayout(root)

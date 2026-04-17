@@ -1115,6 +1115,16 @@ func Reinstall(layout storage.Layout, agentName string) error {
 		}
 	}
 
+	// Remove cache marker files so custom install types (claude-code, goose)
+	// don't skip reinstall on next launch.
+	cacheDir := layout.AgentCache(agentName)
+	for _, marker := range []string{".last-update", ".installed-version"} {
+		p := filepath.Join(cacheDir, marker)
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing cache marker %s: %w", p, err)
+		}
+	}
+
 	return nil
 }
 
