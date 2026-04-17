@@ -49,6 +49,11 @@ type Config struct {
 	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`
 	SecurityProfile string                  `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
 	UpdateInterval  string                  `yaml:"update_interval,omitempty" json:"update_interval,omitempty"`
+	// EnvFile is an optional path to a dotenv-style file whose KEY=VALUE
+	// pairs are loaded into the container environment. Variables from
+	// env_file are applied before the env: map so explicit env: entries
+	// win on conflict. Tilde (~) is expanded. Missing file = hard error.
+	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 	// SymlinkDir is the directory where `manage symlinks create` installs
 	// agent symlinks. Tilde (~) is expanded to the user's home directory.
 	// Read from ~/.ai-shim/config/default.yaml only (global preference);

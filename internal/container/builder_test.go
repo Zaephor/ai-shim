@@ -913,6 +913,55 @@ func TestBuildSpec_PwdFromParams(t *testing.T) {
 		"a bind mount with Source == Pwd should exist; builder must not fall back to os.Getwd when Pwd is set")
 }
 
+func TestBuildSpec_EnvFileLoaded(t *testing.T) {
+	dir := t.TempDir()
+	envPath := dir + "/test.env"
+	require.NoError(t, os.WriteFile(envPath, []byte("MY_KEY=my_value\n"), 0644))
+
+	p := defaultBuildParams()
+	p.Config.EnvFile = envPath
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	found := false
+	for _, e := range spec.Env {
+		if e == "MY_KEY=my_value" {
+			found = true
+		}
+	}
+	assert.True(t, found, "env_file vars should appear in spec.Env")
+}
+
+func TestBuildSpec_EnvFileOverriddenByEnvMap(t *testing.T) {
+	dir := t.TempDir()
+	envPath := dir + "/test.env"
+	require.NoError(t, os.WriteFile(envPath, []byte("KEY=from-file\n"), 0644))
+
+	p := defaultBuildParams()
+	p.Config.EnvFile = envPath
+	p.Config.Env = map[string]string{"KEY": "from-map"}
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	// Docker uses last-wins for duplicate keys in Env slice.
+	// File vars are prepended; map vars come after → map wins.
+	last := ""
+	for _, e := range spec.Env {
+		if strings.HasPrefix(e, "KEY=") {
+			last = e
+		}
+	}
+	assert.Equal(t, "KEY=from-map", last, "env map should override env_file")
+}
+
+func TestBuildSpec_EnvFileMissingReturnsError(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.EnvFile = "/nonexistent/path.env"
+	_, err := BuildSpec(p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "env_file")
+}
+
 // TestBuildSpec_PwdParamOverridesOsGetwd is the nested-invocation regression
 // test: the agent process's cwd (what os.Getwd returns) points at the inner,
 // container-side bind path, while the caller pins Pwd to the outer host

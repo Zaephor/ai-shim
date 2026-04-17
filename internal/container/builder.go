@@ -144,7 +144,33 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	// Prepend tool, package, and git scripts to entrypoint
 	fullScript := toolScript + packageScript + gitScript + entrypoint
 
+	// Load env_file first so the env: map can override on conflict.
+	var fileVars map[string]string
+	if p.Config.EnvFile != "" {
+		envPath := p.Config.EnvFile
+		if strings.HasPrefix(envPath, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				envPath = home + envPath[1:]
+			}
+		}
+		var err error
+		fileVars, err = config.ParseEnvFile(envPath)
+		if err != nil {
+			return ContainerSpec{}, fmt.Errorf("loading env_file: %w", err)
+		}
+	}
+
 	env := buildEnv(p.Config.Env)
+
+	// Prepend file vars — map-based env was already built above, so it wins
+	// for any overlapping keys when Docker merges the slice (last wins).
+	if len(fileVars) > 0 {
+		fileEnv := make([]string, 0, len(fileVars))
+		for k, v := range fileVars {
+			fileEnv = append(fileEnv, k+"="+v)
+		}
+		env = append(fileEnv, env...)
+	}
 
 	// Set HOME so git config --global and other tools find the right home.
 	env = append(env, "HOME="+homeDir)

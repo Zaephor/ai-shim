@@ -67,6 +67,9 @@ func Merge(base, over Config) Config {
 	if over.UpdateInterval != "" {
 		result.UpdateInterval = over.UpdateInterval
 	}
+	if over.EnvFile != "" {
+		result.EnvFile = over.EnvFile
+	}
 	if over.SymlinkDir != "" {
 		result.SymlinkDir = over.SymlinkDir
 	}

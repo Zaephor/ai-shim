@@ -58,6 +58,9 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.UpdateInterval != "" {
 			sources.Fields["update_interval"] = name
 		}
+		if cfg.EnvFile != "" {
+			sources.Fields["env_file"] = name
+		}
 		if cfg.SymlinkDir != "" {
 			sources.Fields["symlink_dir"] = name
 		}

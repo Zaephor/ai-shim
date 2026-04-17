@@ -47,6 +47,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		Git:             &GitConfig{Name: "User", Email: "u@e.com"},
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
+		EnvFile:         "~/.ai-shim/secrets/test.env",
 		SymlinkDir:      "~/.local/bin",
 		SelfUpdate:      &SelfUpdateConfig{Repository: "test/repo", APIURL: "https://test", Enabled: boolPtr(true), Prerelease: boolPtr(true)},
 	}
@@ -154,6 +155,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		Git:             &GitConfig{Name: "User", Email: "u@e.com"},
 		SecurityProfile: "strict",
 		UpdateInterval:  "7d",
+		EnvFile:         "~/.ai-shim/secrets/test.env",
 		SymlinkDir:      "~/.local/bin",
 		SelfUpdate:      &SelfUpdateConfig{Repository: "test/repo", APIURL: "https://test", Enabled: boolPtr(true), Prerelease: boolPtr(true)},
 	}
