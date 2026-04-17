@@ -65,6 +65,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		LabelBase:    "true",
 		LabelAgent:   p.Agent.Name,
 		LabelProfile: p.Profile,
+		LabelRole:    "agent",
 	}
 
 	// Workspace labels are set after wsHash is computed below.

@@ -117,10 +117,14 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	}
 
 	// Copy labels to avoid mutating the caller's map.
-	labels := make(map[string]string, len(cfg.Labels)+2)
+	// Override role from the parent's "agent" to "dind" so the session
+	// picker and cleanup queries can distinguish agent containers from
+	// their sidecars via a positive label filter.
+	labels := make(map[string]string, len(cfg.Labels)+3)
 	for k, v := range cfg.Labels {
 		labels[k] = v
 	}
+	labels[ai_container.LabelRole] = "dind"
 	labels[ai_container.LabelDIND] = "true"
 	if cfg.CacheAddr != "" {
 		labels[ai_container.LabelUsesCache] = "true"

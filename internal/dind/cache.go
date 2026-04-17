@@ -66,6 +66,7 @@ func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir stri
 		},
 		Labels: map[string]string{
 			ai_container.LabelBase:  "true",
+			ai_container.LabelRole:  "cache",
 			ai_container.LabelCache: "true",
 		},
 	}

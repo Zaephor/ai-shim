@@ -117,6 +117,7 @@ func FindAllRunningSessions(ctx context.Context, cli *client.Client, agentName, 
 		filters.Arg("label", LabelBase+"=true"),
 		filters.Arg("label", LabelAgent+"="+agentName),
 		filters.Arg("label", LabelProfile+"="+profile),
+		filters.Arg("label", LabelRole+"=agent"),
 		filters.Arg("label", LabelPersistent+"=true"),
 		filters.Arg("status", "running"),
 	)
