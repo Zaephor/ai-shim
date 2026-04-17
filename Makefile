@@ -1,4 +1,4 @@
-.PHONY: build test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures test-journey
+.PHONY: build dev test lint clean setup fmt vet e2e e2e-ci verify check-silent-failures test-journey
 
 BINARY := ai-shim
 MODULE := github.com/Zaephor/ai-shim
@@ -7,6 +7,11 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/ai-shim
+
+# Dev build: no version ldflags — runtime/debug embeds the VCS commit hash
+# automatically, producing "dev-<hash>" (or "dev-<hash>-dirty").
+dev:
+	go build -trimpath -o $(BINARY) ./cmd/ai-shim
 
 test:
 	go test ./... -v
