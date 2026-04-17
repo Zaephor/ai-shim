@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -170,6 +171,41 @@ func dirOnPath(dir string) bool {
 }
 
 var version = "dev"
+
+func init() {
+	// When built without -ldflags (plain `go build`), version stays "dev".
+	// Enrich it with the VCS revision that Go embeds automatically in
+	// binaries built from a VCS-tracked module (Go 1.18+). This makes
+	// `ai-shim version` useful for identifying dev builds without
+	// requiring `make build`.
+	if version != "dev" {
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	var revision, modified string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			revision = s.Value
+		case "vcs.modified":
+			modified = s.Value
+		}
+	}
+	if revision == "" {
+		return
+	}
+	short := revision
+	if len(short) > 12 {
+		short = short[:12]
+	}
+	version = "dev-" + short
+	if modified == "true" {
+		version += "-dirty"
+	}
+}
 
 func main() {
 	logging.Init()
