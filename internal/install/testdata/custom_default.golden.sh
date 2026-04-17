@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 
+echo "ai-shim: provisioning agent and tools..."
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 LAST_UPDATE="/usr/local/share/ai-shim/agents/claude-code/cache/.last-update"
 INSTALLED_VERSION="/usr/local/share/ai-shim/agents/claude-code/cache/.installed-version"
@@ -30,5 +31,6 @@ if [ "$need_install" = true ]; then
   date +%s > "$LAST_UPDATE"
   echo latest > "$INSTALLED_VERSION"
 fi
+echo "ai-shim: provisioning complete"
 
 exec claude

@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 
+echo "ai-shim: provisioning agent and tools..."
 export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv >/dev/null 2>&1; then
   echo "Installing uv..."
@@ -36,5 +37,6 @@ if [ "$need_install" = true ]; then
   date +%s > "$LAST_UPDATE"
   echo latest > "$INSTALLED_VERSION"
 fi
+echo "ai-shim: provisioning complete"
 
 exec aider

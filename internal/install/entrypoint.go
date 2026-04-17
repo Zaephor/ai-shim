@@ -21,6 +21,13 @@ func GenerateEntrypoint(p EntrypointParams) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -e\n\n")
 
+	// Emit provisioning bracket so users see progress during first-launch
+	// install instead of staring at a blank terminal.
+	hasInstall := p.InstallType != ""
+	if hasInstall {
+		b.WriteString("echo \"ai-shim: provisioning agent and tools...\"\n")
+	}
+
 	switch p.InstallType {
 	case "npm":
 		b.WriteString(generateNPMInstall(p))
@@ -28,6 +35,10 @@ func GenerateEntrypoint(p EntrypointParams) string {
 		b.WriteString(generateUVInstall(p))
 	case "custom":
 		b.WriteString(generateCustomInstall(p))
+	}
+
+	if hasInstall {
+		b.WriteString("echo \"ai-shim: provisioning complete\"\n")
 	}
 
 	fmt.Fprintf(&b, "\nexec %s", shell.Quote(p.Binary))

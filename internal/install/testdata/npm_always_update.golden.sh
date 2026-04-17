@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 
+echo "ai-shim: provisioning agent and tools..."
 export NPM_CONFIG_PREFIX=/usr/local/share/ai-shim/agents/opencode/bin
 export NPM_CONFIG_CACHE=/usr/local/share/ai-shim/agents/opencode/cache
 export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
@@ -21,5 +22,6 @@ if [ "$need_install" = true ]; then
   date +%s > "$LAST_UPDATE"
   echo latest > "$INSTALLED_VERSION"
 fi
+echo "ai-shim: provisioning complete"
 
 exec opencode
