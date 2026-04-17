@@ -360,7 +360,7 @@ func TestRunManage_ManageSubcommandHelps(t *testing.T) {
 		"agents", "profiles", "config", "doctor", "symlinks",
 		"dry-run", "cleanup", "status", "backup", "restore",
 		"disk-usage", "agent-versions", "reinstall", "exec",
-		"watch", "switch-profile",
+		"attach", "watch", "switch-profile",
 	}
 	for _, sub := range subcommands {
 		t.Run(sub, func(t *testing.T) {
@@ -368,6 +368,18 @@ func TestRunManage_ManageSubcommandHelps(t *testing.T) {
 			assert.NoError(t, err, "manage %s --help should succeed", sub)
 		})
 	}
+}
+
+func TestRunManage_ManageAttachMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "attach"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+	assert.Contains(t, err.Error(), "<container-name>")
+}
+
+func TestRunManage_ManageAttachHelp(t *testing.T) {
+	err := runManage([]string{"manage", "attach", "--help"})
+	assert.NoError(t, err)
 }
 
 func TestRunManage_ManageDiskUsage(t *testing.T) {

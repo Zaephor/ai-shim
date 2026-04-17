@@ -109,6 +109,59 @@ func FindRunningSessionsInWorkspace(ctx context.Context, cli *client.Client, age
 	return sessions, nil
 }
 
+// FindSessionByContainerName looks up a running ai-shim container by its
+// exact Docker name. Returns nil if no matching container is found. An error
+// is returned when the container exists but is not running or does not carry
+// the ai-shim label.
+func FindSessionByContainerName(ctx context.Context, cli *client.Client, name string) (*RunningSession, error) {
+	// Docker name filter matches substrings, so we list and do exact match.
+	f := filters.NewArgs(
+		filters.Arg("name", name),
+	)
+	containers, err := cli.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: f,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+
+	// Find exact name match (Docker names have leading /).
+	for _, c := range containers {
+		cName := ""
+		if len(c.Names) > 0 {
+			cName = c.Names[0]
+			if len(cName) > 0 && cName[0] == '/' {
+				cName = cName[1:]
+			}
+		}
+		if cName != name {
+			continue
+		}
+
+		// Verify ai-shim label.
+		if c.Labels[LabelBase] != "true" {
+			return nil, fmt.Errorf("container %q is not an ai-shim container", name)
+		}
+
+		// Verify running.
+		if c.State != "running" {
+			return nil, fmt.Errorf("container %q is not running (state: %s)", name, c.State)
+		}
+
+		return &RunningSession{
+			ContainerID:   c.ID,
+			ContainerName: cName,
+			AgentName:     c.Labels[LabelAgent],
+			Profile:       c.Labels[LabelProfile],
+			WorkspaceHash: c.Labels[LabelWorkspace],
+			WorkspaceDir:  c.Labels[LabelWorkspaceDir],
+			CreatedAt:     time.Unix(c.Created, 0),
+		}, nil
+	}
+	return nil, nil
+}
+
 // FindAllRunningSessions returns all running persistent containers for the
 // given agent and profile across any workspace. Useful for `manage attach`
 // when no workspace is specified.
