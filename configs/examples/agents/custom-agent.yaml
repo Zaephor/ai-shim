@@ -1,0 +1,23 @@
+# ai-shim agent definition: custom-agent (example)
+#
+# This file demonstrates how to define a custom agent that is not
+# in the built-in registry. Place it at:
+#   ~/.ai-shim/config/agents/custom-agent.yaml
+#
+# The agent_def block registers the agent; all other fields
+# (env, args, tools, etc.) work the same as built-in agent overrides.
+
+agent_def:
+  install_type: npm
+  package: my-custom-agent-package
+  binary: my-agent
+  data_dirs:
+    - ".my-agent"
+  data_files:
+    - ".my-agent.json"
+
+env:
+  MY_AGENT_API_KEY: "your-key-here"
+
+args:
+  - "--no-telemetry"

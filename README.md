@@ -90,6 +90,50 @@ ai-shim ships with 10 built-in agent definitions:
 | goose | custom (install script) | `goose` |
 | opencode | npm | `opencode` |
 
+### Custom Agents
+
+Users can define their own agents by adding an `agent_def:` block to an agent
+config file at `~/.ai-shim/config/agents/<name>.yaml`. The filename (minus
+`.yaml`) becomes the agent name.
+
+Supported `agent_def` fields:
+
+| Field | Description |
+|---|---|
+| `install_type` | `npm`, `uv`, or `custom` |
+| `package` | Package name to install (npm/uv package, or ignored for custom) |
+| `binary` | Binary name the agent provides |
+| `data_dirs` | Directories under `~` to persist (e.g. `".my-agent"`) |
+| `data_files` | Files under `~` to persist (e.g. `".my-agent.json"`) |
+
+Example (`~/.ai-shim/config/agents/my-agent.yaml`):
+
+```yaml
+agent_def:
+  install_type: npm
+  package: my-custom-agent-package
+  binary: my-agent
+  data_dirs:
+    - ".my-agent"
+  data_files:
+    - ".my-agent.json"
+
+env:
+  MY_AGENT_API_KEY: "your-key-here"
+
+args:
+  - "--no-telemetry"
+```
+
+Custom agents appear in `ai-shim manage agents` alongside built-ins. If a
+custom agent uses the same filename as a built-in, the custom definition wins.
+Symlink creation works the same way: `ai-shim manage symlinks create my-agent personal`.
+
+All other config fields (`env`, `args`, `tools`, `mcp_servers`, etc.) work
+identically to built-in agent overrides. See
+[`configs/examples/agents/custom-agent.yaml`](configs/examples/agents/custom-agent.yaml)
+for a full annotated example.
+
 ## Configuration
 
 ai-shim uses a 5-tier YAML configuration system. Each tier overrides the

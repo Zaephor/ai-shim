@@ -258,7 +258,7 @@ Commands:
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
   manage exec <name> <cmd...>   Execute command in running container
-  manage attach <agent> [profile] Reattach to a detached session
+  manage attach <container-name>  Reattach to a running container by name
   manage stop <agent> [profile]  Stop a running session
   manage logs [agent] [profile]  Show launch/exit logs or container logs
   manage watch <agent> [profile] Restart agent on crash with retries
@@ -469,7 +469,7 @@ Subcommands:
   dry-run         Preview container config
   status          Show running containers
   exec            Execute command in a running container
-  attach          Reattach to a detached session
+  attach          Reattach to a running container by name
   stop            Stop a running session
   watch           Restart agent on crash with retries
   switch-profile  Set the default profile
@@ -492,7 +492,7 @@ Subcommands:
 
 func printSubcommandHelp(cmd string) error {
 	helps := map[string]string{
-		"agents":         "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.",
+		"agents":         "Usage: ai-shim manage agents\n\n  List all built-in and configured agents.\n  Custom agents defined via agent_def: in ~/.ai-shim/config/agents/*.yaml\n  are included alongside built-ins.",
 		"profiles":       "Usage: ai-shim manage profiles\n\n  List all configured and launched profiles.",
 		"config":         "Usage: ai-shim manage config <agent> [profile]\n\n  Show the fully resolved config for an agent+profile combination.\n  Profile defaults to \"default\" if omitted.",
 		"doctor":         "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
@@ -506,7 +506,7 @@ func printSubcommandHelp(cmd string) error {
 		"agent-versions": "Usage: ai-shim manage agent-versions\n\n  Show installed agent versions by checking bin directories.",
 		"reinstall":      "Usage: ai-shim manage reinstall <agent>\n\n  Force reinstall an agent by clearing its bin cache.",
 		"exec":           "Usage: ai-shim manage exec <name> <command...>\n\n  Execute a command in a running ai-shim container.",
-		"attach":         "Usage: ai-shim manage attach <agent> [profile]\n\n  Reattach to a detached ai-shim session.\n  Detach from a running session with Ctrl+], d.",
+		"attach":         "Usage: ai-shim manage attach <container-name>\n\n  Reattach to a running ai-shim container by its exact name.\n  Use 'ai-shim manage status' to see container names.\n  Detach from a running session with Ctrl+], d.",
 		"stop":           "Usage: ai-shim manage stop <agent> [profile]\n\n  Stop a running ai-shim session and remove its container.",
 		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
 		"logs":           "Usage: ai-shim manage logs [agent] [profile]\n\n  Without arguments: show the launch/exit log.\n  With agent [profile]: show Docker container logs for the most recent matching container.",
@@ -850,16 +850,11 @@ func runManageSubcommand(args []string) error {
 
 	case "attach":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: ai-shim manage attach <agent> [profile]")
+			return fmt.Errorf("usage: ai-shim manage attach <container-name>")
 		}
-		agentName := args[1]
-		profile := "default"
-		if len(args) > 2 {
-			profile = args[2]
-		}
-		exitCode, err := manageAttach(agentName, profile)
+		exitCode, err := manageAttachByName(args[1])
 		if err != nil {
-			return fmt.Errorf("attach to %s/%s: %w", agentName, profile, err)
+			return fmt.Errorf("attach to %s: %w", args[1], err)
 		}
 		os.Exit(exitCode)
 		return nil
@@ -920,7 +915,7 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, watch, switch-profile", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, attach, watch, switch-profile", args[0])
 	}
 }
 
@@ -1553,8 +1548,11 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 	}
 }
 
-// manageAttach implements `ai-shim manage attach <agent> [profile]`.
-func manageAttach(agentName, profile string) (int, error) {
+// manageAttachByName implements `ai-shim manage attach <container-name>`.
+// It looks up the container by exact Docker name, verifies it is a running
+// ai-shim container, resolves the session's config from container labels,
+// and delegates to handleReattach for the actual attach + cleanup flow.
+func manageAttachByName(name string) (int, error) {
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
 	if err != nil {
@@ -1562,58 +1560,26 @@ func manageAttach(agentName, profile string) (int, error) {
 	}
 	defer func() { _ = runner.Close() }()
 
-	sessions, err := container.FindAllRunningSessions(ctx, runner.Client(), agentName, profile)
+	session, err := container.FindSessionByContainerName(ctx, runner.Client(), name)
 	if err != nil {
-		return 1, fmt.Errorf("finding sessions: %w", err)
+		return 1, err
 	}
-	if len(sessions) == 0 {
-		return 1, fmt.Errorf("no running session found for %s/%s", agentName, profile)
-	}
-
-	// If multiple sessions (different workspaces), let user choose.
-	session := &sessions[0]
-	if len(sessions) > 1 {
-		fmt.Fprintf(os.Stderr, "ai-shim: multiple running sessions for %s/%s:\n", agentName, profile)
-		for i, s := range sessions {
-			dir := s.WorkspaceDir
-			if dir == "" {
-				dir = "(unknown)"
-			}
-			age := time.Since(s.CreatedAt).Truncate(time.Second)
-			fmt.Fprintf(os.Stderr, "  [%d] %s (running %s, workspace: %s)\n", i+1, s.ContainerName, age, dir)
-		}
-		fmt.Fprintf(os.Stderr, "  Choice [1]: ")
-
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			input := strings.TrimSpace(scanner.Text())
-			if input != "" {
-				idx := 0
-				if _, err := fmt.Sscanf(input, "%d", &idx); err == nil && idx >= 1 && idx <= len(sessions) {
-					session = &sessions[idx-1]
-				}
-			}
-		}
+	if session == nil {
+		return 1, fmt.Errorf("no ai-shim container named %q found\nUse 'ai-shim manage status' to see running containers", name)
 	}
 
-	fmt.Fprintf(os.Stderr, "ai-shim: reattaching to %s...\n", session.ContainerName)
-	showRecentLogs(ctx, runner.Client(), session.ContainerID)
-
-	result, err := runner.Reattach(ctx, session.ContainerID, true)
+	// Resolve config from the container's agent+profile labels so
+	// handleReattach can run DIND/cache cleanup on container exit.
+	layout := storage.NewLayout(storage.DefaultRoot())
+	cfg, err := config.Resolve(layout.ConfigDir, session.AgentName, session.Profile)
 	if err != nil {
-		return 1, fmt.Errorf("reattaching: %w", err)
+		// Non-fatal: proceed with zero-value config (cleanup will no-op).
+		logging.Debug("resolving config for %s/%s: %v", session.AgentName, session.Profile, err)
+		cfg = config.Config{}
 	}
 
-	if result.Detached {
-		fmt.Fprintf(os.Stderr, "\nai-shim: detached from %s.\n", session.ContainerName)
-		return 0, nil
-	}
-
-	// Container exited — clean up.
-	if err := runner.Client().ContainerRemove(ctx, session.ContainerID, container_types.RemoveOptions{Force: true}); err != nil {
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove container %s: %v\n", session.ContainerName, err)
-	}
-	return result.ExitCode, nil
+	logDir := filepath.Join(layout.Root, "logs")
+	return handleReattach(ctx, runner, session, cfg, logDir)
 }
 
 // manageStop implements `ai-shim manage stop <agent> [profile]`.
