@@ -32,7 +32,7 @@ tools:
   # eksctl -- EKS cluster lifecycle management
   eksctl:
     type: tar-extract
-    url: "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_linux_amd64.tar.gz"
+    url: "https://github.com/eksctl-io/eksctl/releases/download/v0.201.0/eksctl_linux_amd64.tar.gz"
     binary: eksctl
 
   # aws-vault -- secure credential management
@@ -46,7 +46,7 @@ tools:
     type: custom
     install: |
       if ! command -v sam >/dev/null 2>&1; then
-        curl -fsSL "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -o /tmp/sam.zip
+        curl -fsSL "https://github.com/aws/aws-sam-cli/releases/download/v1.145.0/aws-sam-cli-linux-x86_64.zip" -o /tmp/sam.zip
         unzip -q /tmp/sam.zip -d /tmp/sam
         /tmp/sam/install --install-dir /usr/local/sam-cli --bin-dir /usr/local/share/ai-shim/bin
         rm -rf /tmp/sam /tmp/sam.zip

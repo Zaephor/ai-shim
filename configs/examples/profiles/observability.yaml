@@ -21,20 +21,24 @@ tools:
   promtool:
     type: custom
     install: |
-      curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v3.10.0/prometheus-3.10.0.linux-amd64.tar.gz" | tar xz -C /tmp
-      mv /tmp/prometheus-3.10.0.linux-amd64/promtool /usr/local/share/ai-shim/bin/
-      chmod +x /usr/local/share/ai-shim/bin/promtool
-      rm -rf /tmp/prometheus-3.10.0.linux-amd64
+      if ! command -v promtool >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v3.10.0/prometheus-3.10.0.linux-amd64.tar.gz" | tar xz -C /tmp
+        mv /tmp/prometheus-3.10.0.linux-amd64/promtool /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/promtool
+        rm -rf /tmp/prometheus-3.10.0.linux-amd64
+      fi
 
   # logcli -- query Loki logs from the command line
   logcli:
     type: custom
     install: |
-      curl -fsSL "https://github.com/grafana/loki/releases/download/v3.7.1/logcli-linux-amd64.zip" -o /tmp/logcli.zip
-      unzip -o /tmp/logcli.zip -d /usr/local/share/ai-shim/bin/
-      chmod +x /usr/local/share/ai-shim/bin/logcli-linux-amd64
-      mv /usr/local/share/ai-shim/bin/logcli-linux-amd64 /usr/local/share/ai-shim/bin/logcli
-      rm /tmp/logcli.zip
+      if ! command -v logcli >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/grafana/loki/releases/download/v3.7.1/logcli-linux-amd64.zip" -o /tmp/logcli.zip
+        unzip -o /tmp/logcli.zip -d /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/logcli-linux-amd64
+        mv /usr/local/share/ai-shim/bin/logcli-linux-amd64 /usr/local/share/ai-shim/bin/logcli
+        rm /tmp/logcli.zip
+      fi
 
   # k6 -- modern load testing (JavaScript scripted)
   k6:

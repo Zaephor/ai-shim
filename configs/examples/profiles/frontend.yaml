@@ -22,20 +22,24 @@ tools:
   bun:
     type: custom
     install: |
-      curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip" -o /tmp/bun.zip
-      unzip -o /tmp/bun.zip -d /tmp/bun
-      mv /tmp/bun/bun-linux-x64/bun /usr/local/share/ai-shim/bin/
-      chmod +x /usr/local/share/ai-shim/bin/bun
-      rm -rf /tmp/bun /tmp/bun.zip
+      if ! command -v bun >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v1.3.11/bun-linux-x64.zip" -o /tmp/bun.zip
+        unzip -o /tmp/bun.zip -d /tmp/bun
+        mv /tmp/bun/bun-linux-x64/bun /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/bun
+        rm -rf /tmp/bun /tmp/bun.zip
+      fi
 
   # deno -- secure TypeScript/JavaScript runtime
   deno:
     type: custom
     install: |
-      curl -fsSL "https://github.com/denoland/deno/releases/download/v2.7.9/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
-      unzip -o /tmp/deno.zip -d /usr/local/share/ai-shim/bin/
-      chmod +x /usr/local/share/ai-shim/bin/deno
-      rm /tmp/deno.zip
+      if ! command -v deno >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/denoland/deno/releases/download/v2.7.9/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+        unzip -o /tmp/deno.zip -d /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/deno
+        rm /tmp/deno.zip
+      fi
 
   jq:
     type: binary-download

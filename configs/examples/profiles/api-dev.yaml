@@ -34,11 +34,13 @@ tools:
   protoc:
     type: custom
     install: |
-      curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v34.1/protoc-34.1-linux-x86_64.zip" -o /tmp/protoc.zip
-      unzip -o /tmp/protoc.zip -d /tmp/protoc
-      mv /tmp/protoc/bin/protoc /usr/local/share/ai-shim/bin/
-      chmod +x /usr/local/share/ai-shim/bin/protoc
-      rm -rf /tmp/protoc /tmp/protoc.zip
+      if ! command -v protoc >/dev/null 2>&1; then
+        curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v34.1/protoc-34.1-linux-x86_64.zip" -o /tmp/protoc.zip
+        unzip -o /tmp/protoc.zip -d /tmp/protoc
+        mv /tmp/protoc/bin/protoc /usr/local/share/ai-shim/bin/
+        chmod +x /usr/local/share/ai-shim/bin/protoc
+        rm -rf /tmp/protoc /tmp/protoc.zip
+      fi
 
   # curlie -- curl with httpie-style output
   curlie:
