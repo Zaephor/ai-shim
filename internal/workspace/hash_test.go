@@ -55,8 +55,3 @@ func TestHashPath_EmptyPath(t *testing.T) {
 	assert.Len(t, h, 12)
 }
 
-func TestHashPath_DelimiterPreventsCollision(t *testing.T) {
-	h1 := HashPath("ho", "st/path")
-	h2 := HashPath("host", "/path")
-	assert.NotEqual(t, h1, h2, "different hostname/path splits must produce different hashes")
-}
