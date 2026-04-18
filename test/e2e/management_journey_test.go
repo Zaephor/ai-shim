@@ -38,8 +38,9 @@ func TestJourney_ReinstallFlow(t *testing.T) {
 	assert.Contains(t, output1, "install-done")
 
 	// Verify there are files in the bin directory after install.
-	binDir := layout.AgentBin("opencode")
-	_, err := os.ReadDir(binDir)
+	binDir, err := layout.AgentBin("opencode")
+	require.NoError(t, err)
+	_, err = os.ReadDir(binDir)
 	require.NoError(t, err, "bin dir should exist after install")
 
 	// Reinstall: clear the bin directory.
@@ -52,7 +53,9 @@ func TestJourney_ReinstallFlow(t *testing.T) {
 	assert.Empty(t, entries, "bin directory should be empty after Reinstall")
 
 	// Remove marker so the next run writes fresh output.
-	markerHost := filepath.Join(layout.AgentCache("opencode"), ".journey-output")
+	agentCacheDir, err := layout.AgentCache("opencode")
+	require.NoError(t, err)
+	markerHost := filepath.Join(agentCacheDir, ".journey-output")
 	_ = os.Remove(markerHost)
 
 	// Second run: should reinstall (output contains "Installing").
@@ -101,14 +104,15 @@ func TestJourney_BackupRestoreRoundtrip(t *testing.T) {
 	layout := setupJourneyLayout(t)
 
 	// Create the profile home directory and a marker file.
-	profileHome := layout.ProfileHome("default")
+	profileHome, err := layout.ProfileHome("default")
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(profileHome, 0755))
 	markerPath := filepath.Join(profileHome, "journey-marker.txt")
 	require.NoError(t, os.WriteFile(markerPath, []byte("backup-roundtrip-data"), 0644))
 
 	// Backup.
 	backupPath := filepath.Join(layout.Root, "test-backup.tar.gz")
-	err := cli.BackupProfile(layout, "default", backupPath)
+	err = cli.BackupProfile(layout, "default", backupPath)
 	require.NoError(t, err, "BackupProfile should succeed")
 
 	// Verify backup file was created and is non-empty.
@@ -143,9 +147,11 @@ func TestJourney_DiskUsageReportsData(t *testing.T) {
 	layout := setupJourneyLayout(t)
 
 	// Write some files into agent and shared directories.
-	require.NoError(t, os.MkdirAll(layout.AgentBin("opencode"), 0755))
+	opencodeBin, err := layout.AgentBin("opencode")
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(opencodeBin, 0755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(layout.AgentBin("opencode"), "fake-binary"),
+		filepath.Join(opencodeBin, "fake-binary"),
 		[]byte(strings.Repeat("x", 4096)),
 		0644,
 	))

@@ -121,7 +121,9 @@ func buildAndRun(t *testing.T, layout storage.Layout, agentName, profile string,
 	require.NoError(t, err, "container Run should not return an error")
 
 	// Read captured output from the marker file on the host side.
-	markerHost := filepath.Join(layout.AgentCache(agentName), ".journey-output")
+	agentCacheDir, err := layout.AgentCache(agentName)
+	require.NoError(t, err)
+	markerHost := filepath.Join(agentCacheDir, ".journey-output")
 	data, readErr := os.ReadFile(markerHost)
 	output := ""
 	if readErr == nil {

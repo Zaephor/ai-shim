@@ -104,7 +104,7 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 //
 // ToolsOrder is consulted when non-empty so mount order is deterministic;
 // otherwise the tools map is iterated directly.
-func buildDINDSharedMounts(pwd, workdir, cacheBind string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) []mount.Mount {
+func buildDINDSharedMounts(pwd, workdir, cacheBind string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) ([]mount.Mount, error) {
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeBind,
@@ -137,14 +137,17 @@ func buildDINDSharedMounts(pwd, workdir, cacheBind string, tools map[string]conf
 		if !ok || !td.DataDir {
 			continue
 		}
-		hostPath := storage.ToolCachePath(layout, name, td.CacheScope, agentName, profileName)
+		hostPath, err := storage.ToolCachePath(layout, name, td.CacheScope, agentName, profileName)
+		if err != nil {
+			return nil, fmt.Errorf("resolving DIND tool cache path for %q: %w", name, err)
+		}
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: hostPath,
 			Target: hostPath,
 		})
 	}
-	return mounts
+	return mounts, nil
 }
 
 // dirOnPath reports whether the given directory appears in the current
@@ -172,6 +175,8 @@ func dirOnPath(dir string) bool {
 
 var version = "dev"
 
+const shortRevisionLen = 12
+
 func init() {
 	// When built without -ldflags (plain `go build`), version stays "dev".
 	// Enrich it with the VCS revision that Go embeds automatically in
@@ -198,8 +203,8 @@ func init() {
 		return
 	}
 	short := revision
-	if len(short) > 12 {
-		short = short[:12]
+	if len(short) > shortRevisionLen {
+		short = short[:shortRevisionLen]
 	}
 	version = "dev-" + short
 	if modified == "true" {
@@ -299,20 +304,6 @@ func formatAgentList() string {
 		s += "  " + name + "\n"
 	}
 	return s
-}
-
-// formatBytesMain formats a byte count for human-readable output.
-func formatBytesMain(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
 func runManage(args []string) error {
@@ -1003,7 +994,7 @@ func runManageSubcommand(args []string) error {
 		}
 
 		// Print summary.
-		fmt.Fprintf(os.Stderr, "Profile home removed (%s freed)\n", formatBytesMain(result.BytesFreed))
+		fmt.Fprintf(os.Stderr, "Profile home removed (%s freed)\n", cli.FormatBytes(result.BytesFreed))
 		if len(result.AgentProfilesRemoved) > 0 {
 			fmt.Fprintf(os.Stderr, "Agent-profile configs removed:\n")
 			for _, name := range result.AgentProfilesRemoved {
@@ -1305,7 +1296,7 @@ func runAgent(name string, args []string) (int, error) {
 		if cacheAddr != "" {
 			cacheBind = filepath.Join(layout.Root, "shared", "registry-cache")
 		}
-		dindSharedMounts := buildDINDSharedMounts(
+		dindSharedMounts, err := buildDINDSharedMounts(
 			pwd,
 			workspace.ContainerWorkdir(platInfo.Hostname, pwd),
 			cacheBind,
@@ -1315,6 +1306,9 @@ func runAgent(name string, args []string) (int, error) {
 			agentName,
 			profileName,
 		)
+		if err != nil {
+			return 1, fmt.Errorf("building DIND shared mounts: %w", err)
+		}
 
 		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,

@@ -69,18 +69,13 @@ func detectGPU() (available bool, count int) {
 	if runtime.GOOS == "darwin" {
 		return false, 0
 	}
-
-	if _, err := os.Stat("/dev/nvidia0"); err == nil {
-		if n := countGPUsViaSMI(); n > 0 {
-			return true, n
-		}
-		return true, 1
-	}
-
-	if n := countGPUsViaSMI(); n > 0 {
+	n := countGPUsViaSMI()
+	if n > 0 {
 		return true, n
 	}
-
+	if _, err := os.Stat("/dev/nvidia0"); err == nil {
+		return true, 1
+	}
 	return false, 0
 }
 

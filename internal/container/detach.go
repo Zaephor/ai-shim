@@ -24,6 +24,7 @@ type DetachableReader struct {
 	sawEscape  bool      // true if first key was seen
 	escapeTime time.Time // when the first key arrived
 	pending    byte      // buffered first key to forward if second doesn't match
+	scratch    []byte    // reusable read buffer
 }
 
 // NewDetachableReader creates a DetachableReader with the default keys and
@@ -79,7 +80,10 @@ func (d *DetachableReader) Read(p []byte) (int, error) {
 	d.mu.Unlock()
 
 	// Read from underlying reader.
-	buf := make([]byte, len(p))
+	if cap(d.scratch) < len(p) {
+		d.scratch = make([]byte, len(p))
+	}
+	buf := d.scratch[:len(p)]
 	n, err := d.reader.Read(buf)
 	if n == 0 {
 		// Underlying reader returned no data. If we have a pending escape

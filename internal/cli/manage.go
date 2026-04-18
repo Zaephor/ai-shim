@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -879,7 +880,13 @@ func colorizeStatus(c color.Colorer, status string) string {
 // conservative upper bound on archive size, leaving 20% headroom) and
 // removes the partial archive if tar fails mid-write.
 func BackupProfile(layout storage.Layout, profile, outputPath string) error {
-	profileDir := layout.ProfileHome(profile)
+	if err := invocation.ValidateProfileName(profile); err != nil {
+		return fmt.Errorf("invalid profile name: %w", err)
+	}
+	profileDir, err := layout.ProfileHome(profile)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
 		return fmt.Errorf("profile %q does not exist", profile)
 	}
@@ -904,7 +911,7 @@ func BackupProfile(layout storage.Layout, profile, outputPath string) error {
 		if free, freeErr := freeBytes(destDir); freeErr == nil {
 			if uint64(profileBytes) > (free*8)/10 {
 				return fmt.Errorf("insufficient disk space for backup: profile is %s, only %s available at %s (need 20%% headroom)",
-					formatBytes(profileBytes), formatBytes(int64(free)), destDir)
+					FormatBytes(profileBytes), FormatBytes(int64(free)), destDir)
 			}
 		}
 	}
@@ -921,16 +928,31 @@ func BackupProfile(layout storage.Layout, profile, outputPath string) error {
 
 // RestoreProfile extracts a tar.gz archive into a profile's home directory.
 func RestoreProfile(layout storage.Layout, profile, archivePath string) error {
-	profileDir := layout.ProfileHome(profile)
+	if err := invocation.ValidateProfileName(profile); err != nil {
+		return fmt.Errorf("invalid profile name: %w", err)
+	}
+
+	info, err := os.Lstat(archivePath)
+	if err != nil {
+		return fmt.Errorf("archive not found: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("archive path %q is not a regular file", archivePath)
+	}
+
+	profileDir, err := layout.ProfileHome(profile)
+	if err != nil {
+		return fmt.Errorf("resolving profile home: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(profileDir), 0755); err != nil {
 		return fmt.Errorf("creating profile directory: %w", err)
 	}
 
 	cmd := exec.Command("tar", "xzf", archivePath, "-C", filepath.Dir(profileDir))
 	if output, err := cmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(profileDir)
 		return fmt.Errorf("restoring backup: %s: %w", string(output), err)
 	}
-
 	return nil
 }
 
@@ -958,9 +980,9 @@ func DiskUsage(layout storage.Layout) (string, error) {
 			continue
 		}
 		total += size
-		fmt.Fprintf(&b, "  %-12s  %s\n", dir.name, formatBytes(size))
+		fmt.Fprintf(&b, "  %-12s  %s\n", dir.name, FormatBytes(size))
 	}
-	fmt.Fprintf(&b, "\n  %-12s  %s\n", "Total", formatBytes(total))
+	fmt.Fprintf(&b, "\n  %-12s  %s\n", "Total", FormatBytes(total))
 
 	// Per-profile breakdown
 	profilesDir := filepath.Join(layout.Root, "profiles")
@@ -970,7 +992,7 @@ func DiskUsage(layout storage.Layout) (string, error) {
 		for _, e := range entries {
 			if e.IsDir() {
 				size, _ := dirSize(filepath.Join(profilesDir, e.Name()))
-				fmt.Fprintf(&b, "  %-20s  %s\n", e.Name(), formatBytes(size))
+				fmt.Fprintf(&b, "  %-20s  %s\n", e.Name(), FormatBytes(size))
 			}
 		}
 	}
@@ -994,19 +1016,6 @@ func dirSize(path string) (int64, error) {
 		return nil
 	})
 	return size, err
-}
-
-func formatBytes(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
 // formatEnabledField formats a *bool config field as enabled/disabled for DryRun output.
@@ -1044,11 +1053,16 @@ func imagePinLabel(image string, isDefault bool) string {
 	return label
 }
 
+const containerIDShortLen = 12
+
 func containerDisplayName(c container_types.Summary) string {
 	if len(c.Names) > 0 {
 		return strings.TrimPrefix(c.Names[0], "/")
 	}
-	return c.ID[:12]
+	if len(c.ID) >= containerIDShortLen {
+		return c.ID[:containerIDShortLen]
+	}
+	return c.ID
 }
 
 // AgentVersions returns a formatted report of installed agent versions.
@@ -1058,7 +1072,11 @@ func AgentVersions(layout storage.Layout) string {
 
 	for _, name := range agent.Names() {
 		def, _ := agent.Lookup(name)
-		binDir := layout.AgentBin(name)
+		binDir, err := layout.AgentBin(name)
+		if err != nil {
+			fmt.Fprintf(&b, "  %-15s  (invalid name: %v)\n", name, err)
+			continue
+		}
 
 		status := "not installed"
 		entries, err := os.ReadDir(binDir)
@@ -1097,7 +1115,10 @@ func Reinstall(layout storage.Layout, agentName string) error {
 		return fmt.Errorf("unknown agent: %s", agentName)
 	}
 
-	binDir := layout.AgentBin(agentName)
+	binDir, err := layout.AgentBin(agentName)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(binDir); os.IsNotExist(err) {
 		return fmt.Errorf("agent %s is not installed (no bin directory)", agentName)
 	}
@@ -1117,7 +1138,10 @@ func Reinstall(layout storage.Layout, agentName string) error {
 
 	// Remove cache marker files so custom install types (claude-code, goose)
 	// don't skip reinstall on next launch.
-	cacheDir := layout.AgentCache(agentName)
+	cacheDir, err := layout.AgentCache(agentName)
+	if err != nil {
+		return err
+	}
 	for _, marker := range []string{".last-update", ".installed-version"} {
 		p := filepath.Join(cacheDir, marker)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
@@ -1457,8 +1481,7 @@ func ContainerLogs(agent, profile string, tailLines int) (string, error) {
 func stripDockerLogHeaders(data []byte) []byte {
 	var result []byte
 	for len(data) >= 8 {
-		// Frame: 1 byte stream type, 3 padding, 4 byte big-endian size
-		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		size := int(binary.BigEndian.Uint32(data[4:8]))
 		data = data[8:]
 		if size > len(data) {
 			size = len(data)

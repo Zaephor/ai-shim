@@ -28,7 +28,7 @@ func makeRaw() func() {
 		return nil
 	}
 	return func() {
-		unix.IoctlSetTermios(fd, unix.TIOCSETA, oldState)
+		_ = unix.IoctlSetTermios(fd, unix.TIOCSETA, oldState)
 	}
 }
 

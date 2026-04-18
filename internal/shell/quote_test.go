@@ -51,10 +51,9 @@ func TestQuote_NoSpecialChars(t *testing.T) {
 }
 
 func TestQuote_NullByte(t *testing.T) {
-	// Null bytes in shell strings cause truncation. Quote wraps them but
-	// doesn't strip them — the caller should validate input before quoting.
+	// Null bytes cause shell truncation so Quote() rejects them.
 	q := Quote("hello\x00world")
-	assert.Contains(t, q, "\x00", "null byte is preserved (not stripped)")
+	assert.Equal(t, "''", q)
 }
 
 func TestQuote_ControlChars(t *testing.T) {

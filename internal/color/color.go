@@ -65,6 +65,6 @@ func Enabled() bool {
 	if os.Getenv("AI_SHIM_NO_COLOR") != "" {
 		return false
 	}
-	// Check if stderr is a terminal
-	return isTerminal(int(os.Stderr.Fd()))
+	// Check if stdout or stderr is a terminal
+	return isTerminal(int(os.Stdout.Fd())) || isTerminal(int(os.Stderr.Fd()))
 }

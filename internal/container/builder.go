@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -197,7 +199,11 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	// Pass the YAML declaration order so the emitted JSON lists servers in
 	// the order the user wrote them rather than Go map-iteration order.
 	if len(p.Config.MCPServers) > 0 {
-		env = append(env, "MCP_SERVERS="+mcpServersJSON(p.Config.MCPServers, p.Config.MCPServersOrder))
+		mcpJSON, err := mcpServersJSON(p.Config.MCPServers, p.Config.MCPServersOrder)
+		if err != nil {
+			return ContainerSpec{}, fmt.Errorf("serializing MCP servers: %w", err)
+		}
+		env = append(env, "MCP_SERVERS="+mcpJSON)
 	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
@@ -257,7 +263,20 @@ func IsTTY() bool {
 }
 
 func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, error) {
-	profileHome := p.Layout.ProfileHome(p.Profile)
+	profileHome, err := p.Layout.ProfileHome(p.Profile)
+	if err != nil {
+		return nil, fmt.Errorf("resolving profile home: %w", err)
+	}
+
+	agentBin, err := p.Layout.AgentBin(p.Agent.Name)
+	if err != nil {
+		return nil, fmt.Errorf("resolving agent bin: %w", err)
+	}
+
+	agentCache, err := p.Layout.AgentCache(p.Agent.Name)
+	if err != nil {
+		return nil, fmt.Errorf("resolving agent cache: %w", err)
+	}
 
 	mounts := []mount.Mount{
 		{
@@ -267,12 +286,12 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 		},
 		{
 			Type:   mount.TypeBind,
-			Source: p.Layout.AgentBin(p.Agent.Name),
+			Source: agentBin,
 			Target: "/usr/local/share/ai-shim/agents/" + p.Agent.Name + "/bin",
 		},
 		{
 			Type:   mount.TypeBind,
-			Source: p.Layout.AgentCache(p.Agent.Name),
+			Source: agentCache,
 			Target: "/usr/local/share/ai-shim/agents/" + p.Agent.Name + "/cache",
 		},
 		{
@@ -299,9 +318,13 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 				continue
 			}
 			if _, ok := agent.Lookup(name); ok {
+				allowedBin, err := p.Layout.AgentBin(name)
+				if err != nil {
+					return nil, fmt.Errorf("resolving allowed agent bin for %q: %w", name, err)
+				}
 				mounts = append(mounts, mount.Mount{
 					Type:   mount.TypeBind,
-					Source: p.Layout.AgentBin(name),
+					Source: allowedBin,
 					Target: "/usr/local/share/ai-shim/agents/" + name + "/bin",
 				})
 			} else {
@@ -314,9 +337,13 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 			if name == p.Agent.Name {
 				continue
 			}
+			sharedBin, err := p.Layout.AgentBin(name)
+			if err != nil {
+				return nil, fmt.Errorf("resolving shared agent bin for %q: %w", name, err)
+			}
 			mounts = append(mounts, mount.Mount{
 				Type:   mount.TypeBind,
-				Source: p.Layout.AgentBin(name),
+				Source: sharedBin,
 				Target: "/usr/local/share/ai-shim/agents/" + name + "/bin",
 			})
 		}
@@ -333,10 +360,16 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume %s: %v\n", vol, err)
 			continue
 		}
+		// Validate target path — reject traversal attempts.
+		target := filepath.Clean(parts[1])
+		if !filepath.IsAbs(target) || strings.Contains(target, "..") {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume target %q: must be absolute path without traversal\n", parts[1])
+			continue
+		}
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: parts[0],
-			Target: parts[1],
+			Target: target,
 		})
 	}
 
@@ -345,7 +378,10 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 		if !td.DataDir {
 			continue
 		}
-		hostPath := storage.ToolCachePath(p.Layout, name, td.CacheScope, p.Agent.Name, p.Profile)
+		hostPath, err := storage.ToolCachePath(p.Layout, name, td.CacheScope, p.Agent.Name, p.Profile)
+		if err != nil {
+			return nil, fmt.Errorf("resolving tool cache path for %q: %w", name, err)
+		}
 		if err := os.MkdirAll(hostPath, 0755); err != nil {
 			// Refuse to proceed: silently dropping the mount would run
 			// the tool against an empty ephemeral layer, losing the
@@ -386,6 +422,12 @@ func parsePorts(ports []string) (nat.PortMap, nat.PortSet) {
 			continue
 		}
 		hostPort := parts[0]
+		if hostPort != "" {
+			if _, err := strconv.Atoi(hostPort); err != nil {
+				fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid port %q: host port must be numeric\n", p)
+				continue
+			}
+		}
 		containerPort := parts[1]
 		port, err := nat.NewPort("tcp", containerPort)
 		if err != nil {
@@ -408,10 +450,17 @@ func generateContainerName(agentName, profile, workspaceHash string) string {
 func randomSuffix(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback to timestamp-based suffix if crypto/rand fails
-		return fmt.Sprintf("%x", time.Now().UnixNano())[:n]
+		s := fmt.Sprintf("%x", time.Now().UnixNano())
+		if len(s) < n {
+			n = len(s)
+		}
+		return s[:n]
 	}
-	return fmt.Sprintf("%x", b)[:n]
+	s := fmt.Sprintf("%x", b)
+	if len(s) < n {
+		n = len(s)
+	}
+	return s[:n]
 }
 
 // mcpServersJSON serializes MCP server definitions to JSON for the MCP_SERVERS
@@ -422,14 +471,14 @@ func randomSuffix(n int) string {
 // Any keys present in the map but not in `order` are appended alphabetically
 // so nothing is silently dropped. When `order` is empty, all keys are emitted
 // in alphabetical order for deterministic output.
-func mcpServersJSON(servers map[string]config.MCPServerDef, order []string) string {
+func mcpServersJSON(servers map[string]config.MCPServerDef, order []string) (string, error) {
 	type mcpEntry struct {
 		Command string            `json:"command"`
 		Args    []string          `json:"args,omitempty"`
 		Env     map[string]string `json:"env,omitempty"`
 	}
 	if len(servers) == 0 {
-		return "{}"
+		return "{}", nil
 	}
 	// Build the final key sequence: honored-order keys first (skipping any
 	// not present in the map), then any leftover map keys alphabetically so
@@ -469,20 +518,18 @@ func mcpServersJSON(servers map[string]config.MCPServerDef, order []string) stri
 		}
 		nameJSON, err := json.Marshal(name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP server name %q: %v\n", name, err)
-			return "{}"
+			return "", fmt.Errorf("failed to marshal MCP server name %q: %w", name, err)
 		}
 		valJSON, err := json.Marshal(entry)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to marshal MCP server %q: %v\n", name, err)
-			return "{}"
+			return "", fmt.Errorf("failed to marshal MCP server %q: %w", name, err)
 		}
 		buf.Write(nameJSON)
 		buf.WriteByte(':')
 		buf.Write(valJSON)
 	}
 	buf.WriteByte('}')
-	return buf.String()
+	return buf.String(), nil
 }
 
 // generatePackageScript builds the shell snippet that installs apt packages

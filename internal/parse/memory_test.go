@@ -46,12 +46,9 @@ func TestMemory_Whitespace(t *testing.T) {
 }
 
 func TestMemory_HugeValue(t *testing.T) {
-	// 999999999g exceeds int64 range when converted to bytes.
-	// Should still return a value (float64 → int64 truncation), but
-	// the result won't match the input exactly. At minimum it shouldn't panic.
-	result, err := Memory("999999999g")
-	require.NoError(t, err)
-	assert.True(t, result > 0, "huge memory value should produce a positive result")
+	// 9999999999999g exceeds int64 range when converted to bytes.
+	_, err := Memory("9999999999999g")
+	assert.Error(t, err)
 }
 
 func TestMemory_FractionalSmallUnit(t *testing.T) {

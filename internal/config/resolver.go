@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/Zaephor/ai-shim/internal/invocation"
 )
 
 // Resolve loads, merges, and resolves the full 5-tier config for the given
@@ -16,6 +19,17 @@ func Resolve(configDir, agent, profile string) (Config, error) {
 // ResolveWithSources is like Resolve but also returns ConfigSources that
 // tracks which tier set each field.
 func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSources, error) {
+	if agentName != "" {
+		if err := invocation.ValidateAgentName(agentName); err != nil {
+			return Config{}, ConfigSources{}, fmt.Errorf("invalid agent name: %w", err)
+		}
+	}
+	if profile != "" {
+		if err := invocation.ValidateProfileName(profile); err != nil {
+			return Config{}, ConfigSources{}, fmt.Errorf("invalid profile name: %w", err)
+		}
+	}
+
 	var allWarnings []string
 
 	defaultCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "default.yaml"))
@@ -129,6 +143,18 @@ func resolveProfileExtends(configDir, profileName string, child Config) (Config,
 	return merged, nil
 }
 
+// parseBoolEnv reads the named environment variable and returns a pointer to a
+// bool parsed from it, or nil if the variable is unset or empty.
+// "1" and "true" (case-insensitive) are treated as true; anything else is false.
+func parseBoolEnv(key string) *bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	b := v == "1" || strings.EqualFold(v, "true")
+	return &b
+}
+
 // loadEnvOverrides reads AI_SHIM_* environment variables and returns a Config
 // representing tier 5 overrides. Supported variables:
 //   - AI_SHIM_IMAGE         — override container image
@@ -159,17 +185,14 @@ func loadEnvOverrides() Config {
 	if v := os.Getenv("AI_SHIM_VERSION"); v != "" {
 		cfg.Version = v
 	}
-	if v := os.Getenv("AI_SHIM_DIND"); v != "" {
-		b := v == "1" || v == "true"
-		cfg.DIND = &b
+	if b := parseBoolEnv("AI_SHIM_DIND"); b != nil {
+		cfg.DIND = b
 	}
-	if v := os.Getenv("AI_SHIM_DIND_GPU"); v != "" {
-		b := v == "1" || v == "true"
-		cfg.DINDGpu = &b
+	if b := parseBoolEnv("AI_SHIM_DIND_GPU"); b != nil {
+		cfg.DINDGpu = b
 	}
-	if v := os.Getenv("AI_SHIM_GPU"); v != "" {
-		b := v == "1" || v == "true"
-		cfg.GPU = &b
+	if b := parseBoolEnv("AI_SHIM_GPU"); b != nil {
+		cfg.GPU = b
 	}
 	if v := os.Getenv("AI_SHIM_NETWORK_SCOPE"); v != "" {
 		cfg.NetworkScope = v
@@ -177,13 +200,11 @@ func loadEnvOverrides() Config {
 	if v := os.Getenv("AI_SHIM_DIND_HOSTNAME"); v != "" {
 		cfg.DINDHostname = v
 	}
-	if v := os.Getenv("AI_SHIM_DIND_CACHE"); v != "" {
-		b := v == "1" || v == "true"
-		cfg.DINDCache = &b
+	if b := parseBoolEnv("AI_SHIM_DIND_CACHE"); b != nil {
+		cfg.DINDCache = b
 	}
-	if v := os.Getenv("AI_SHIM_DIND_TLS"); v != "" {
-		b := v == "1" || v == "true"
-		cfg.DINDTLS = &b
+	if b := parseBoolEnv("AI_SHIM_DIND_TLS"); b != nil {
+		cfg.DINDTLS = b
 	}
 
 	if v := os.Getenv("AI_SHIM_SECURITY_PROFILE"); v != "" {
@@ -214,13 +235,11 @@ func loadEnvOverrides() Config {
 		if suAPI != "" {
 			cfg.SelfUpdate.APIURL = suAPI
 		}
-		if suEnabled != "" {
-			b := suEnabled == "1" || suEnabled == "true"
-			cfg.SelfUpdate.Enabled = &b
+		if b := parseBoolEnv("AI_SHIM_SELFUPDATE_ENABLED"); b != nil {
+			cfg.SelfUpdate.Enabled = b
 		}
-		if suPrerelease != "" {
-			b := suPrerelease == "1" || suPrerelease == "true"
-			cfg.SelfUpdate.Prerelease = &b
+		if b := parseBoolEnv("AI_SHIM_SELFUPDATE_PRERELEASE"); b != nil {
+			cfg.SelfUpdate.Prerelease = b
 		}
 	}
 
@@ -251,13 +270,11 @@ func LoadEnvSelfUpdate() *SelfUpdateConfig {
 	if apiURL != "" {
 		su.APIURL = apiURL
 	}
-	if enabled != "" {
-		b := enabled == "1" || enabled == "true"
-		su.Enabled = &b
+	if b := parseBoolEnv("AI_SHIM_SELFUPDATE_ENABLED"); b != nil {
+		su.Enabled = b
 	}
-	if prerelease != "" {
-		b := prerelease == "1" || prerelease == "true"
-		su.Prerelease = &b
+	if b := parseBoolEnv("AI_SHIM_SELFUPDATE_PRERELEASE"); b != nil {
+		su.Prerelease = b
 	}
 	return su
 }

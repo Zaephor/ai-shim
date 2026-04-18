@@ -643,14 +643,16 @@ func TestMCPServersJSON(t *testing.T) {
 	servers := map[string]config.MCPServerDef{
 		"test": {Command: "cmd", Args: []string{"arg1"}, Env: map[string]string{"K": "V"}},
 	}
-	result := mcpServersJSON(servers, nil)
+	result, err := mcpServersJSON(servers, nil)
+	require.NoError(t, err)
 	assert.Contains(t, result, `"command":"cmd"`)
 	assert.Contains(t, result, `"args":["arg1"]`)
 	assert.Contains(t, result, `"K":"V"`)
 }
 
 func TestMCPServersJSON_Empty(t *testing.T) {
-	result := mcpServersJSON(map[string]config.MCPServerDef{}, nil)
+	result, err := mcpServersJSON(map[string]config.MCPServerDef{}, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "{}", result)
 }
 
@@ -658,7 +660,8 @@ func TestMCPServersJSON_OmitsEmptyFields(t *testing.T) {
 	servers := map[string]config.MCPServerDef{
 		"minimal": {Command: "echo"},
 	}
-	result := mcpServersJSON(servers, nil)
+	result, err := mcpServersJSON(servers, nil)
+	require.NoError(t, err)
 	assert.Contains(t, result, `"command":"echo"`)
 	assert.NotContains(t, result, `"args"`, "nil args should be omitted")
 	assert.NotContains(t, result, `"env"`, "nil env should be omitted")
@@ -669,7 +672,8 @@ func TestMCPServersJSON_MultipleServers(t *testing.T) {
 		"fs":  {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem"}},
 		"git": {Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-git"}},
 	}
-	result := mcpServersJSON(servers, nil)
+	result, err := mcpServersJSON(servers, nil)
+	require.NoError(t, err)
 	assert.Contains(t, result, `"fs"`)
 	assert.Contains(t, result, `"git"`)
 }
@@ -684,7 +688,8 @@ func TestMCPServersJSON_HonorsOrder(t *testing.T) {
 		"mid":   {Command: "m"},
 	}
 	order := []string{"zeta", "alpha", "mid"}
-	result := mcpServersJSON(servers, order)
+	result, err := mcpServersJSON(servers, order)
+	require.NoError(t, err)
 	zIdx := strings.Index(result, `"zeta"`)
 	aIdx := strings.Index(result, `"alpha"`)
 	mIdx := strings.Index(result, `"mid"`)
@@ -702,7 +707,8 @@ func TestMCPServersJSON_AlphabeticalFallback(t *testing.T) {
 		"alpha": {Command: "a"},
 		"mid":   {Command: "m"},
 	}
-	result := mcpServersJSON(servers, nil)
+	result, err := mcpServersJSON(servers, nil)
+	require.NoError(t, err)
 	aIdx := strings.Index(result, `"alpha"`)
 	mIdx := strings.Index(result, `"mid"`)
 	zIdx := strings.Index(result, `"zeta"`)
@@ -718,7 +724,8 @@ func TestMCPServersJSON_OrderKeyMissing(t *testing.T) {
 		"a": {Command: "a"},
 	}
 	order := []string{"ghost", "a"}
-	result := mcpServersJSON(servers, order)
+	result, err := mcpServersJSON(servers, order)
+	require.NoError(t, err)
 	assert.Contains(t, result, `"a"`)
 	assert.NotContains(t, result, `"ghost"`)
 }
@@ -768,11 +775,13 @@ func TestBuildSpec_ToolDataDirMount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have a bind mount for the tool cache
+	expectedNVM, err := storage.ToolCachePath(p.Layout, "nvm", "", p.Agent.Name, p.Profile)
+	require.NoError(t, err)
 	found := false
 	for _, m := range spec.Mounts {
 		if m.Target == "/usr/local/share/ai-shim/cache/nvm" {
 			found = true
-			assert.Equal(t, storage.ToolCachePath(p.Layout, "nvm", "", p.Agent.Name, p.Profile), m.Source)
+			assert.Equal(t, expectedNVM, m.Source)
 		}
 	}
 	assert.True(t, found, "tool data_dir mount should be present at /usr/local/share/ai-shim/cache/nvm")
@@ -794,12 +803,13 @@ func TestBuildSpec_ToolDataDirMountProfileScope(t *testing.T) {
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
 
+	expectedGVM, err := storage.ToolCachePath(p.Layout, "gvm", "profile", p.Agent.Name, p.Profile)
+	require.NoError(t, err)
 	found := false
 	for _, m := range spec.Mounts {
 		if m.Target == "/usr/local/share/ai-shim/cache/gvm" {
 			found = true
-			expected := storage.ToolCachePath(p.Layout, "gvm", "profile", p.Agent.Name, p.Profile)
-			assert.Equal(t, expected, m.Source)
+			assert.Equal(t, expectedGVM, m.Source)
 		}
 	}
 	assert.True(t, found, "tool data_dir mount with profile scope should be present")

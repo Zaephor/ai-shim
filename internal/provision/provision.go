@@ -105,7 +105,7 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 	case "tar-extract":
 		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
 		fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin)
-		fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; curl -fsSL %s | tar xz -C /tmp && find /tmp -name %s -exec mv {} \"%s/\" \\; ; } || \\\n", bin, url, bin, targetDir)
+		fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; tmpdir=$(mktemp -d) && curl -fsSL %s | tar xz -C \"$tmpdir\" && find \"$tmpdir\" -name %s -exec mv {} \"%s/\" \\; && rm -rf \"$tmpdir\"; } || \\\n", bin, url, bin, targetDir)
 		fmt.Fprintf(&b, "  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin)
 		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")

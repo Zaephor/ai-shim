@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/docker"
@@ -29,7 +28,7 @@ func Exec(containerName string, cmd []string) (int, error) {
 
 	// Use a timeout for the container lookup — the exec itself runs
 	// as long as the user's command takes.
-	lookupCtx, lookupCancel := context.WithTimeout(ctx, 30*time.Second)
+	lookupCtx, lookupCancel := context.WithTimeout(ctx, dockerTimeout)
 	defer lookupCancel()
 	containerID, err := findContainerByName(lookupCtx, cli, containerName)
 	if err != nil {

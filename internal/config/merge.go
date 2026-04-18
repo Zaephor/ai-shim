@@ -278,7 +278,7 @@ func appendUnique(base, extra []string) []string {
 	for _, v := range base {
 		seen[v] = true
 	}
-	result := make([]string, len(base))
+	result := make([]string, len(base), len(base)+len(extra))
 	copy(result, base)
 	for _, v := range extra {
 		if !seen[v] {

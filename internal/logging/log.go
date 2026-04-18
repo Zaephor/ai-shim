@@ -4,27 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/Zaephor/ai-shim/internal/security"
 )
 
-var verbose bool
+var verbose atomic.Bool
 
 // Init checks AI_SHIM_VERBOSE environment variable.
 func Init() {
-	verbose = os.Getenv("AI_SHIM_VERBOSE") == "1"
+	verbose.Store(os.Getenv("AI_SHIM_VERBOSE") != "")
 }
 
 // IsVerbose returns whether verbose logging is enabled.
 func IsVerbose() bool {
-	return verbose
+	return verbose.Load()
 }
 
 // Debug prints a debug message to stderr if verbose is enabled.
 func Debug(format string, args ...interface{}) {
-	if !verbose {
+	if !verbose.Load() {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "ai-shim: [debug] "+format+"\n", args...)
@@ -32,7 +33,7 @@ func Debug(format string, args ...interface{}) {
 
 // DebugEnv prints environment variables with secrets masked.
 func DebugEnv(env map[string]string) {
-	if !verbose {
+	if !verbose.Load() {
 		return
 	}
 	masked := security.MaskSecrets(env)
@@ -63,7 +64,7 @@ func appendLog(logDir, message string) {
 		return
 	}
 	if err := os.MkdirAll(logDir, 0755); err != nil {
-		if verbose {
+		if verbose.Load() {
 			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log mkdir failed: %v\n", err)
 		}
 		return
@@ -72,7 +73,7 @@ func appendLog(logDir, message string) {
 	entry := fmt.Sprintf("%s %s\n", time.Now().Format(time.RFC3339), message)
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		if verbose {
+		if verbose.Load() {
 			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log open failed: %v\n", err)
 		}
 		return
@@ -84,7 +85,7 @@ func appendLog(logDir, message string) {
 	// flock(2) is supported on both Linux and macOS, the only platforms
 	// ai-shim targets.
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		if verbose {
+		if verbose.Load() {
 			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log flock failed: %v\n", err)
 		}
 		return
@@ -92,7 +93,7 @@ func appendLog(logDir, message string) {
 	defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }()
 
 	if _, err := f.WriteString(entry); err != nil {
-		if verbose {
+		if verbose.Load() {
 			fmt.Fprintf(os.Stderr, "ai-shim: [debug] log write failed: %v\n", err)
 		}
 	}

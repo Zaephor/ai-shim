@@ -6,6 +6,9 @@ import "strings"
 // If s contains no special characters, it is returned as-is.
 // Otherwise, it is wrapped in single quotes with internal single quotes escaped.
 func Quote(s string) string {
+	if strings.ContainsRune(s, 0) {
+		return "''"
+	}
 	if s == "" {
 		return "''"
 	}

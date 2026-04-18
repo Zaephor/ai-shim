@@ -20,9 +20,14 @@ var sensitiveKeyPatterns = []string{
 
 // sensitiveValuePrefixes lists prefixes that indicate a secret API key value.
 var sensitiveValuePrefixes = []string{
-	"sk-ant-",
-	"sk-",
-	"gsk_",
+	"sk-ant-",  // Anthropic
+	"sk-",      // OpenAI-style
+	"gsk_",     // Google
+	"ghp_",     // GitHub personal access token
+	"gho_",     // GitHub OAuth token
+	"glpat-",   // GitLab
+	"xoxb-",    // Slack bot
+	"xoxp-",    // Slack user
 }
 
 // MaskSecrets replaces sensitive values in a key=value map with "***".
@@ -31,6 +36,9 @@ var sensitiveValuePrefixes = []string{
 // Masks based on key name patterns (*KEY*, *SECRET*, *TOKEN*, *PASSWORD*, *CREDENTIAL*, *AUTH*)
 // and value patterns (sk-ant-*, sk-*, gsk_*, etc.)
 func MaskSecrets(env map[string]string) map[string]string {
+	if env == nil {
+		return make(map[string]string)
+	}
 	result := make(map[string]string, len(env))
 	for k, v := range env {
 		if isSensitiveKey(k) || isSensitiveValue(v) {

@@ -21,20 +21,32 @@ func TestNewLayout(t *testing.T) {
 func TestLayout_AgentPaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	assert.Equal(t, filepath.Join(root, "agents", "claude", "bin"), layout.AgentBin("claude"))
-	assert.Equal(t, filepath.Join(root, "agents", "claude", "cache"), layout.AgentCache("claude"))
+	agentBin, err := layout.AgentBin("claude")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "agents", "claude", "bin"), agentBin)
+	agentCache, err := layout.AgentCache("claude")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "agents", "claude", "cache"), agentCache)
 }
 
 func TestLayout_ProfilePaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	assert.Equal(t, filepath.Join(root, "profiles", "work", "home"), layout.ProfileHome("work"))
+	profileHome, err := layout.ProfileHome("work")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "profiles", "work", "home"), profileHome)
 }
 
 func TestLayout_EnsureAll(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
 	err := layout.EnsureDirectories("claude", "work")
+	require.NoError(t, err)
+	agentBin, err := layout.AgentBin("claude")
+	require.NoError(t, err)
+	agentCache, err := layout.AgentCache("claude")
+	require.NoError(t, err)
+	profileHome, err := layout.ProfileHome("work")
 	require.NoError(t, err)
 	for _, dir := range []string{
 		layout.ConfigDir,
@@ -43,9 +55,9 @@ func TestLayout_EnsureAll(t *testing.T) {
 		filepath.Join(layout.ConfigDir, "agent-profiles"),
 		layout.SharedBin,
 		layout.SharedCache,
-		layout.AgentBin("claude"),
-		layout.AgentCache("claude"),
-		layout.ProfileHome("work"),
+		agentBin,
+		agentCache,
+		profileHome,
 	} {
 		_, err := os.Stat(dir)
 		assert.NoError(t, err, "directory should exist: %s", dir)
@@ -83,7 +95,8 @@ func TestLayout_EnsureAgentData_Dirs(t *testing.T) {
 	err := layout.EnsureAgentData("work", []string{".claude", ".config/goose"}, nil)
 	require.NoError(t, err)
 
-	home := layout.ProfileHome("work")
+	home, err := layout.ProfileHome("work")
+	require.NoError(t, err)
 	for _, dir := range []string{".claude", ".config/goose"} {
 		info, err := os.Stat(filepath.Join(home, dir))
 		require.NoError(t, err, "data dir should exist: %s", dir)
@@ -99,7 +112,8 @@ func TestLayout_EnsureAgentData_Files(t *testing.T) {
 	err := layout.EnsureAgentData("work", nil, []string{".claude.json"})
 	require.NoError(t, err)
 
-	home := layout.ProfileHome("work")
+	home, err := layout.ProfileHome("work")
+	require.NoError(t, err)
 	info, err := os.Stat(filepath.Join(home, ".claude.json"))
 	require.NoError(t, err, ".claude.json should exist")
 	assert.False(t, info.IsDir(), ".claude.json should be a file, not a directory")
@@ -110,11 +124,12 @@ func TestLayout_EnsureAgentData_PreservesExistingFiles(t *testing.T) {
 	layout := NewLayout(root)
 	require.NoError(t, layout.EnsureDirectories("claude-code", "work"))
 
-	home := layout.ProfileHome("work")
+	home, err := layout.ProfileHome("work")
+	require.NoError(t, err)
 	path := filepath.Join(home, ".claude.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"key":"value"}`), 0644))
 
-	err := layout.EnsureAgentData("work", nil, []string{".claude.json"})
+	err = layout.EnsureAgentData("work", nil, []string{".claude.json"})
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(path)
@@ -134,28 +149,32 @@ func TestLayout_EnsureAgentData_Idempotent(t *testing.T) {
 func TestToolCachePath_Global(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	got := ToolCachePath(layout, "nvm", "global", "claude-code", "default")
+	got, err := ToolCachePath(layout, "nvm", "global", "claude-code", "default")
+	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "shared", "cache", "nvm"), got)
 }
 
 func TestToolCachePath_EmptyScopeDefaultsToGlobal(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	got := ToolCachePath(layout, "nvm", "", "claude-code", "default")
+	got, err := ToolCachePath(layout, "nvm", "", "claude-code", "default")
+	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "shared", "cache", "nvm"), got)
 }
 
 func TestToolCachePath_Profile(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	got := ToolCachePath(layout, "gvm", "profile", "claude-code", "golang")
+	got, err := ToolCachePath(layout, "gvm", "profile", "claude-code", "golang")
+	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "profiles", "golang", "cache", "gvm"), got)
 }
 
 func TestToolCachePath_Agent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".ai-shim")
 	layout := NewLayout(root)
-	got := ToolCachePath(layout, "sdkman", "agent", "gemini-cli", "default")
+	got, err := ToolCachePath(layout, "sdkman", "agent", "gemini-cli", "default")
+	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "agents", "gemini-cli", "cache", "sdkman"), got)
 }
 
@@ -167,8 +186,73 @@ func TestLayout_EnsureAgentData_NestedFileParentCreated(t *testing.T) {
 	err := layout.EnsureAgentData("work", nil, []string{".config/agent/settings.json"})
 	require.NoError(t, err)
 
-	home := layout.ProfileHome("work")
+	home, err := layout.ProfileHome("work")
+	require.NoError(t, err)
 	info, err := os.Stat(filepath.Join(home, ".config/agent/settings.json"))
 	require.NoError(t, err)
 	assert.False(t, info.IsDir())
+}
+
+func TestAgentBin_ValidName(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got, err := layout.AgentBin("valid-name")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "agents", "valid-name", "bin"), got)
+}
+
+func TestAgentBin_TraversalRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := layout.AgentBin("../../etc")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestAgentBin_SeparatorRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := layout.AgentBin("foo/bar")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestProfileHome_ValidName(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	got, err := layout.ProfileHome("my-profile")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "profiles", "my-profile", "home"), got)
+}
+
+func TestProfileHome_TraversalRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := layout.ProfileHome("../../etc")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestProfileHome_SeparatorRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := layout.ProfileHome("foo/bar")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestToolCachePath_TraversalRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := ToolCachePath(layout, "../../etc/passwd", "", "agent", "profile")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path traversal")
+}
+
+func TestToolCachePath_EmptyNameRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".ai-shim")
+	layout := NewLayout(root)
+	_, err := ToolCachePath(layout, "", "", "agent", "profile")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be empty")
 }

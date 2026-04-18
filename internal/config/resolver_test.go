@@ -363,3 +363,29 @@ tools:
 	assert.Equal(t, []string{"tool-a", "tool-b", "tool-c"}, cfg.ToolsOrder,
 		"parent tools order preserved, child tool appended")
 }
+
+func TestResolveWithSources_InvalidAgentName(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := ResolveWithSources(dir, "../../etc/passwd", "profile")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid agent name")
+}
+
+func TestResolveWithSources_InvalidProfileName(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := ResolveWithSources(dir, "agent", "../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid profile name")
+}
+
+func TestResolveWithSources_EmptyNamesAllowed(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	// Empty agentName and profile should be allowed (no validation performed).
+	_, _, err := ResolveWithSources(dir, "", "")
+	require.NoError(t, err)
+}

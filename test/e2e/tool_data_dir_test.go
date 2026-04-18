@@ -128,7 +128,8 @@ func TestToolDataDir_CacheScopes(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(fmt.Sprintf("scope=%q", tc.scope), func(t *testing.T) {
-			got := storage.ToolCachePath(layout, toolName, tc.scope, agentName, profile)
+			got, err := storage.ToolCachePath(layout, toolName, tc.scope, agentName, profile)
+			require.NoError(t, err)
 			assert.Equal(t, tc.wantPath, got,
 				"ToolCachePath with scope=%q should return the expected host path", tc.scope)
 		})
@@ -231,7 +232,8 @@ fi`
 	plat := platform.Detect()
 
 	// Determine the host-side cache path once (both launches share it).
-	uvCacheHost := storage.ToolCachePath(layout, "uv", "global", agentDef.Name, "default")
+	uvCacheHost, err := storage.ToolCachePath(layout, "uv", "global", agentDef.Name, "default")
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(uvCacheHost) })
 
 	containerTarget := "/usr/local/share/ai-shim/cache/uv"
@@ -355,7 +357,8 @@ export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node/ | tail -1)/bin:
 
 	plat := platform.Detect()
 
-	nvmCacheHost := storage.ToolCachePath(layout, "nvm", "", agentDef.Name, "default")
+	nvmCacheHost, err := storage.ToolCachePath(layout, "nvm", "", agentDef.Name, "default")
+	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(nvmCacheHost) })
 
 	containerTarget := "/usr/local/share/ai-shim/cache/nvm"

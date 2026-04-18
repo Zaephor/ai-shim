@@ -142,6 +142,20 @@ func validateTools(tools map[string]ToolDef) []string {
 		if !validCacheScopes[td.CacheScope] {
 			warnings = append(warnings, fmt.Sprintf("tool %q: invalid cache_scope %q (valid: global, profile, agent)", name, td.CacheScope))
 		}
+		switch td.Type {
+		case "binary-download":
+			if td.URL == "" {
+				warnings = append(warnings, fmt.Sprintf("tool %q: binary-download type should have a url", name))
+			}
+		case "tar-extract", "tar-extract-selective":
+			if td.URL == "" {
+				warnings = append(warnings, fmt.Sprintf("tool %q: %s type should have a url", name, td.Type))
+			}
+		case "custom":
+			if td.Install == "" && td.Package == "" {
+				warnings = append(warnings, fmt.Sprintf("tool %q: custom type should have install or package", name))
+			}
+		}
 	}
 	return warnings
 }

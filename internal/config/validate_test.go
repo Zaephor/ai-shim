@@ -261,3 +261,59 @@ func TestValidate_Tools_ValidCacheScopes(t *testing.T) {
 		assert.Empty(t, errs, "cache_scope %q should be valid", scope)
 	}
 }
+
+func TestValidate_Tools_BinaryDownload_NoURL(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"mytool": {Type: "binary-download", Binary: "mytool"},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "binary-download") && strings.Contains(e, "url") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should warn that binary-download type needs a url")
+}
+
+func TestValidate_Tools_TarExtract_NoURL(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"mytool": {Type: "tar-extract", Binary: "mytool"},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "tar-extract") && strings.Contains(e, "url") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should warn that tar-extract type needs a url")
+}
+
+func TestValidate_Tools_Custom_NoInstallOrPackage(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"mytool": {Type: "custom"},
+	}}
+	errs := cfg.Validate()
+	assert.NotEmpty(t, errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "custom") && strings.Contains(e, "install or package") {
+			found = true
+		}
+	}
+	assert.True(t, found, "should warn that custom type needs install or package")
+}
+
+func TestValidate_Tools_Custom_WithInstall_NoWarning(t *testing.T) {
+	cfg := Config{Tools: map[string]ToolDef{
+		"mytool": {Type: "custom", Install: "echo hello"},
+	}}
+	errs := cfg.Validate()
+	// Should have no warning about install/package since Install is set
+	for _, e := range errs {
+		assert.NotContains(t, e, "install or package", "should not warn about missing install/package when Install is set")
+	}
+}

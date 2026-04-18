@@ -3,14 +3,16 @@ package dind
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	ai_container "github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/parse"
+	"github.com/Zaephor/ai-shim/internal/security"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -78,6 +80,9 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	image := cfg.Image
 	if image == "" {
 		image = DefaultImage
+	}
+	if strings.ContainsAny(image, " \t\n") {
+		return nil, fmt.Errorf("invalid DIND image reference: %q", image)
 	}
 
 	cli := runner.Client()
@@ -170,6 +175,11 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 			Target: "/certs",
 		})
 	}
+	for _, m := range cfg.SharedMounts {
+		if err := security.ValidateVolumePath(m.Source); err != nil {
+			return nil, fmt.Errorf("invalid DIND shared mount %q: %w", m.Source, err)
+		}
+	}
 	mounts = append(mounts, cfg.SharedMounts...)
 
 	hostCfg := &container.HostConfig{
@@ -202,6 +212,13 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 				}
 				return nil, fmt.Errorf("invalid DIND memory limit %q: %w", cfg.Resources.Memory, err)
 			}
+			if memBytes <= 0 {
+				_ = cli.VolumeRemove(ctx, socketVolName, true)
+				if certsVolName != "" {
+					_ = cli.VolumeRemove(ctx, certsVolName, true)
+				}
+				return nil, fmt.Errorf("DIND memory limit must be positive, got %v", memBytes)
+			}
 			hostCfg.Memory = memBytes
 		}
 		if cfg.Resources.CPUs != "" {
@@ -212,6 +229,13 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 					_ = cli.VolumeRemove(ctx, certsVolName, true)
 				}
 				return nil, fmt.Errorf("invalid DIND CPU limit %q: %w", cfg.Resources.CPUs, err)
+			}
+			if cpus <= 0 {
+				_ = cli.VolumeRemove(ctx, socketVolName, true)
+				if certsVolName != "" {
+					_ = cli.VolumeRemove(ctx, certsVolName, true)
+				}
+				return nil, fmt.Errorf("DIND CPU limit must be positive, got %v", cpus)
 			}
 			hostCfg.NanoCPUs = int64(cpus * 1e9)
 		}
@@ -228,8 +252,10 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	}
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		if cleanupErr := cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); cleanupErr != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to clean up container: %v\n", cleanupErr)
+		_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		_ = cli.VolumeRemove(ctx, socketVolName, true)
+		if certsVolName != "" {
+			_ = cli.VolumeRemove(ctx, certsVolName, true)
 		}
 		return nil, fmt.Errorf("starting DIND container: %w", err)
 	}
@@ -280,8 +306,8 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		// during startup.
 		if cfg.TLS {
 			gidStr := strconv.Itoa(cfg.SocketGID)
-			certChgrpCmd := []string{"sh", "-c", "chgrp -R " + gidStr + " /certs/client && chmod -R g+rX /certs/client"}
-			exitCode, _, stderr, err := sidecar.exec(ctx, certChgrpCmd)
+			chgrpCertsCmd := []string{"chgrp", "-R", gidStr, "/certs/client"}
+			exitCode, _, stderr, err = sidecar.exec(ctx, chgrpCertsCmd)
 			if err != nil {
 				_ = sidecar.Stop(ctx)
 				return nil, fmt.Errorf("chgrp DIND certs: %w", err)
@@ -289,6 +315,16 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 			if exitCode != 0 {
 				_ = sidecar.Stop(ctx)
 				return nil, fmt.Errorf("chgrp DIND certs: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
+			}
+			chmodCertsCmd := []string{"chmod", "-R", "g+rX", "/certs/client"}
+			exitCode, _, stderr, err = sidecar.exec(ctx, chmodCertsCmd)
+			if err != nil {
+				_ = sidecar.Stop(ctx)
+				return nil, fmt.Errorf("chmod DIND certs: %w", err)
+			}
+			if exitCode != 0 {
+				_ = sidecar.Stop(ctx)
+				return nil, fmt.Errorf("chmod DIND certs: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
 			}
 		}
 	}
@@ -385,23 +421,21 @@ func (s *Sidecar) CertsVolume() string {
 
 // Stop removes the DIND sidecar container and its socket volume.
 func (s *Sidecar) Stop(ctx context.Context) error {
-	var firstErr error
+	var errs []error
 	if err := s.client.ContainerRemove(ctx, s.containerID, container.RemoveOptions{Force: true}); err != nil {
-		firstErr = fmt.Errorf("removing DIND container: %w", err)
+		errs = append(errs, fmt.Errorf("removing DIND container: %w", err))
 	}
-	// Remove the socket volume
 	if s.socketVolume != "" {
-		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && !cerrdefs.IsNotFound(err) && firstErr == nil {
-			firstErr = fmt.Errorf("removing DIND socket volume: %w", err)
+		if err := s.client.VolumeRemove(ctx, s.socketVolume, true); err != nil && !cerrdefs.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("removing DIND socket volume: %w", err))
 		}
 	}
-	// Remove the certs volume if TLS was enabled
 	if s.certsVolume != "" {
-		if err := s.client.VolumeRemove(ctx, s.certsVolume, true); err != nil && !cerrdefs.IsNotFound(err) && firstErr == nil {
-			firstErr = fmt.Errorf("removing DIND certs volume: %w", err)
+		if err := s.client.VolumeRemove(ctx, s.certsVolume, true); err != nil && !cerrdefs.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("removing DIND certs volume: %w", err))
 		}
 	}
-	return firstErr
+	return errors.Join(errs...)
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

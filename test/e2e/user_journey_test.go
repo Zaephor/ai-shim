@@ -60,7 +60,9 @@ func TestJourney_AgentInstallAndCache(t *testing.T) {
 	assert.Contains(t, output1, "first-run-done")
 
 	// Remove the marker file so the second run can write fresh output.
-	markerHost := filepath.Join(layout.AgentCache("opencode"), ".journey-output")
+	agentCacheDir1, err := layout.AgentCache("opencode")
+	require.NoError(t, err)
+	markerHost := filepath.Join(agentCacheDir1, ".journey-output")
 	_ = os.Remove(markerHost)
 
 	// Second run: same layout, persistent bind mounts should have cached state.
@@ -123,7 +125,9 @@ func TestJourney_UpdateIntervalNever(t *testing.T) {
 	assert.Contains(t, output1, "never-first")
 
 	// Remove marker for clean second-run capture.
-	markerHost := filepath.Join(layout.AgentCache("opencode"), ".journey-output")
+	agentCacheDirNever, err := layout.AgentCache("opencode")
+	require.NoError(t, err)
+	markerHost := filepath.Join(agentCacheDirNever, ".journey-output")
 	_ = os.Remove(markerHost)
 
 	// Second run: should skip with update_interval=never message.
@@ -154,7 +158,9 @@ func TestJourney_UpdateIntervalAlways(t *testing.T) {
 		"first run should install, got: %s", output1)
 
 	// Remove marker for clean second-run capture.
-	markerHost := filepath.Join(layout.AgentCache("opencode"), ".journey-output")
+	agentCacheDirAlways, err := layout.AgentCache("opencode")
+	require.NoError(t, err)
+	markerHost := filepath.Join(agentCacheDirAlways, ".journey-output")
 	_ = os.Remove(markerHost)
 
 	// Second run: should also install (always).

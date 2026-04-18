@@ -7,7 +7,7 @@ import (
 
 // HashPath returns a deterministic 12-character hex hash of the hostname + path.
 func HashPath(hostname, absPath string) string {
-	h := sha256.Sum256([]byte(hostname + absPath))
+	h := sha256.Sum256([]byte(hostname + "\x00" + absPath))
 	return fmt.Sprintf("%x", h)[:12]
 }
 

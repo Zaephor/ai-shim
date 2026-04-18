@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Layout holds all resolved paths for the ai-shim storage hierarchy.
@@ -37,19 +39,40 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".ai-shim")
 }
 
+// validatePathSegment rejects names containing path separators or traversal sequences.
+func validatePathSegment(name, kind string) error {
+	if name == "" {
+		return fmt.Errorf("%s name cannot be empty", kind)
+	}
+	cleaned := filepath.Clean(name)
+	if cleaned != name || strings.Contains(cleaned, string(filepath.Separator)) || strings.Contains(cleaned, "..") {
+		return fmt.Errorf("%s name %q contains path traversal or separators", kind, name)
+	}
+	return nil
+}
+
 // AgentBin returns the bin directory path for the given agent.
-func (l Layout) AgentBin(agent string) string {
-	return filepath.Join(l.Root, "agents", agent, "bin")
+func (l Layout) AgentBin(agent string) (string, error) {
+	if err := validatePathSegment(agent, "agent"); err != nil {
+		return "", err
+	}
+	return filepath.Join(l.Root, "agents", agent, "bin"), nil
 }
 
 // AgentCache returns the cache directory path for the given agent.
-func (l Layout) AgentCache(agent string) string {
-	return filepath.Join(l.Root, "agents", agent, "cache")
+func (l Layout) AgentCache(agent string) (string, error) {
+	if err := validatePathSegment(agent, "agent"); err != nil {
+		return "", err
+	}
+	return filepath.Join(l.Root, "agents", agent, "cache"), nil
 }
 
 // ProfileHome returns the home directory path for the given profile.
-func (l Layout) ProfileHome(profile string) string {
-	return filepath.Join(l.Root, "profiles", profile, "home")
+func (l Layout) ProfileHome(profile string) (string, error) {
+	if err := validatePathSegment(profile, "profile"); err != nil {
+		return "", err
+	}
+	return filepath.Join(l.Root, "profiles", profile, "home"), nil
 }
 
 // ToolCachePath returns the host path for a tool's persistent cache directory.
@@ -57,19 +80,40 @@ func (l Layout) ProfileHome(profile string) string {
 //   - "" or "global": ~/.ai-shim/shared/cache/{tool-name}/
 //   - "profile":      ~/.ai-shim/profiles/{profile}/cache/{tool-name}/
 //   - "agent":        ~/.ai-shim/agents/{agent}/cache/{tool-name}/
-func ToolCachePath(layout Layout, toolName, cacheScope, agent, profile string) string {
+func ToolCachePath(layout Layout, toolName, cacheScope, agent, profile string) (string, error) {
+	if err := validatePathSegment(toolName, "tool"); err != nil {
+		return "", err
+	}
 	switch cacheScope {
 	case "profile":
-		return filepath.Join(layout.Root, "profiles", profile, "cache", toolName)
+		if err := validatePathSegment(profile, "profile"); err != nil {
+			return "", err
+		}
+		return filepath.Join(layout.Root, "profiles", profile, "cache", toolName), nil
 	case "agent":
-		return filepath.Join(layout.Root, "agents", agent, "cache", toolName)
+		if err := validatePathSegment(agent, "agent"); err != nil {
+			return "", err
+		}
+		return filepath.Join(layout.Root, "agents", agent, "cache", toolName), nil
 	default: // "" or "global"
-		return filepath.Join(layout.SharedCache, toolName)
+		return filepath.Join(layout.SharedCache, toolName), nil
 	}
 }
 
 // EnsureDirectories creates all required directories for the given agent and profile.
 func (l Layout) EnsureDirectories(agent, profile string) error {
+	agentBin, err := l.AgentBin(agent)
+	if err != nil {
+		return err
+	}
+	agentCache, err := l.AgentCache(agent)
+	if err != nil {
+		return err
+	}
+	profileHome, err := l.ProfileHome(profile)
+	if err != nil {
+		return err
+	}
 	dirs := []string{
 		l.ConfigDir,
 		filepath.Join(l.ConfigDir, "agents"),
@@ -77,9 +121,9 @@ func (l Layout) EnsureDirectories(agent, profile string) error {
 		filepath.Join(l.ConfigDir, "agent-profiles"),
 		l.SharedBin,
 		l.SharedCache,
-		l.AgentBin(agent),
-		l.AgentCache(agent),
-		l.ProfileHome(profile),
+		agentBin,
+		agentCache,
+		profileHome,
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -94,7 +138,10 @@ func (l Layout) EnsureDirectories(agent, profile string) error {
 // Docker bind-mounts them. dataDirs are created as directories, dataFiles are
 // created as empty files (with parent directories).
 func (l Layout) EnsureAgentData(profile string, dataDirs, dataFiles []string) error {
-	home := l.ProfileHome(profile)
+	home, err := l.ProfileHome(profile)
+	if err != nil {
+		return err
+	}
 	for _, dir := range dataDirs {
 		if err := os.MkdirAll(filepath.Join(home, dir), 0755); err != nil {
 			return err

@@ -156,7 +156,11 @@ func extractBinaryFromTarGz(r io.Reader, dst io.Writer) error {
 		// component (GoReleaser places binaries at the archive root, but
 		// handle subdirectory layouts defensively).
 		if filepath.Base(hdr.Name) == "ai-shim" && hdr.Typeflag == tar.TypeReg {
-			if _, err := io.Copy(dst, tr); err != nil {
+			const maxBinarySize = 500 * 1024 * 1024 // 500 MB
+			if hdr.Size > maxBinarySize {
+				return fmt.Errorf("ai-shim binary in archive exceeds size limit (%d bytes)", hdr.Size)
+			}
+			if _, err := io.Copy(dst, io.LimitReader(tr, maxBinarySize)); err != nil {
 				return fmt.Errorf("extracting ai-shim from archive: %w", err)
 			}
 			return nil

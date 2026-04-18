@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -9,6 +10,7 @@ import (
 // Memory parses a human-readable memory string (e.g. "512m", "2g", "4g") into bytes.
 // Supported suffixes: k (KiB), m (MiB), g (GiB). No suffix = bytes.
 func Memory(s string) (int64, error) {
+	original := s
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" {
 		return 0, fmt.Errorf("empty memory value")
@@ -31,5 +33,9 @@ func Memory(s string) (int64, error) {
 	if val < 0 {
 		return 0, fmt.Errorf("memory value must be positive: %s", s)
 	}
-	return int64(val * float64(multiplier)), nil
+	result := val * float64(multiplier)
+	if result > float64(math.MaxInt64) {
+		return 0, fmt.Errorf("memory value %q overflows int64", original)
+	}
+	return int64(result), nil
 }

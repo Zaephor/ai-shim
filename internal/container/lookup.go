@@ -3,13 +3,24 @@ package container
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
+
+// containerName returns the Docker container name with the leading slash stripped.
+func containerName(c types.Container) string {
+	if len(c.Names) > 0 {
+		return strings.TrimPrefix(c.Names[0], "/")
+	}
+	return ""
+}
 
 // RunningSession describes a running container eligible for reattach.
 type RunningSession struct {
@@ -46,12 +57,9 @@ func FindRunningSession(ctx context.Context, cli *client.Client, agentName, prof
 	}
 
 	c := containers[0]
-	name := ""
-	if len(c.Names) > 0 {
-		name = c.Names[0]
-		if len(name) > 0 && name[0] == '/' {
-			name = name[1:]
-		}
+	name := containerName(c)
+	if c.Labels[LabelAgent] == "" {
+		return nil, fmt.Errorf("container %s missing required label %s", name, LabelAgent)
 	}
 
 	return &RunningSession{
@@ -86,12 +94,10 @@ func FindRunningSessionsInWorkspace(ctx context.Context, cli *client.Client, age
 
 	sessions := make([]RunningSession, 0, len(containers))
 	for _, c := range containers {
-		name := ""
-		if len(c.Names) > 0 {
-			name = c.Names[0]
-			if len(name) > 0 && name[0] == '/' {
-				name = name[1:]
-			}
+		name := containerName(c)
+		if c.Labels[LabelAgent] == "" {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping container %s: missing label %s\n", name, LabelAgent)
+			continue
 		}
 		sessions = append(sessions, RunningSession{
 			ContainerID:   c.ID,
@@ -128,13 +134,7 @@ func FindSessionByContainerName(ctx context.Context, cli *client.Client, name st
 
 	// Find exact name match (Docker names have leading /).
 	for _, c := range containers {
-		cName := ""
-		if len(c.Names) > 0 {
-			cName = c.Names[0]
-			if len(cName) > 0 && cName[0] == '/' {
-				cName = cName[1:]
-			}
-		}
+		cName := containerName(c)
 		if cName != name {
 			continue
 		}
@@ -147,6 +147,10 @@ func FindSessionByContainerName(ctx context.Context, cli *client.Client, name st
 		// Verify running.
 		if c.State != "running" {
 			return nil, fmt.Errorf("container %q is not running (state: %s)", name, c.State)
+		}
+
+		if c.Labels[LabelAgent] == "" {
+			return nil, fmt.Errorf("container %s missing required label %s", cName, LabelAgent)
 		}
 
 		return &RunningSession{
@@ -184,12 +188,10 @@ func FindAllRunningSessions(ctx context.Context, cli *client.Client, agentName, 
 
 	sessions := make([]RunningSession, 0, len(containers))
 	for _, c := range containers {
-		name := ""
-		if len(c.Names) > 0 {
-			name = c.Names[0]
-			if len(name) > 0 && name[0] == '/' {
-				name = name[1:]
-			}
+		name := containerName(c)
+		if c.Labels[LabelAgent] == "" {
+			fmt.Fprintf(os.Stderr, "ai-shim: skipping container %s: missing label %s\n", name, LabelAgent)
+			continue
 		}
 		sessions = append(sessions, RunningSession{
 			ContainerID:   c.ID,

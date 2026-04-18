@@ -27,9 +27,13 @@ func WatchRetries() int {
 	return n
 }
 
-// WatchLoop runs a function in a retry loop. It calls runFn repeatedly on
-// non-zero exit codes, up to maxRetries times. On zero exit (clean shutdown),
-// it stops immediately. It returns the last exit code and error.
+// WatchLoop repeatedly invokes runFn until it returns exit code 0 or the
+// retry limit is reached. Callers should use context cancellation within
+// runFn to enforce timeouts on individual runs.
+//
+// It calls runFn repeatedly on non-zero exit codes, up to maxRetries times.
+// On zero exit (clean shutdown), it stops immediately. It returns the last
+// exit code and error.
 //
 // runFn should return (exitCode, error). If error is non-nil, the loop stops.
 // sleepFn is called between retries (allows testing without real delays).

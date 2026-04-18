@@ -22,6 +22,20 @@ type Handle struct {
 	client  *client.Client
 }
 
+// isolatedName generates a unique network name with a random suffix for
+// isolated and unknown scopes.
+func isolatedName(agentName, profile, workspaceHash string) string {
+	suffix := make([]byte, 4)
+	if _, err := rand.Read(suffix); err != nil {
+		s := fmt.Sprintf("%x", time.Now().UnixNano())
+		if len(s) >= 8 {
+			s = s[:8]
+		}
+		return fmt.Sprintf("%s-%s-%s-%s-%s", prefix, agentName, profile, workspaceHash, s)
+	}
+	return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix[:4])
+}
+
 // ResolveName returns the deterministic network name for a given scope.
 func ResolveName(scope, agentName, profile, workspaceHash string) string {
 	switch scope {
@@ -34,18 +48,10 @@ func ResolveName(scope, agentName, profile, workspaceHash string) string {
 	case "profile-workspace":
 		return prefix + "-" + profile + "-" + workspaceHash
 	case "isolated", "":
-		suffix := make([]byte, 4)
-		if _, err := rand.Read(suffix); err != nil {
-			suffix = []byte(fmt.Sprintf("%x", time.Now().UnixNano())[:8])
-		}
-		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix[:4])
+		return isolatedName(agentName, profile, workspaceHash)
 	default:
 		// Unknown scope defaults to isolated
-		suffix := make([]byte, 4)
-		if _, err := rand.Read(suffix); err != nil {
-			suffix = []byte(fmt.Sprintf("%x", time.Now().UnixNano())[:8])
-		}
-		return fmt.Sprintf("%s-%s-%s-%s-%x", prefix, agentName, profile, workspaceHash, suffix[:4])
+		return isolatedName(agentName, profile, workspaceHash)
 	}
 }
 

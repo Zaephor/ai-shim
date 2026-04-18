@@ -21,7 +21,7 @@ func TestDebug_Verbose(t *testing.T) {
 }
 
 func TestDebug_NotVerbose(t *testing.T) {
-	t.Setenv("AI_SHIM_VERBOSE", "0")
+	t.Setenv("AI_SHIM_VERBOSE", "")
 	Init()
 	assert.False(t, IsVerbose())
 }
@@ -80,7 +80,7 @@ func TestDebugEnv_MasksSecretsInOutput(t *testing.T) {
 }
 
 func TestDebug_NoOutputWhenNotVerbose(t *testing.T) {
-	t.Setenv("AI_SHIM_VERBOSE", "0")
+	t.Setenv("AI_SHIM_VERBOSE", "")
 	Init()
 
 	// Should not panic when not verbose

@@ -53,6 +53,24 @@ func TestMaskSecrets_ValuePatterns(t *testing.T) {
 	}
 }
 
+func TestMaskSecrets_NewPrefixes(t *testing.T) {
+	env := map[string]string{
+		"VAR1": "ghp_abc123",
+		"VAR2": "gho_def456",
+		"VAR3": "glpat-xyz789",
+		"VAR4": "xoxb-some-token",
+		"VAR5": "xoxp-another-token",
+	}
+
+	masked := MaskSecrets(env)
+
+	for key := range env {
+		if masked[key] != "***" {
+			t.Errorf("expected %s to be masked by value pattern, got %q", key, masked[key])
+		}
+	}
+}
+
 func TestMaskSecrets_SafeValues(t *testing.T) {
 	env := map[string]string{
 		"HOME":   "/home/user",

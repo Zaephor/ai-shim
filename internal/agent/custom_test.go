@@ -71,12 +71,21 @@ func TestLoadCustomAgents_EmptyFile(t *testing.T) {
 	assert.Nil(t, customs)
 }
 
-func TestSetCustomAgents_OverrideBuiltin(t *testing.T) {
-	// Save and restore customs
+func withCustomAgents(t *testing.T, agents map[string]Definition) {
+	t.Helper()
+	customsMu.Lock()
 	orig := customs
-	defer func() { customs = orig }()
+	customs = agents
+	customsMu.Unlock()
+	t.Cleanup(func() {
+		customsMu.Lock()
+		customs = orig
+		customsMu.Unlock()
+	})
+}
 
-	SetCustomAgents(map[string]Definition{
+func TestSetCustomAgents_OverrideBuiltin(t *testing.T) {
+	withCustomAgents(t, map[string]Definition{
 		"claude-code": {
 			Name:        "claude-code",
 			InstallType: "npm",
@@ -93,10 +102,7 @@ func TestSetCustomAgents_OverrideBuiltin(t *testing.T) {
 }
 
 func TestSetCustomAgents_NewAgent(t *testing.T) {
-	orig := customs
-	defer func() { customs = orig }()
-
-	SetCustomAgents(map[string]Definition{
+	withCustomAgents(t, map[string]Definition{
 		"new-agent": {
 			Name:        "new-agent",
 			InstallType: "pip",
@@ -128,8 +134,7 @@ func TestSetCustomAgents_NewAgent(t *testing.T) {
 }
 
 func TestSetCustomAgents_Nil(t *testing.T) {
-	orig := customs
-	defer func() { customs = orig }()
+	withCustomAgents(t, nil)
 
 	SetCustomAgents(map[string]Definition{
 		"test": {Name: "test"},
