@@ -44,6 +44,14 @@ func TestBuildSpec_DefaultImageAndHostname(t *testing.T) {
 	assert.Equal(t, DefaultHostname, spec.Hostname)
 }
 
+func TestBuildSpec_LabelRoleIsAgent(t *testing.T) {
+	p := defaultBuildParams()
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+	assert.Equal(t, "agent", spec.Labels[LabelRole],
+		"agent containers must carry role=agent so the session picker excludes sidecars")
+}
+
 func TestBuildSpec_ConfigOverridesImage(t *testing.T) {
 	p := defaultBuildParams()
 	p.Config.Image = "custom/image:latest"
