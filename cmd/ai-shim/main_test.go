@@ -360,7 +360,7 @@ func TestRunManage_ManageSubcommandHelps(t *testing.T) {
 		"agents", "profiles", "config", "doctor", "symlinks",
 		"dry-run", "cleanup", "status", "backup", "restore",
 		"disk-usage", "agent-versions", "reinstall", "exec",
-		"attach", "watch", "switch-profile",
+		"attach", "watch", "switch-profile", "warm",
 	}
 	for _, sub := range subcommands {
 		t.Run(sub, func(t *testing.T) {
@@ -733,6 +733,27 @@ func TestRunManage_UnknownManageSubcommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "profiles")
 }
 
+func TestRunManage_ManageWarmMissingArgs(t *testing.T) {
+	err := runManage([]string{"manage", "warm"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestRunManage_ManageWarmHelp(t *testing.T) {
+	err := runManage([]string{"manage", "warm", "--help"})
+	assert.NoError(t, err)
+}
+
+func TestRunManage_ManageWarmUnknownAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	require.NoError(t, runManage([]string{"init"}))
+
+	err := runManage([]string{"manage", "warm", "nonexistent-agent-xyz"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown agent")
+}
+
 func TestRunManage_ManageStatusJSON(t *testing.T) {
 	skipIfNoDocker(t)
 	t.Setenv("AI_SHIM_JSON", "1")
@@ -797,4 +818,22 @@ func TestInitIdempotency(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(afterProfile), "my_profile_setting: enabled",
 		"init clobbered profile config — user config was lost")
+}
+
+func TestRunManage_DeleteProfileHelp(t *testing.T) {
+	err := runManage([]string{"manage", "delete-profile", "--help"})
+	assert.NoError(t, err, "delete-profile --help should work")
+}
+
+func TestRunManage_DeleteProfileMissingArg(t *testing.T) {
+	err := runManage([]string{"manage", "delete-profile"})
+	assert.Error(t, err, "delete-profile with no arg should error")
+	assert.Contains(t, err.Error(), "usage")
+}
+
+func TestManageHelpIncludesDeleteProfile(t *testing.T) {
+	// The manage help text should list delete-profile as a subcommand.
+	// We test this by checking printSubcommandHelp succeeds.
+	err := printSubcommandHelp("delete-profile")
+	assert.NoError(t, err, "delete-profile should be in the subcommand help map")
 }

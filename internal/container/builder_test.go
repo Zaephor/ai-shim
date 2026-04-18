@@ -3,6 +3,7 @@ package container
 import (
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -1055,4 +1056,96 @@ func TestBuildSpec_PwdFallbackToOsGetwdWhenEmpty(t *testing.T) {
 	require.NotNil(t, wsMount, "workspace bind mount (Target == container workdir) must exist")
 	assert.Equal(t, cwdDir, wsMount.Source,
 		"with Pwd empty, workspace bind mount Source should be os.Getwd()")
+}
+
+func TestWarmEntrypoint_ReplacesExecLine(t *testing.T) {
+	p := defaultBuildParams()
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	// Before warm: entrypoint should contain exec
+	original := spec.Entrypoint[2]
+	assert.Contains(t, original, "\nexec ")
+
+	err = WarmEntrypoint(&spec)
+	require.NoError(t, err)
+
+	// After warm: no exec line, ends with exit 0
+	assert.NotContains(t, spec.Entrypoint[2], "\nexec ")
+	assert.Contains(t, spec.Entrypoint[2], "\nexit 0\n")
+
+	// Provisioning prefix is preserved
+	assert.Contains(t, spec.Entrypoint[2], "set -e")
+
+	// Container is ephemeral
+	assert.False(t, spec.Persistent)
+	assert.False(t, spec.TTY)
+	assert.False(t, spec.Stdin)
+}
+
+func TestWarmEntrypoint_ProducesValidShell(t *testing.T) {
+	p := defaultBuildParams()
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+	require.NoError(t, WarmEntrypoint(&spec))
+
+	script := spec.Entrypoint[2]
+
+	// Validate with bash -n (or sh -n as fallback)
+	shellBin := ""
+	for _, name := range []string{"bash", "sh"} {
+		if path, lookErr := exec.LookPath(name); lookErr == nil {
+			shellBin = path
+			break
+		}
+	}
+	if shellBin == "" {
+		t.Skip("no bash or sh available; skipping syntax check")
+	}
+
+	f, err := os.CreateTemp(t.TempDir(), "warm-*.sh")
+	require.NoError(t, err)
+	_, err = f.WriteString(script)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	out, err := exec.Command(shellBin, "-n", f.Name()).CombinedOutput()
+	require.NoError(t, err, "shell syntax check failed:\n%s\n---script---\n%s", out, script)
+}
+
+func TestWarmEntrypoint_PreservesProvisioningScript(t *testing.T) {
+	p := defaultBuildParams()
+	p.Config.Tools = map[string]config.ToolDef{
+		"gh": {Type: "binary", URL: "https://example.com/gh", Binary: "gh"},
+	}
+	p.Config.ToolsOrder = []string{"gh"}
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	// Tool provisioning should be in the original
+	assert.Contains(t, spec.Entrypoint[2], "gh")
+
+	require.NoError(t, WarmEntrypoint(&spec))
+
+	// Tool provisioning is still there after warm
+	assert.Contains(t, spec.Entrypoint[2], "gh")
+	assert.NotContains(t, spec.Entrypoint[2], "\nexec ")
+}
+
+func TestWarmEntrypoint_BadEntrypointShape(t *testing.T) {
+	spec := ContainerSpec{
+		Entrypoint: []string{"bash", "script.sh"},
+	}
+	err := WarmEntrypoint(&spec)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected entrypoint shape")
+}
+
+func TestWarmEntrypoint_NoExecLine(t *testing.T) {
+	spec := ContainerSpec{
+		Entrypoint: []string{"sh", "-c", "echo hello\n"},
+	}
+	err := WarmEntrypoint(&spec)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no exec line")
 }

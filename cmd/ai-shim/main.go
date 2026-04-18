@@ -257,6 +257,7 @@ Commands:
   manage status                  Show running containers
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
+  manage warm <agent> [profile]  Pre-warm image and caches for an agent
   manage exec <name> <cmd...>   Execute command in running container
   manage attach <container-name>  Reattach to a running container by name
   manage stop <agent> [profile]  Stop a running session
@@ -298,6 +299,20 @@ func formatAgentList() string {
 		s += "  " + name + "\n"
 	}
 	return s
+}
+
+// formatBytesMain formats a byte count for human-readable output.
+func formatBytesMain(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMG"[exp])
 }
 
 func runManage(args []string) error {
@@ -480,6 +495,8 @@ Subcommands:
   logs            Show launch/exit logs or container logs
   agent-versions  Show installed agent versions
   reinstall       Force reinstall an agent
+  delete-profile  Remove a profile and its associated data
+  warm            Pre-warm image and caches for an agent
 `)
 			return nil
 		}
@@ -511,6 +528,8 @@ func printSubcommandHelp(cmd string) error {
 		"watch":          "Usage: ai-shim manage watch <agent> [profile]\n\n  Launch an agent and restart it on crash.\n  Set AI_SHIM_WATCH_RETRIES to control max restarts (default 3).",
 		"logs":           "Usage: ai-shim manage logs [agent] [profile]\n\n  Without arguments: show the launch/exit log.\n  With agent [profile]: show Docker container logs for the most recent matching container.",
 		"switch-profile": "Usage: ai-shim manage switch-profile <profile>\n\n  Set the default profile used when no profile is specified.",
+		"delete-profile": "Usage: ai-shim manage delete-profile <profile>\n\n  Remove a profile's runtime data (home directory, caches) and associated\n  agent-profile configs. The profile's own config YAML is retained.\n  Refuses to proceed if any sessions are running for the profile.",
+		"warm":           "Usage: ai-shim manage warm <agent> [profile]\n\n  Pre-warm the container image and agent install caches.\n  Pulls the image, provisions tools, and installs the agent without\n  launching it. Subsequent launches skip all first-run setup.",
 	}
 	if help, ok := helps[cmd]; ok {
 		fmt.Println(help)
@@ -914,8 +933,85 @@ func runManageSubcommand(args []string) error {
 		fmt.Printf("Default profile set to: %s\n", args[1])
 		return nil
 
+	case "warm":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage warm <agent> [profile]")
+		}
+		agentName := args[1]
+		profile := "default"
+		if len(args) > 2 {
+			profile = args[2]
+		}
+		return manageWarm(layout, agentName, profile)
+
+	case "delete-profile":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: ai-shim manage delete-profile <profile>")
+		}
+		profileName := args[1]
+
+		// Safety: refuse if any sessions are running for this profile.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		runner, err := container.NewRunner(ctx)
+		if err != nil {
+			return fmt.Errorf("connecting to Docker: %w", err)
+		}
+		defer func() { _ = runner.Close() }()
+
+		// Check all agents for running sessions using this profile.
+		var runningSessions []container.RunningSession
+		for _, agentName := range agent.Names() {
+			sessions, findErr := container.FindAllRunningSessions(ctx, runner.Client(), agentName, profileName)
+			if findErr != nil {
+				continue // best-effort; Docker may not have any matching containers
+			}
+			runningSessions = append(runningSessions, sessions...)
+		}
+		// Also check custom agents that may not be in the built-in list.
+		if customDefs := agent.LoadCustomAgents(layout.ConfigDir); customDefs != nil {
+			agent.SetCustomAgents(customDefs)
+			for _, agentName := range agent.Names() {
+				sessions, findErr := container.FindAllRunningSessions(ctx, runner.Client(), agentName, profileName)
+				if findErr != nil {
+					continue
+				}
+				runningSessions = append(runningSessions, sessions...)
+			}
+		}
+
+		if len(runningSessions) > 0 {
+			fmt.Fprintf(os.Stderr, "Cannot delete profile %q: %d running session(s):\n", profileName, len(runningSessions))
+			for _, s := range runningSessions {
+				fmt.Fprintf(os.Stderr, "  %s (agent=%s, workspace=%s)\n", s.ContainerName, s.AgentName, s.WorkspaceDir)
+			}
+			return fmt.Errorf("stop running sessions first")
+		}
+
+		// Print what will be removed.
+		profileDir := filepath.Join(layout.Root, "profiles", profileName)
+		fmt.Fprintf(os.Stderr, "Removing profile data: %s\n", profileDir)
+
+		result, err := cli.DeleteProfile(layout, profileName)
+		if err != nil {
+			return fmt.Errorf("deleting profile %s: %w", profileName, err)
+		}
+
+		// Print summary.
+		fmt.Fprintf(os.Stderr, "Profile home removed (%s freed)\n", formatBytesMain(result.BytesFreed))
+		if len(result.AgentProfilesRemoved) > 0 {
+			fmt.Fprintf(os.Stderr, "Agent-profile configs removed:\n")
+			for _, name := range result.AgentProfilesRemoved {
+				fmt.Fprintf(os.Stderr, "  %s\n", name)
+			}
+		}
+		if result.ConfigRetainedPath != "" {
+			fmt.Fprintf(os.Stderr, "Profile config retained at: %s\n", result.ConfigRetainedPath)
+		}
+		return nil
+
 	default:
-		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, attach, watch, switch-profile", args[0])
+		return fmt.Errorf("unknown manage subcommand: %s\nAvailable: agents, profiles, config, doctor, symlinks, dry-run, status, backup, restore, disk-usage, cleanup, agent-versions, reinstall, exec, attach, watch, switch-profile, delete-profile, warm", args[0])
 	}
 }
 
@@ -1284,6 +1380,107 @@ func runAgent(name string, args []string) (int, error) {
 	}
 
 	return result.ExitCode, nil
+}
+
+// manageWarm pre-warms the container image and agent install caches for the
+// given agent+profile. It resolves config, pulls the image, builds the
+// container spec, replaces the agent exec with a no-op, runs the container
+// to completion (so all provisioning and install caches populate), and
+// removes it.
+func manageWarm(layout storage.Layout, agentName, profileName string) error {
+	// Load custom agent definitions
+	if customDefs := agent.LoadCustomAgents(layout.ConfigDir); customDefs != nil {
+		agent.SetCustomAgents(customDefs)
+	}
+
+	agentDef, ok := agent.Lookup(agentName)
+	if !ok {
+		return fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s", agentName, formatAgentList())
+	}
+
+	platInfo := platform.Detect()
+
+	if err := layout.EnsureDirectories(agentName, profileName); err != nil {
+		return fmt.Errorf("setting up directories: %w", err)
+	}
+
+	cfg, err := config.Resolve(layout.ConfigDir, agentName, profileName)
+	if err != nil {
+		return fmt.Errorf("resolving config: %w", err)
+	}
+	if errs := cfg.Validate(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "ai-shim: config error: %s\n", e)
+		}
+		return fmt.Errorf("invalid config: %d error(s)", len(errs))
+	}
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting working directory: %w", err)
+	}
+
+	// Pre-create agent data dirs/files for correct ownership
+	if err := layout.EnsureAgentData(profileName, agentDef.DataDirs, agentDef.DataFiles); err != nil {
+		return fmt.Errorf("setting up agent data: %w", err)
+	}
+	for _, name := range cfg.AllowAgents {
+		if allowed, ok := agent.Lookup(name); ok {
+			if err := layout.EnsureAgentData(profileName, allowed.DataDirs, allowed.DataFiles); err != nil {
+				return fmt.Errorf("setting up agent data for %s: %w", name, err)
+			}
+		}
+	}
+
+	ctx := context.Background()
+	runner, err := container.NewRunner(ctx)
+	if err != nil {
+		return fmt.Errorf("creating container runner: %w", err)
+	}
+	defer func() { _ = runner.Close() }()
+
+	image := cfg.GetImage()
+	if err := runner.EnsureImage(ctx, image); err != nil {
+		return fmt.Errorf("preparing image: %w", err)
+	}
+
+	imageUser, err := runner.InspectImageUser(ctx, image)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: could not inspect image user, defaulting to /home/user: %v\n", err)
+		imageUser = container.ImageUser{HomeDir: "/home/user", Username: "user"}
+	}
+
+	spec, err := container.BuildSpec(container.BuildParams{
+		Config:   cfg,
+		Agent:    agentDef,
+		Profile:  profileName,
+		Layout:   layout,
+		Platform: platInfo,
+		HomeDir:  imageUser.HomeDir,
+		Pwd:      pwd,
+	})
+	if err != nil {
+		return fmt.Errorf("building container spec: %w", err)
+	}
+
+	// Replace the agent exec with a no-op so provisioning runs but the
+	// agent binary never launches.
+	if err := container.WarmEntrypoint(&spec); err != nil {
+		return fmt.Errorf("preparing warm entrypoint: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "ai-shim: warming %s/%s...\n", agentName, profileName)
+
+	result, err := runner.Run(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("running warm container: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("warm container exited with code %d", result.ExitCode)
+	}
+
+	fmt.Fprintf(os.Stderr, "ai-shim: warm complete for %s/%s\n", agentName, profileName)
+	return nil
 }
 
 // promptReattach asks the user what to do with one or more existing running

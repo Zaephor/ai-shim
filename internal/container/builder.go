@@ -534,6 +534,34 @@ func resolveSecurityProfile(profile string) (securityOpt []string, capDrop []str
 	return
 }
 
+// WarmEntrypoint rewrites a ContainerSpec's entrypoint so the provisioning
+// and install scripts run to completion but the final `exec <agent-binary>`
+// is replaced with a no-op exit. The spec is also made non-persistent and
+// non-interactive so the container auto-removes after the warm run.
+//
+// Precondition: spec.Entrypoint must be ["sh", "-c", <script>] as produced
+// by BuildSpec. Returns an error if the entrypoint shape is unexpected or
+// the exec line cannot be found.
+func WarmEntrypoint(spec *ContainerSpec) error {
+	if len(spec.Entrypoint) != 3 || spec.Entrypoint[0] != "sh" || spec.Entrypoint[1] != "-c" {
+		return fmt.Errorf("unexpected entrypoint shape (len=%d)", len(spec.Entrypoint))
+	}
+	script := spec.Entrypoint[2]
+	idx := strings.LastIndex(script, "\nexec ")
+	if idx < 0 {
+		return fmt.Errorf("entrypoint script has no exec line to replace")
+	}
+	// Replace everything from the exec line to the end with a no-op.
+	spec.Entrypoint[2] = script[:idx] + "\nexit 0\n"
+
+	// Make the container ephemeral and non-interactive.
+	spec.Persistent = false
+	spec.TTY = false
+	spec.Stdin = false
+	spec.Reattach = false
+	return nil
+}
+
 // ValidateConfigVolumes checks all volume mount paths for security issues.
 func ValidateConfigVolumes(volumes []string) []error {
 	var errs []error
