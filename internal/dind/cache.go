@@ -29,7 +29,7 @@ const (
 // the runner's EnsureImage logic — the Docker SDK's ContainerCreate does NOT
 // auto-pull missing images (unlike the `docker run` CLI), so the cache image
 // must be pulled explicitly before the cache container is created.
-func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir string) (string, error) {
+func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir, version string) (string, error) {
 	cli := runner.Client()
 
 	// Check if cache is already running
@@ -65,9 +65,10 @@ func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir stri
 			"REGISTRY_STORAGE_DELETE_ENABLED=true",
 		},
 		Labels: map[string]string{
-			ai_container.LabelBase:  "true",
-			ai_container.LabelRole:  "cache",
-			ai_container.LabelCache: "true",
+			ai_container.LabelBase:    "true",
+			ai_container.LabelRole:    "cache",
+			ai_container.LabelCache:   "true",
+			ai_container.LabelVersion: version,
 		},
 	}
 

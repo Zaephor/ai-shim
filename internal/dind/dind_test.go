@@ -207,7 +207,7 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache")
 	os.MkdirAll(cacheDir, 0755)
 	t.Cleanup(func() { os.RemoveAll(cacheDir) })
-	addr, err := EnsureCache(ctx, runner, cacheDir)
+	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err)
 	assert.Contains(t, addr, "host.docker.internal")
 	assert.Contains(t, addr, CachePort)
@@ -254,7 +254,7 @@ func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 	require.NoError(t, os.MkdirAll(cacheDir, 0755))
 	t.Cleanup(func() { _ = os.RemoveAll(cacheDir) })
 
-	addr, err := EnsureCache(ctx, runner, cacheDir)
+	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err, "EnsureCache must pull the cache image when it is not present locally")
 	assert.Contains(t, addr, "host.docker.internal")
 	assert.Contains(t, addr, CachePort)

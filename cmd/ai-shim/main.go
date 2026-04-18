@@ -91,11 +91,9 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 // so any host path the agent will hand to DIND must also exist at that
 // same path inside DIND.
 //
-// Three payloads are propagated:
+// Two payloads are propagated:
 //   - Workspace (pwd → containerWorkdir): so docker-against-DIND against
 //     files in the repo resolves correctly.
-//   - Registry cache directory (same-path): so EnsureCache inside DIND
-//     can bind-mount it. Only included when cacheBind is non-empty.
 //   - Tool caches (same-path): every tool with data_dir=true gets its
 //     host ToolCachePath bound at an identical path inside DIND. Without
 //     this, an install script that calls `docker -v $TOOL_CACHE_DIR:/x`
@@ -104,20 +102,13 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 //
 // ToolsOrder is consulted when non-empty so mount order is deterministic;
 // otherwise the tools map is iterated directly.
-func buildDINDSharedMounts(pwd, workdir, cacheBind string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) ([]mount.Mount, error) {
+func buildDINDSharedMounts(pwd, workdir string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) ([]mount.Mount, error) {
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeBind,
 			Source: pwd,
 			Target: workdir,
 		},
-	}
-	if cacheBind != "" {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: cacheBind,
-			Target: cacheBind,
-		})
 	}
 	// Walk tools in a deterministic order when possible so the mount
 	// slice has a stable shape (matters for tests and for diffability).
@@ -1210,7 +1201,8 @@ func runAgent(name string, args []string) (int, error) {
 		LogDir:   logDir,
 		// Pin pwd at this layer so BuildSpec does not re-read
 		// os.Getwd() and risk divergence in nested scenarios.
-		Pwd: pwd,
+		Pwd:     pwd,
+		Version: version,
 	})
 	if err != nil {
 		return 1, fmt.Errorf("building container spec: %w", err)
@@ -1266,7 +1258,7 @@ func runAgent(name string, args []string) (int, error) {
 		var cacheAddr string
 		if cfg.IsCacheEnabled() {
 			cacheDir := filepath.Join(layout.Root, "shared", "registry-cache")
-			addr, err := dind.EnsureCache(ctx, runner, cacheDir)
+			addr, err := dind.EnsureCache(ctx, runner, cacheDir, version)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ai-shim: warning: registry cache unavailable, image pulls will be slower: %v\n", err)
 				fmt.Fprintf(os.Stderr, "ai-shim: hint: run 'ai-shim manage cleanup' if stale cache container exists\n")
@@ -1292,14 +1284,9 @@ func runAgent(name string, args []string) (int, error) {
 		// or resolves to an empty overlay. Propagate the workspace, the
 		// pull-through registry cache directory, and every tool cache
 		// (for tools with data_dir:true) at identical paths.
-		var cacheBind string
-		if cacheAddr != "" {
-			cacheBind = filepath.Join(layout.Root, "shared", "registry-cache")
-		}
 		dindSharedMounts, err := buildDINDSharedMounts(
 			pwd,
 			workspace.ContainerWorkdir(platInfo.Hostname, pwd),
-			cacheBind,
 			cfg.Tools,
 			cfg.ToolsOrder,
 			layout,
@@ -1328,6 +1315,7 @@ func runAgent(name string, args []string) (int, error) {
 			// denied" (docker:dind's "docker" group has GID 2375).
 			SocketGID:    platInfo.GID,
 			SharedMounts: dindSharedMounts,
+			Version:      version,
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
@@ -1457,6 +1445,7 @@ func manageWarm(layout storage.Layout, agentName, profileName string) error {
 		Platform: platInfo,
 		HomeDir:  imageUser.HomeDir,
 		Pwd:      pwd,
+		Version:  version,
 	})
 	if err != nil {
 		return fmt.Errorf("building container spec: %w", err)

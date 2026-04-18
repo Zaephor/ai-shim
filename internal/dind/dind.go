@@ -70,6 +70,7 @@ type Config struct {
 	// bind mounts from inside the sandbox resolve against the intended
 	// host content instead of an empty overlay directory.
 	SharedMounts []mount.Mount
+	Version      string // ai-shim version (informational label)
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -131,6 +132,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	}
 	labels[ai_container.LabelRole] = "dind"
 	labels[ai_container.LabelDIND] = "true"
+	labels[ai_container.LabelVersion] = cfg.Version
 	if cfg.CacheAddr != "" {
 		labels[ai_container.LabelUsesCache] = "true"
 	}
@@ -186,6 +188,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		Privileged:  true,
 		NetworkMode: container.NetworkMode(cfg.NetworkID),
 		Mounts:      mounts,
+		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 	}
 
 	// Use Sysbox if requested

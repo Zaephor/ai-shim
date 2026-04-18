@@ -47,7 +47,8 @@ type BuildParams struct {
 	// calling BuildSpec for an inner container) os.Getwd() returns the
 	// agent-internal view, not the host path, so callers must pin Pwd
 	// at the outermost layer and pass it through.
-	Pwd string
+	Pwd     string
+	Version string // ai-shim version that launched the container
 }
 
 // BuildSpec creates a ContainerSpec from the resolved parameters.
@@ -68,6 +69,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		LabelAgent:   p.Agent.Name,
 		LabelProfile: p.Profile,
 		LabelRole:    "agent",
+		LabelVersion: p.Version,
 	}
 
 	// Workspace labels are set after wsHash is computed below.

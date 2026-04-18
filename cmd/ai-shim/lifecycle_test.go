@@ -90,7 +90,7 @@ func TestDINDSessionFilters_IncludesWorkspace(t *testing.T) {
 // behaviour: the workspace is always propagated to the DIND sidecar.
 func TestBuildDINDSharedMounts_WorkspaceAlwaysPresent(t *testing.T) {
 	layout := storage.NewLayout(t.TempDir())
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", "", nil, nil, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	found := false
@@ -100,22 +100,6 @@ func TestBuildDINDSharedMounts_WorkspaceAlwaysPresent(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "workspace bind must be propagated to DIND")
-}
-
-// TestBuildDINDSharedMounts_CacheBindWhenEnabled covers existing base
-// behaviour for the registry-cache bind (same-path propagation).
-func TestBuildDINDSharedMounts_CacheBindWhenEnabled(t *testing.T) {
-	layout := storage.NewLayout(t.TempDir())
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", "/host/cache", nil, nil, layout, "claude-code", "default")
-	require.NoError(t, err)
-
-	found := false
-	for _, m := range mounts {
-		if m.Source == "/host/cache" && m.Target == "/host/cache" {
-			found = true
-		}
-	}
-	assert.True(t, found, "registry-cache bind must be propagated to DIND at identical path")
 }
 
 // TestBuildDINDSharedMounts_ToolCachesPropagated guards Fix #5: tools with
@@ -129,7 +113,7 @@ func TestBuildDINDSharedMounts_ToolCachesPropagated(t *testing.T) {
 		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"}, // no data_dir
 		"gvm": {Type: "custom", Install: "echo hi", DataDir: true, EnvVar: "GVM_ROOT", CacheScope: "profile"},
 	}
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", "", tools, []string{"nvm", "act", "gvm"}, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", tools, []string{"nvm", "act", "gvm"}, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	expectedNVM, err := storage.ToolCachePath(layout, "nvm", "", "claude-code", "default")
@@ -161,7 +145,7 @@ func TestBuildDINDSharedMounts_ToolCachesPropagated(t *testing.T) {
 // TestBuildDINDSharedMounts_NoToolsNoDIND covers the empty-tools case.
 func TestBuildDINDSharedMounts_NoToolsNoDIND(t *testing.T) {
 	layout := storage.NewLayout(t.TempDir())
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", "", nil, nil, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	// Only the workspace bind.
