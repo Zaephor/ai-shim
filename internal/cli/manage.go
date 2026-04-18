@@ -1469,6 +1469,77 @@ func stripDockerLogHeaders(data []byte) []byte {
 	return result
 }
 
+// DeleteProfileResult holds the outcome of a DeleteProfile operation.
+type DeleteProfileResult struct {
+	HomeRemoved          bool
+	BytesFreed           int64
+	AgentProfilesRemoved []string
+	ConfigRetainedPath   string
+}
+
+// DeleteProfile removes a profile's runtime data (home directory and any
+// profile-scoped cache) and associated agent-profile config files. It does
+// NOT remove the profile's own config YAML (config/profiles/<name>.yaml)
+// since that is user-authored configuration.
+//
+// The caller is responsible for checking that no sessions are running for
+// this profile before calling DeleteProfile.
+func DeleteProfile(layout storage.Layout, profileName string) (DeleteProfileResult, error) {
+	var result DeleteProfileResult
+
+	// The profile directory is profiles/<name>/ which contains home/ and
+	// optionally cache/ subdirectories.
+	profileDir := filepath.Join(layout.Root, "profiles", profileName)
+	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
+		return result, fmt.Errorf("profile %q does not exist", profileName)
+	}
+
+	// Measure size before removal for the summary.
+	size, _ := dirSize(profileDir)
+	result.BytesFreed = size
+
+	// Remove the entire profiles/<name>/ tree (home + cache).
+	if err := os.RemoveAll(profileDir); err != nil {
+		return result, fmt.Errorf("removing profile directory %s: %w", profileDir, err)
+	}
+	result.HomeRemoved = true
+
+	// Scan agent-profiles/ for configs matching *_<profileName>.yaml and
+	// *_<profileName>.yml. The naming convention is <agent>_<profile>.yaml.
+	apDir := filepath.Join(layout.ConfigDir, "agent-profiles")
+	suffixes := []string{"_" + profileName + ".yaml", "_" + profileName + ".yml"}
+	entries, err := os.ReadDir(apDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			for _, suffix := range suffixes {
+				if strings.HasSuffix(name, suffix) {
+					path := filepath.Join(apDir, name)
+					if rmErr := os.Remove(path); rmErr == nil {
+						result.AgentProfilesRemoved = append(result.AgentProfilesRemoved, name)
+					}
+					break
+				}
+			}
+		}
+	}
+	// Missing agent-profiles dir is fine — nothing to clean.
+
+	// Check whether the profile config YAML exists and note its path.
+	for _, ext := range []string{".yaml", ".yml"} {
+		cfgPath := filepath.Join(layout.ConfigDir, "profiles", profileName+ext)
+		if _, err := os.Stat(cfgPath); err == nil {
+			result.ConfigRetainedPath = cfgPath
+			break
+		}
+	}
+
+	return result, nil
+}
+
 func readDirNames(root, subdir string) ([]string, error) {
 	dirPath := filepath.Join(root, subdir)
 	entries, err := os.ReadDir(dirPath)

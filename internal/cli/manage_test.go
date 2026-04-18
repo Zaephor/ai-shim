@@ -1552,3 +1552,126 @@ func TestDoctorWithColor_ChecksDocker(t *testing.T) {
 	assert.Contains(t, output, "OK", "Docker should be OK since it is available")
 	assert.Contains(t, output, "Storage root", "should report storage root")
 }
+
+// --- DeleteProfile tests ---
+
+func TestDeleteProfile_RemovesProfileHome(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile home with some data
+	profileHome := layout.ProfileHome("work")
+	require.NoError(t, os.MkdirAll(profileHome, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileHome, "data.txt"), []byte("important"), 0644))
+
+	result, err := DeleteProfile(layout, "work")
+	require.NoError(t, err)
+
+	// Profile home directory should be gone
+	_, statErr := os.Stat(profileHome)
+	assert.True(t, os.IsNotExist(statErr), "profile home should be removed")
+
+	// Result should report what was removed
+	assert.True(t, result.HomeRemoved, "result should indicate home was removed")
+	assert.Greater(t, result.BytesFreed, int64(0), "should report bytes freed")
+}
+
+func TestDeleteProfile_RemovesAgentProfileConfigs(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile home
+	profileHome := layout.ProfileHome("work")
+	require.NoError(t, os.MkdirAll(profileHome, 0755))
+
+	// Create agent-profile configs matching this profile
+	apDir := filepath.Join(layout.ConfigDir, "agent-profiles")
+	require.NoError(t, os.MkdirAll(apDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(apDir, "claude-code_work.yaml"), []byte("image: test\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(apDir, "aider_work.yaml"), []byte("image: test\n"), 0644))
+	// This one should NOT be removed (different profile)
+	require.NoError(t, os.WriteFile(filepath.Join(apDir, "claude-code_personal.yaml"), []byte("image: test\n"), 0644))
+
+	result, err := DeleteProfile(layout, "work")
+	require.NoError(t, err)
+
+	// Matching agent-profile configs should be gone
+	_, err = os.Stat(filepath.Join(apDir, "claude-code_work.yaml"))
+	assert.True(t, os.IsNotExist(err), "claude-code_work.yaml should be removed")
+	_, err = os.Stat(filepath.Join(apDir, "aider_work.yaml"))
+	assert.True(t, os.IsNotExist(err), "aider_work.yaml should be removed")
+
+	// Non-matching config should still exist
+	_, err = os.Stat(filepath.Join(apDir, "claude-code_personal.yaml"))
+	assert.NoError(t, err, "claude-code_personal.yaml should be retained")
+
+	assert.Len(t, result.AgentProfilesRemoved, 2, "should report 2 agent-profile configs removed")
+}
+
+func TestDeleteProfile_RetainsProfileConfig(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile home
+	profileHome := layout.ProfileHome("work")
+	require.NoError(t, os.MkdirAll(profileHome, 0755))
+
+	// Create the profile's own config file (should NOT be removed)
+	profileConfigDir := filepath.Join(layout.ConfigDir, "profiles")
+	require.NoError(t, os.MkdirAll(profileConfigDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileConfigDir, "work.yaml"), []byte("image: custom\n"), 0644))
+
+	result, err := DeleteProfile(layout, "work")
+	require.NoError(t, err)
+
+	// Profile config should still exist
+	_, err = os.Stat(filepath.Join(profileConfigDir, "work.yaml"))
+	assert.NoError(t, err, "profile config YAML should be retained")
+
+	assert.Equal(t, filepath.Join(profileConfigDir, "work.yaml"), result.ConfigRetainedPath,
+		"result should include path of retained config")
+}
+
+func TestDeleteProfile_NonexistentProfile(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	_, err := DeleteProfile(layout, "nonexistent")
+	assert.Error(t, err, "should error for nonexistent profile")
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+func TestDeleteProfile_RemovesProfileCacheDir(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile home and cache
+	profileHome := layout.ProfileHome("work")
+	require.NoError(t, os.MkdirAll(profileHome, 0755))
+	cacheDir := filepath.Join(root, "profiles", "work", "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "tool-data"), []byte("cached"), 0644))
+
+	result, err := DeleteProfile(layout, "work")
+	require.NoError(t, err)
+
+	// The entire profiles/<name>/ dir should be gone (home + cache)
+	_, statErr := os.Stat(filepath.Join(root, "profiles", "work"))
+	assert.True(t, os.IsNotExist(statErr), "entire profile directory should be removed")
+	assert.True(t, result.HomeRemoved)
+}
+
+func TestDeleteProfile_NoAgentProfilesDir(t *testing.T) {
+	root := t.TempDir()
+	layout := storage.NewLayout(root)
+
+	// Create profile home but no config directory at all
+	profileHome := layout.ProfileHome("work")
+	require.NoError(t, os.MkdirAll(profileHome, 0755))
+
+	// Should succeed even without agent-profiles dir
+	result, err := DeleteProfile(layout, "work")
+	require.NoError(t, err)
+	assert.True(t, result.HomeRemoved)
+	assert.Empty(t, result.AgentProfilesRemoved)
+}
