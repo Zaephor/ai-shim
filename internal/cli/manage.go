@@ -1540,6 +1540,75 @@ func DeleteProfile(layout storage.Layout, profileName string) (DeleteProfileResu
 	return result, nil
 }
 
+// ShowOutputLog reads the persisted container output log for the most recent
+// container matching agent (and optionally profile) from the LogDir on disk.
+// This works even after the container has been removed because the output was
+// persisted at exit time by saveContainerOutput in runner.go.
+//
+// The container name pattern is: <agent>-<profile>-<wsHash>
+// When profile is empty, any profile matches.
+func ShowOutputLog(layout storage.Layout, agent, profile string) (string, error) {
+	logDir := filepath.Join(layout.Root, "logs")
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("no output logs found")
+		}
+		return "", err
+	}
+
+	// Find matching output.log files, sorted by modification time (newest first).
+	type candidate struct {
+		path    string
+		modTime time.Time
+	}
+	var candidates []candidate
+	suffix := container.OutputLogSuffix
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		// The base name (without suffix) is the container name.
+		base := strings.TrimSuffix(name, suffix)
+		if !strings.HasPrefix(base, agent) {
+			continue
+		}
+		// If profile is specified, check that it appears in the name.
+		if profile != "" && !strings.Contains(base, agent+"-"+profile) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		candidates = append(candidates, candidate{
+			path:    filepath.Join(logDir, name),
+			modTime: info.ModTime(),
+		})
+	}
+
+	if len(candidates) == 0 {
+		hint := agent
+		if profile != "" {
+			hint += "/" + profile
+		}
+		return "", fmt.Errorf("no output logs found for %s", hint)
+	}
+
+	// Pick the most recently modified file.
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].modTime.After(candidates[j].modTime)
+	})
+
+	data, err := os.ReadFile(candidates[0].path)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
+}
+
 func readDirNames(root, subdir string) ([]string, error) {
 	dirPath := filepath.Join(root, subdir)
 	entries, err := os.ReadDir(dirPath)

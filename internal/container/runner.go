@@ -1,6 +1,7 @@
 package container
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -515,6 +516,11 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 	case status := <-statusCh:
 		<-outputDone
 		exitCode := int(status.StatusCode)
+
+		// Best-effort: persist the container's last N lines of output so
+		// users can debug crashes after the container is gone.
+		r.captureContainerOutput(containerID, spec)
+
 		if exitCode != 0 {
 			r.saveExitLog(spec.LogDir, spec.Name, exitCode)
 			fmt.Fprintf(os.Stderr, "\nai-shim: container %s exited with code %d\n", spec.Name, exitCode)
@@ -576,6 +582,94 @@ func (r *Runner) InspectImageUser(ctx context.Context, image string) (ImageUser,
 	}
 
 	return result, nil
+}
+
+// OutputLogTailLines is the maximum number of trailing lines captured from
+// the container's combined stdout/stderr when persisting output on exit.
+const OutputLogTailLines = 100
+
+// OutputLogSuffix is the file suffix used for persisted container output logs.
+const OutputLogSuffix = ".output.log"
+
+// saveContainerOutput reads up to tailLines trailing lines from r and writes
+// them to <logDir>/<name>.output.log. It is best-effort: any error is
+// warned on stderr but never propagated. The reader r is consumed until EOF.
+func saveContainerOutput(logDir, name string, r io.Reader, tailLines int) {
+	if logDir == "" || r == nil {
+		return
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: output log: cannot create log dir %s: %v\n", logDir, err)
+		return
+	}
+
+	// Read all lines, keeping only the last tailLines.
+	scanner := bufio.NewScanner(r)
+	// Allow up to 1 MB per line to handle wide terminal output.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var ring []string
+	for scanner.Scan() {
+		ring = append(ring, scanner.Text())
+		if len(ring) > tailLines {
+			ring = ring[1:]
+		}
+	}
+	// scanner.Err() is intentionally ignored — partial reads are fine.
+
+	if len(ring) == 0 {
+		return
+	}
+
+	logFile := filepath.Join(logDir, name+OutputLogSuffix)
+	var b strings.Builder
+	for _, line := range ring {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(logFile, []byte(b.String()), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: output log: cannot write %s: %v\n", logFile, err)
+	}
+}
+
+// captureContainerOutput fetches the container's logs via the Docker API and
+// persists the last OutputLogTailLines lines to disk. For AutoRemove=true
+// containers the container may already be gone by the time we call
+// ContainerLogs — that is handled gracefully (skip, no error).
+func (r *Runner) captureContainerOutput(containerID string, spec ContainerSpec) {
+	if spec.LogDir == "" || spec.Name == "" {
+		return
+	}
+	tail := fmt.Sprintf("%d", OutputLogTailLines)
+	logReader, err := r.client.ContainerLogs(context.Background(), containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       tail,
+	})
+	if err != nil {
+		// Expected for AutoRemove containers — the container is already gone.
+		logging.Debug("output log: ContainerLogs failed for %s: %v", spec.Name, err)
+		return
+	}
+	defer func() { _ = logReader.Close() }()
+
+	// Docker multiplexes stdout/stderr with an 8-byte header per frame when
+	// TTY is false. For TTY containers the stream is raw bytes. Demux
+	// non-TTY output into a single combined stream via stdcopy.
+	var src io.Reader
+	if spec.TTY {
+		src = logReader
+	} else {
+		pr, pw := io.Pipe()
+		go func() {
+			// StdCopy demuxes into pw (combined). Ignore the returned
+			// byte counts — we only care about the content.
+			_, _ = stdcopy.StdCopy(pw, pw, logReader)
+			pw.Close()
+		}()
+		src = pr
+	}
+
+	saveContainerOutput(spec.LogDir, spec.Name, src, OutputLogTailLines)
 }
 
 // saveExitLog appends an exit log entry to a log file for the container.

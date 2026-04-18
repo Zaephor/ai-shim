@@ -1675,3 +1675,80 @@ func TestDeleteProfile_NoAgentProfilesDir(t *testing.T) {
 	assert.True(t, result.HomeRemoved)
 	assert.Empty(t, result.AgentProfilesRemoved)
 }
+
+// --- ShowOutputLog tests ---
+
+func TestShowOutputLog_NoLogsDir(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	_, err := ShowOutputLog(layout, "claude-code", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no output logs found")
+}
+
+func TestShowOutputLog_NoMatchingFiles(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(logDir, "other-agent-default-abc"+container.OutputLogSuffix),
+		[]byte("some output\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	_, err := ShowOutputLog(layout, "claude-code", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no output logs found for claude-code")
+}
+
+func TestShowOutputLog_MatchesAgent(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(logDir, "claude-code-default-abc123"+container.OutputLogSuffix),
+		[]byte("crash output here\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowOutputLog(layout, "claude-code", "")
+	require.NoError(t, err)
+	assert.Equal(t, "crash output here\n", output)
+}
+
+func TestShowOutputLog_MatchesAgentAndProfile(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(logDir, "claude-code-work-abc123"+container.OutputLogSuffix),
+		[]byte("work output\n"), 0644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(logDir, "claude-code-personal-def456"+container.OutputLogSuffix),
+		[]byte("personal output\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowOutputLog(layout, "claude-code", "work")
+	require.NoError(t, err)
+	assert.Equal(t, "work output\n", output)
+	assert.NotContains(t, output, "personal")
+}
+
+func TestShowOutputLog_PicksMostRecent(t *testing.T) {
+	root := t.TempDir()
+	logDir := filepath.Join(root, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	// Write older file first
+	older := filepath.Join(logDir, "claude-code-default-old"+container.OutputLogSuffix)
+	require.NoError(t, os.WriteFile(older, []byte("old output\n"), 0644))
+	// Ensure different mtime
+	oldTime := time.Now().Add(-1 * time.Hour)
+	require.NoError(t, os.Chtimes(older, oldTime, oldTime))
+
+	// Write newer file
+	newer := filepath.Join(logDir, "claude-code-default-new"+container.OutputLogSuffix)
+	require.NoError(t, os.WriteFile(newer, []byte("new output\n"), 0644))
+
+	layout := storage.NewLayout(root)
+	output, err := ShowOutputLog(layout, "claude-code", "")
+	require.NoError(t, err)
+	assert.Equal(t, "new output\n", output, "should return the most recently modified file")
+}

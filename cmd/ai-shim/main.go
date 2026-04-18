@@ -625,9 +625,14 @@ func runManageSubcommand(args []string) error {
 			if len(args) >= 3 {
 				profile = args[2]
 			}
+			// Try Docker container logs first (if container still running),
+			// then persisted output log (captured on exit), then
+			// launch/exit log as last resort.
 			output, err := cli.ContainerLogs(agent, profile, 100)
 			if err != nil {
-				// Fall back to persistent log filtered by agent
+				output, err = cli.ShowOutputLog(layout, agent, profile)
+			}
+			if err != nil {
 				output, err = cli.ShowLogs(layout, agent, profile, 50)
 				if err != nil {
 					return fmt.Errorf("showing logs for %s/%s: %w", agent, profile, err)

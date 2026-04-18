@@ -486,6 +486,75 @@ func TestRun_InvalidResourceLimitsError(t *testing.T) {
 	})
 }
 
+// --- saveContainerOutput tests ---
+
+func TestSaveContainerOutput_WritesFile(t *testing.T) {
+	logDir := t.TempDir()
+	input := "line1\nline2\nline3\n"
+	saveContainerOutput(logDir, "test-ctr", strings.NewReader(input), 100)
+
+	data, err := os.ReadFile(filepath.Join(logDir, "test-ctr"+OutputLogSuffix))
+	require.NoError(t, err)
+	assert.Equal(t, "line1\nline2\nline3\n", string(data))
+}
+
+func TestSaveContainerOutput_TailsLines(t *testing.T) {
+	logDir := t.TempDir()
+	var lines []string
+	for i := 1; i <= 200; i++ {
+		lines = append(lines, fmt.Sprintf("line-%d", i))
+	}
+	input := strings.Join(lines, "\n") + "\n"
+	saveContainerOutput(logDir, "tail-ctr", strings.NewReader(input), 100)
+
+	data, err := os.ReadFile(filepath.Join(logDir, "tail-ctr"+OutputLogSuffix))
+	require.NoError(t, err)
+	outLines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	assert.Len(t, outLines, 100, "should keep only last 100 lines")
+	assert.Equal(t, "line-101", outLines[0], "first kept line should be 101")
+	assert.Equal(t, "line-200", outLines[99], "last kept line should be 200")
+}
+
+func TestSaveContainerOutput_EmptyReader(t *testing.T) {
+	logDir := t.TempDir()
+	saveContainerOutput(logDir, "empty-ctr", strings.NewReader(""), 100)
+
+	_, err := os.Stat(filepath.Join(logDir, "empty-ctr"+OutputLogSuffix))
+	assert.True(t, os.IsNotExist(err), "no file should be created for empty output")
+}
+
+func TestSaveContainerOutput_EmptyLogDir(t *testing.T) {
+	// Should not panic when logDir is empty
+	saveContainerOutput("", "test", strings.NewReader("data\n"), 100)
+}
+
+func TestSaveContainerOutput_NilReader(t *testing.T) {
+	logDir := t.TempDir()
+	// Should not panic when reader is nil
+	saveContainerOutput(logDir, "nil-reader", nil, 100)
+}
+
+func TestSaveContainerOutput_OverwritesPrevious(t *testing.T) {
+	logDir := t.TempDir()
+	saveContainerOutput(logDir, "overwrite", strings.NewReader("first run\n"), 100)
+	saveContainerOutput(logDir, "overwrite", strings.NewReader("second run\n"), 100)
+
+	data, err := os.ReadFile(filepath.Join(logDir, "overwrite"+OutputLogSuffix))
+	require.NoError(t, err)
+	assert.Equal(t, "second run\n", string(data), "second call should overwrite first")
+	assert.NotContains(t, string(data), "first run")
+}
+
+func TestSaveContainerOutput_FileNamingConvention(t *testing.T) {
+	logDir := t.TempDir()
+	saveContainerOutput(logDir, "my-agent-default-abc123", strings.NewReader("hello\n"), 100)
+
+	// Verify the output.log file is alongside where exit-code .log files go
+	expected := filepath.Join(logDir, "my-agent-default-abc123"+OutputLogSuffix)
+	_, err := os.Stat(expected)
+	assert.NoError(t, err, "output log should be at %s", expected)
+}
+
 func TestInspectImageUser_UbuntuImage(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	ctx := context.Background()
