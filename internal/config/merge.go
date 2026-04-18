@@ -67,6 +67,9 @@ func Merge(base, over Config) Config {
 	if over.UpdateInterval != "" {
 		result.UpdateInterval = over.UpdateInterval
 	}
+	if over.Extends != "" {
+		result.Extends = over.Extends
+	}
 	if over.EnvFile != "" {
 		result.EnvFile = over.EnvFile
 	}

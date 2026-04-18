@@ -49,6 +49,12 @@ type Config struct {
 	Git             *GitConfig              `yaml:"git,omitempty" json:"git,omitempty"`
 	SecurityProfile string                  `yaml:"security_profile,omitempty" json:"security_profile,omitempty"`
 	UpdateInterval  string                  `yaml:"update_interval,omitempty" json:"update_interval,omitempty"`
+	// Extends is the name of another profile to inherit from.
+	// When set, the referenced profile is loaded first and this profile's
+	// settings are merged on top (child overrides parent). Chaining is
+	// supported (A extends B extends C); circular references and chains
+	// deeper than 10 are rejected.
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
 	// EnvFile is an optional path to a dotenv-style file whose KEY=VALUE
 	// pairs are loaded into the container environment. Variables from
 	// env_file are applied before the env: map so explicit env: entries

@@ -192,3 +192,174 @@ imagee: "typo"
 	require.NoError(t, err)
 	assert.Equal(t, "test:latest", cfg.Image, "valid fields should still be loaded")
 }
+
+// --- Profile extends tests ---
+
+func TestResolve_ExtendsBasicInheritance(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	// Parent profile has tool jq
+	writeYAML(t, filepath.Join(dir, "profiles", "parent.yaml"), `
+tools:
+  jq:
+    type: binary-download
+    url: "https://example.com/jq"
+    binary: jq
+image: "parent-image"
+`)
+
+	// Child profile extends parent, adds tool ruff, overrides image
+	writeYAML(t, filepath.Join(dir, "profiles", "child.yaml"), `
+extends: parent
+tools:
+  ruff:
+    type: binary-download
+    url: "https://example.com/ruff"
+    binary: ruff
+image: "child-image"
+`)
+
+	cfg, err := Resolve(dir, "test", "child")
+	require.NoError(t, err)
+
+	// Child image overrides parent
+	assert.Equal(t, "child-image", cfg.Image, "child image should override parent")
+
+	// Both tools present
+	require.Contains(t, cfg.Tools, "jq", "parent tool inherited")
+	require.Contains(t, cfg.Tools, "ruff", "child tool present")
+	assert.Equal(t, "jq", cfg.Tools["jq"].Binary)
+	assert.Equal(t, "ruff", cfg.Tools["ruff"].Binary)
+
+	// Extends should not leak into final config
+	assert.Empty(t, cfg.Extends, "extends should be cleared from merged result")
+}
+
+func TestResolve_ExtendsChain(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	// Grandparent: tool-a
+	writeYAML(t, filepath.Join(dir, "profiles", "grandparent.yaml"), `
+tools:
+  tool-a:
+    type: binary-download
+    url: "https://example.com/a"
+    binary: a
+`)
+
+	// Parent extends grandparent, adds tool-b
+	writeYAML(t, filepath.Join(dir, "profiles", "parent.yaml"), `
+extends: grandparent
+tools:
+  tool-b:
+    type: binary-download
+    url: "https://example.com/b"
+    binary: b
+`)
+
+	// Child extends parent, adds tool-c
+	writeYAML(t, filepath.Join(dir, "profiles", "child.yaml"), `
+extends: parent
+tools:
+  tool-c:
+    type: binary-download
+    url: "https://example.com/c"
+    binary: c
+`)
+
+	cfg, err := Resolve(dir, "test", "child")
+	require.NoError(t, err)
+
+	require.Contains(t, cfg.Tools, "tool-a", "grandparent tool inherited")
+	require.Contains(t, cfg.Tools, "tool-b", "parent tool inherited")
+	require.Contains(t, cfg.Tools, "tool-c", "child tool present")
+}
+
+func TestResolve_ExtendsCircularDetection(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	// A extends B, B extends A
+	writeYAML(t, filepath.Join(dir, "profiles", "alpha.yaml"), `
+extends: beta
+image: "alpha"
+`)
+	writeYAML(t, filepath.Join(dir, "profiles", "beta.yaml"), `
+extends: alpha
+image: "beta"
+`)
+
+	_, err := Resolve(dir, "test", "alpha")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular")
+}
+
+func TestResolve_ExtendsMissing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	writeYAML(t, filepath.Join(dir, "profiles", "child.yaml"), `
+extends: nonexistent
+image: "child"
+`)
+
+	_, err := Resolve(dir, "test", "child")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestResolve_ExtendsToolsOrder(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	// Parent declares tools in order [a, b]
+	writeYAML(t, filepath.Join(dir, "profiles", "parent.yaml"), `
+tools:
+  tool-a:
+    type: binary-download
+    url: "https://example.com/a"
+    binary: a
+  tool-b:
+    type: binary-download
+    url: "https://example.com/b"
+    binary: b
+`)
+
+	// Child extends parent, adds tool-c
+	writeYAML(t, filepath.Join(dir, "profiles", "child.yaml"), `
+extends: parent
+tools:
+  tool-c:
+    type: binary-download
+    url: "https://example.com/c"
+    binary: c
+`)
+
+	cfg, err := Resolve(dir, "test", "child")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"tool-a", "tool-b", "tool-c"}, cfg.ToolsOrder,
+		"parent tools order preserved, child tool appended")
+}

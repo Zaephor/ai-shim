@@ -36,6 +36,11 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 	}
 	allWarnings = append(allWarnings, warnings...)
 
+	profileCfg, err = resolveProfileExtends(configDir, profile, profileCfg)
+	if err != nil {
+		return Config{}, ConfigSources{}, fmt.Errorf("resolving profile extends: %w", err)
+	}
+
 	agentProfileCfg, warnings, err := LoadFileStrict(filepath.Join(configDir, "agent-profiles", agentName+"_"+profile+".yaml"))
 	if err != nil {
 		return Config{}, ConfigSources{}, fmt.Errorf("loading agent-profile config: %w", err)
@@ -71,6 +76,57 @@ func ResolveWithSources(configDir, agentName, profile string) (Config, ConfigSou
 	}
 
 	return resolved, sources, nil
+}
+
+// maxExtendsDepth is the maximum number of extends hops allowed. This guards
+// against both direct circular references and pathologically deep chains.
+const maxExtendsDepth = 10
+
+// resolveProfileExtends recursively loads parent profiles referenced by the
+// extends field and merges them so that the child profile's values override
+// the parent. The final merged config has Extends cleared.
+func resolveProfileExtends(configDir, profileName string, child Config) (Config, error) {
+	if child.Extends == "" {
+		return child, nil
+	}
+
+	seen := map[string]bool{profileName: true}
+	chain := []Config{child}
+
+	current := child
+	for depth := 0; current.Extends != ""; depth++ {
+		if depth >= maxExtendsDepth {
+			return Config{}, fmt.Errorf("profile extends chain exceeds maximum depth of %d", maxExtendsDepth)
+		}
+		parentName := current.Extends
+		if seen[parentName] {
+			return Config{}, fmt.Errorf("circular profile extends: %q already in chain", parentName)
+		}
+		seen[parentName] = true
+
+		parentPath := filepath.Join(configDir, "profiles", parentName+".yaml")
+		parent, err := LoadFile(parentPath)
+		if err != nil {
+			return Config{}, fmt.Errorf("loading extended profile %q: %w", parentName, err)
+		}
+		// Check that the file actually existed (LoadFile returns empty on missing).
+		if _, statErr := os.Stat(parentPath); statErr != nil {
+			return Config{}, fmt.Errorf("extended profile %q not found", parentName)
+		}
+
+		chain = append(chain, parent)
+		current = parent
+	}
+
+	// Merge from the oldest ancestor forward so child overrides parent.
+	// chain is [child, parent, grandparent, ...] — reverse it.
+	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+
+	merged := MergeAll(chain...)
+	merged.Extends = "" // clear so it doesn't leak into the final config
+	return merged, nil
 }
 
 // loadEnvOverrides reads AI_SHIM_* environment variables and returns a Config
