@@ -3,6 +3,7 @@ package integration
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Zaephor/ai-shim/internal/config"
@@ -158,7 +159,13 @@ func TestProfileExamples_StrictYAML(t *testing.T) {
 			if err != nil {
 				t.Fatalf("strict load error in %s: %v", f, err)
 			}
+			// Agent files may contain an "agent_def" block parsed by
+			// internal/agent.LoadCustomAgents, not the config schema.
+			isAgentFile := filepath.Base(filepath.Dir(f)) == "agents"
 			for _, w := range warnings {
+				if isAgentFile && strings.Contains(w, "agent_def") {
+					continue
+				}
 				t.Errorf("unknown key in %s: %s", filepath.Base(f), w)
 			}
 			_ = cfg
