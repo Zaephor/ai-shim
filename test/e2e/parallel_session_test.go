@@ -10,6 +10,7 @@ import (
 	"github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/dind"
 	"github.com/Zaephor/ai-shim/internal/testutil"
+	cerrdefs "github.com/containerd/errdefs"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -470,6 +471,6 @@ func TestParallel_CacheOrphanGuard(t *testing.T) {
 	_, err = cli.ContainerInspect(ctx, cacheResp.ID)
 	require.Error(t, err, "cache container must be removed after last consumer exits")
 	assert.True(t,
-		client.IsErrNotFound(err) || strings.Contains(err.Error(), "No such container"),
+		cerrdefs.IsNotFound(err) || strings.Contains(err.Error(), "No such container"),
 		"error should be not-found, got: %v", err)
 }

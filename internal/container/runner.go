@@ -664,7 +664,7 @@ func (r *Runner) captureContainerOutput(containerID string, spec ContainerSpec) 
 			// StdCopy demuxes into pw (combined). Ignore the returned
 			// byte counts — we only care about the content.
 			_, _ = stdcopy.StdCopy(pw, pw, logReader)
-			pw.Close()
+			_ = pw.Close()
 		}()
 		src = pr
 	}

@@ -8,14 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
 
 // containerName returns the Docker container name with the leading slash stripped.
-func containerName(c types.Container) string {
+func containerName(c container.Summary) string {
 	if len(c.Names) > 0 {
 		return strings.TrimPrefix(c.Names[0], "/")
 	}

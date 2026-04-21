@@ -20,14 +20,14 @@ var sensitiveKeyPatterns = []string{
 
 // sensitiveValuePrefixes lists prefixes that indicate a secret API key value.
 var sensitiveValuePrefixes = []string{
-	"sk-ant-",  // Anthropic
-	"sk-",      // OpenAI-style
-	"gsk_",     // Google
-	"ghp_",     // GitHub personal access token
-	"gho_",     // GitHub OAuth token
-	"glpat-",   // GitLab
-	"xoxb-",    // Slack bot
-	"xoxp-",    // Slack user
+	"sk-ant-", // Anthropic
+	"sk-",     // OpenAI-style
+	"gsk_",    // Google
+	"ghp_",    // GitHub personal access token
+	"gho_",    // GitHub OAuth token
+	"glpat-",  // GitLab
+	"xoxb-",   // Slack bot
+	"xoxp-",   // Slack user
 }
 
 // MaskSecrets replaces sensitive values in a key=value map with "***".

@@ -54,4 +54,3 @@ func TestHashPath_EmptyPath(t *testing.T) {
 	h := HashPath("host", "")
 	assert.Len(t, h, 12)
 }
-
