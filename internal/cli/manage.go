@@ -185,6 +185,8 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 	b.WriteString(formatBoolFieldSrc("dind", cfg.DIND, false, src("dind")))
 	b.WriteString(formatBoolFieldSrc("gpu", cfg.GPU, false, src("gpu")))
 	b.WriteString(formatBoolFieldSrc("dind_gpu", cfg.DINDGpu, false, src("dind_gpu")))
+	b.WriteString(formatBoolFieldSrc("kvm", cfg.KVM, false, src("kvm")))
+	b.WriteString(formatBoolFieldSrc("dind_kvm", cfg.DINDKVM, false, src("dind_kvm")))
 
 	if cfg.NetworkScope != "" {
 		fmt.Fprintf(&b, "  network_scope: %s%s\n", cfg.NetworkScope, src("network_scope"))
@@ -648,6 +650,8 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 	b.WriteString(formatEnabledField("DIND", cfg.DIND))
 	b.WriteString(formatEnabledField("GPU", cfg.GPU))
 	b.WriteString(formatEnabledField("DIND GPU", cfg.DINDGpu))
+	b.WriteString(formatEnabledField("KVM", cfg.KVM))
+	b.WriteString(formatEnabledField("DIND KVM", cfg.DINDKVM))
 
 	if cfg.NetworkScope != "" {
 		fmt.Fprintf(&b, "  Network:   %s\n", cfg.NetworkScope)

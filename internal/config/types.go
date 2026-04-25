@@ -27,6 +27,8 @@ type Config struct {
 	DIND         *bool                   `yaml:"dind,omitempty" json:"dind,omitempty"`
 	DINDGpu      *bool                   `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
 	GPU          *bool                   `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+	KVM          *bool                   `yaml:"kvm,omitempty" json:"kvm,omitempty"`
+	DINDKVM      *bool                   `yaml:"dind_kvm,omitempty" json:"dind_kvm,omitempty"`
 	DINDMirrors  []string                `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
 	DINDCache    *bool                   `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
 	DINDTLS      *bool                   `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
@@ -115,6 +117,12 @@ func (c Config) IsGPUEnabled() bool { return c.GPU != nil && *c.GPU }
 
 // IsDINDGPUEnabled returns true if DIND GPU is explicitly enabled.
 func (c Config) IsDINDGPUEnabled() bool { return c.DINDGpu != nil && *c.DINDGpu }
+
+// IsKVMEnabled returns true if KVM passthrough is explicitly enabled.
+func (c Config) IsKVMEnabled() bool { return c.KVM != nil && *c.KVM }
+
+// IsDINDKVMEnabled returns true if DIND KVM passthrough is explicitly enabled.
+func (c Config) IsDINDKVMEnabled() bool { return c.DINDKVM != nil && *c.DINDKVM }
 
 // IsCacheEnabled returns true if pull-through cache is explicitly enabled.
 func (c Config) IsCacheEnabled() bool { return c.DINDCache != nil && *c.DINDCache }

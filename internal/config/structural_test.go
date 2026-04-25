@@ -33,6 +33,8 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		DIND:            boolPtr(true),
 		DINDGpu:         boolPtr(true),
 		GPU:             boolPtr(true),
+		KVM:             boolPtr(true),
+		DINDKVM:         boolPtr(true),
 		DINDMirrors:     []string{"mirror"},
 		DINDCache:       boolPtr(true),
 		DINDTLS:         boolPtr(true),
@@ -81,6 +83,8 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 		"AI_SHIM_DIND":                  "1",
 		"AI_SHIM_DIND_GPU":              "1",
 		"AI_SHIM_GPU":                   "1",
+		"AI_SHIM_DIND_KVM":              "1",
+		"AI_SHIM_KVM":                   "1",
 		"AI_SHIM_NETWORK_SCOPE":         "profile",
 		"AI_SHIM_DIND_HOSTNAME":         "dind-host",
 		"AI_SHIM_DIND_CACHE":            "1",
@@ -106,6 +110,8 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	assert.True(t, cfg.IsDINDEnabled(), "AI_SHIM_DIND")
 	assert.True(t, cfg.IsDINDGPUEnabled(), "AI_SHIM_DIND_GPU")
 	assert.True(t, cfg.IsGPUEnabled(), "AI_SHIM_GPU")
+	assert.True(t, cfg.IsDINDKVMEnabled(), "AI_SHIM_DIND_KVM")
+	assert.True(t, cfg.IsKVMEnabled(), "AI_SHIM_KVM")
 	assert.Equal(t, "profile", cfg.NetworkScope, "AI_SHIM_NETWORK_SCOPE")
 	assert.Equal(t, "dind-host", cfg.DINDHostname, "AI_SHIM_DIND_HOSTNAME")
 	assert.True(t, cfg.IsCacheEnabled(), "AI_SHIM_DIND_CACHE")
@@ -142,6 +148,8 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		DIND:            boolPtr(true),
 		DINDGpu:         boolPtr(true),
 		GPU:             boolPtr(true),
+		KVM:             boolPtr(true),
+		DINDKVM:         boolPtr(true),
 		DINDMirrors:     []string{"mirror"},
 		DINDCache:       boolPtr(true),
 		DINDTLS:         boolPtr(true),

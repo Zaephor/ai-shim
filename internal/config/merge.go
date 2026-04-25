@@ -30,6 +30,12 @@ func Merge(base, over Config) Config {
 	if over.GPU != nil {
 		result.GPU = over.GPU
 	}
+	if over.KVM != nil {
+		result.KVM = over.KVM
+	}
+	if over.DINDKVM != nil {
+		result.DINDKVM = over.DINDKVM
+	}
 	if over.Isolated != nil {
 		result.Isolated = over.Isolated
 	}

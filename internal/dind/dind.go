@@ -46,6 +46,7 @@ type ResourceLimits struct {
 type Config struct {
 	Image         string // defaults to docker:dind
 	GPU           bool   // GPU passthrough for DIND
+	KVM           bool   // KVM passthrough for DIND
 	UseSysbox     bool   // use sysbox runtime if available
 	Labels        map[string]string
 	ContainerName string          // display name for the DIND container
@@ -202,6 +203,15 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		hostCfg.DeviceRequests = []container.DeviceRequest{
 			{Count: -1, Capabilities: [][]string{{"gpu"}}},
 		}
+	}
+
+	// KVM for DIND
+	if cfg.KVM {
+		hostCfg.Devices = append(hostCfg.Devices, container.DeviceMapping{
+			PathOnHost:        "/dev/kvm",
+			PathInContainer:   "/dev/kvm",
+			CgroupPermissions: "rwm",
+		})
 	}
 
 	// Resource limits for DIND

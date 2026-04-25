@@ -90,6 +90,7 @@ type ContainerSpec struct {
 	TTY          bool
 	Stdin        bool
 	GPU          bool
+	KVM          bool
 	NetworkID    string          // Docker network ID to attach container to
 	Resources    *ResourceLimits // optional resource constraints
 	SecurityOpt  []string        // Docker SecurityOpt (e.g. no-new-privileges)
@@ -234,6 +235,14 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 		hostCfg.DeviceRequests = []container.DeviceRequest{
 			{Count: -1, Capabilities: [][]string{{"gpu"}}},
 		}
+	}
+
+	if spec.KVM {
+		hostCfg.Devices = append(hostCfg.Devices, container.DeviceMapping{
+			PathOnHost:        "/dev/kvm",
+			PathInContainer:   "/dev/kvm",
+			CgroupPermissions: "rwm",
+		})
 	}
 
 	if spec.Resources != nil {

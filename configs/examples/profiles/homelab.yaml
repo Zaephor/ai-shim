@@ -16,6 +16,9 @@ packages:
 dind: true
 dind_cache: true
 
+# Enable KVM passthrough if running VMs or QEMU-based workloads.
+# kvm: true
+
 # Forward common self-hosted service ports.
 ports:
   - "80:80"

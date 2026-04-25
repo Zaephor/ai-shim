@@ -58,6 +58,12 @@
 # Enable GPU passthrough for agent container. Default: false
 # gpu: false
 
+# Enable KVM passthrough for agent container. Default: false
+# kvm: false
+
+# Enable KVM passthrough for DIND sidecar. Default: false
+# dind_kvm: false
+
 # Network scope for container isolation.
 # Options: global, profile, workspace, profile-workspace, isolated (default)
 # network_scope: isolated

@@ -211,6 +211,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	ports, exposedPorts := parsePorts(p.Config.Ports)
 
 	gpu := p.Config.IsGPUEnabled()
+	kvm := p.Config.IsKVMEnabled()
 
 	// Resource limits (optional)
 	var resources *ResourceLimits
@@ -247,6 +248,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		TTY:          tty,
 		Stdin:        tty,
 		GPU:          gpu,
+		KVM:          kvm,
 		Resources:    resources,
 		SecurityOpt:  securityOpt,
 		CapDrop:      capDrop,

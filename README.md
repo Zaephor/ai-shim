@@ -164,6 +164,8 @@ args:
 dind: false
 gpu: false
 # dind_gpu: false                # GPU passthrough for DIND sidecar
+# kvm: false                     # KVM passthrough for agent container
+# dind_kvm: false                # KVM passthrough for DIND sidecar
 network_scope: isolated     # global, profile, workspace, profile-workspace, isolated
 
 # Git identity for commits made inside the container
@@ -230,6 +232,9 @@ See `configs/examples/` for annotated example files and
   access, with Sysbox preferred and privileged fallback
 - **GPU passthrough** -- independent toggles for the agent container and DIND
   sidecar (`gpu`, `dind_gpu`)
+- **KVM passthrough** -- independent toggles for the agent container and DIND
+  sidecar (`kvm`, `dind_kvm`); grants access to the host KVM hypervisor device,
+  use only with trusted workloads
 - **Network scopes** -- configurable network isolation per invocation: global,
   profile, workspace, profile-workspace, or fully isolated (default)
 - **Registry mirrors** -- DIND sidecar uses configurable registry mirrors
@@ -376,6 +381,8 @@ AI_SHIM_VERSION=<ver>           # pin agent version
 AI_SHIM_DIND=0/1                # toggle DIND sidecar
 AI_SHIM_DIND_GPU=0/1            # toggle GPU for DIND
 AI_SHIM_GPU=0/1                 # toggle GPU for agent container
+AI_SHIM_DIND_KVM=0/1            # toggle KVM passthrough for DIND
+AI_SHIM_KVM=0/1                 # toggle KVM passthrough for agent container
 AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache

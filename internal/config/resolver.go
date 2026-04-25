@@ -162,6 +162,8 @@ func parseBoolEnv(key string) *bool {
 //   - AI_SHIM_DIND          — toggle DIND sidecar (0/1/true/false)
 //   - AI_SHIM_DIND_GPU      — toggle GPU for DIND (0/1/true/false)
 //   - AI_SHIM_GPU           — toggle GPU for agent container (0/1/true/false)
+//   - AI_SHIM_DIND_KVM      — toggle KVM passthrough for DIND (0/1/true/false)
+//   - AI_SHIM_KVM           — toggle KVM passthrough for agent container (0/1/true/false)
 //   - AI_SHIM_NETWORK_SCOPE — override network scope
 //   - AI_SHIM_DIND_HOSTNAME — override DIND sidecar hostname
 //   - AI_SHIM_DIND_CACHE    — toggle pull-through registry cache (0/1/true/false)
@@ -193,6 +195,12 @@ func loadEnvOverrides() Config {
 	}
 	if b := parseBoolEnv("AI_SHIM_GPU"); b != nil {
 		cfg.GPU = b
+	}
+	if b := parseBoolEnv("AI_SHIM_DIND_KVM"); b != nil {
+		cfg.DINDKVM = b
+	}
+	if b := parseBoolEnv("AI_SHIM_KVM"); b != nil {
+		cfg.KVM = b
 	}
 	if v := os.Getenv("AI_SHIM_NETWORK_SCOPE"); v != "" {
 		cfg.NetworkScope = v

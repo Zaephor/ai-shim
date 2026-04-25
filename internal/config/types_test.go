@@ -25,6 +25,18 @@ func TestIsDINDGPUEnabled(t *testing.T) {
 	assert.False(t, Config{DINDGpu: testutil.BoolPtr(false)}.IsDINDGPUEnabled())
 }
 
+func TestIsKVMEnabled(t *testing.T) {
+	assert.False(t, Config{}.IsKVMEnabled(), "nil should be false")
+	assert.True(t, Config{KVM: testutil.BoolPtr(true)}.IsKVMEnabled())
+	assert.False(t, Config{KVM: testutil.BoolPtr(false)}.IsKVMEnabled())
+}
+
+func TestIsDINDKVMEnabled(t *testing.T) {
+	assert.False(t, Config{}.IsDINDKVMEnabled(), "nil should be false")
+	assert.True(t, Config{DINDKVM: testutil.BoolPtr(true)}.IsDINDKVMEnabled())
+	assert.False(t, Config{DINDKVM: testutil.BoolPtr(false)}.IsDINDKVMEnabled())
+}
+
 func TestIsCacheEnabled(t *testing.T) {
 	assert.False(t, Config{}.IsCacheEnabled(), "nil should be false")
 	assert.True(t, Config{DINDCache: testutil.BoolPtr(true)}.IsCacheEnabled())

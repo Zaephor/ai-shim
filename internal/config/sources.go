@@ -80,6 +80,12 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.GPU != nil {
 			sources.Fields["gpu"] = name
 		}
+		if cfg.KVM != nil {
+			sources.Fields["kvm"] = name
+		}
+		if cfg.DINDKVM != nil {
+			sources.Fields["dind_kvm"] = name
+		}
 		if cfg.Isolated != nil {
 			sources.Fields["isolated"] = name
 		}

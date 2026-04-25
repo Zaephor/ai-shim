@@ -270,6 +270,8 @@ Environment Variables:
   AI_SHIM_DIND          Enable/disable DIND (0/1)
   AI_SHIM_DIND_GPU      Enable/disable GPU for DIND (0/1)
   AI_SHIM_GPU           Enable/disable GPU (0/1)
+  AI_SHIM_DIND_KVM      Enable/disable KVM passthrough for DIND (0/1)
+  AI_SHIM_KVM           Enable/disable KVM passthrough for agent (0/1)
   AI_SHIM_NETWORK_SCOPE Network isolation scope
   AI_SHIM_DIND_HOSTNAME DIND container hostname
   AI_SHIM_DIND_CACHE    Enable registry cache (0/1)
@@ -1222,6 +1224,7 @@ func runAgent(name string, args []string) (int, error) {
 	// 7.5 Create shared network and start DIND sidecar if enabled
 	if cfg.IsDINDEnabled() {
 		dindGPU := cfg.IsDINDGPUEnabled()
+		dindKVM := cfg.IsDINDKVMEnabled()
 
 		useSysbox := dind.DetectSysbox(ctx, runner.Client())
 
@@ -1299,6 +1302,7 @@ func runAgent(name string, args []string) (int, error) {
 
 		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,
+			KVM:           dindKVM,
 			UseSysbox:     useSysbox,
 			Labels:        spec.Labels,
 			ContainerName: dindName,

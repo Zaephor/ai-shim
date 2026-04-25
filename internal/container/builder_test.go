@@ -106,6 +106,31 @@ func TestBuildSpec_GPU(t *testing.T) {
 	})
 }
 
+func TestBuildSpec_KVM(t *testing.T) {
+	t.Run("nil KVM defaults to false", func(t *testing.T) {
+		p := defaultBuildParams()
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
+		assert.False(t, spec.KVM)
+	})
+
+	t.Run("KVM enabled", func(t *testing.T) {
+		p := defaultBuildParams()
+		p.Config.KVM = testutil.BoolPtr(true)
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
+		assert.True(t, spec.KVM)
+	})
+
+	t.Run("KVM disabled", func(t *testing.T) {
+		p := defaultBuildParams()
+		p.Config.KVM = testutil.BoolPtr(false)
+		spec, err := BuildSpec(p)
+		require.NoError(t, err)
+		assert.False(t, spec.KVM)
+	})
+}
+
 func TestBuildSpec_User(t *testing.T) {
 	p := defaultBuildParams()
 	p.Platform.UID = 501
