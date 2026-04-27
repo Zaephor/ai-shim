@@ -2,9 +2,11 @@ package container
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -96,9 +98,42 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	labels[LabelWorkspace] = wsHash
 	labels[LabelWorkspaceDir] = pwd
 
+	// gsd: compute project identity hash using gsd's own algorithm so
+	// GSD_PROJECT_ID and GSD_STATE_DIR are set correctly before launch.
+	gsdEnabled := p.Agent.Name == "gsd" || sliceContains(p.Config.AllowAgents, "gsd")
+	var gsdHash string
+	var gsdHostStateDir string
+	if gsdEnabled {
+		gsdHash = computeGSDHash(pwd, workdir)
+		profileHome, err := p.Layout.ProfileHome(p.Profile)
+		if err != nil {
+			return ContainerSpec{}, fmt.Errorf("resolving profile home for gsd state: %w", err)
+		}
+		gsdHostStateDir = filepath.Join(profileHome, ".gsd", "projects", gsdHash)
+		if err := os.MkdirAll(gsdHostStateDir, 0o755); err != nil {
+			return ContainerSpec{}, fmt.Errorf("creating gsd state dir: %w", err)
+		}
+	}
+
 	mounts, mountsErr := buildMounts(p, pwd, workdir, homeDir)
 	if mountsErr != nil {
 		return ContainerSpec{}, mountsErr
+	}
+
+	if gsdEnabled {
+		// Bind-mount the real persistent state dir at the scoped path so
+		// gsd reads/writes through GSD_STATE_DIR without touching ~/.gsd/projects/.
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: gsdHostStateDir,
+			Target: "/tmp/gsd-scope/projects/" + gsdHash,
+		})
+		// Tmpfs over ~/.gsd/projects/ hides any stale entries accumulated
+		// from previous container runs at the container-local scope.
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeTmpfs,
+			Target: homeDir + "/.gsd/projects",
+		})
 	}
 
 	// Tool provisioning script
@@ -206,6 +241,10 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 			return ContainerSpec{}, fmt.Errorf("serializing MCP servers: %w", err)
 		}
 		env = append(env, "MCP_SERVERS="+mcpJSON)
+	}
+
+	if gsdEnabled {
+		env = append(env, "GSD_PROJECT_ID="+gsdHash, "GSD_STATE_DIR=/tmp/gsd-scope")
 	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
@@ -611,6 +650,40 @@ func WarmEntrypoint(spec *ContainerSpec) error {
 	spec.Stdin = false
 	spec.Reattach = false
 	return nil
+}
+
+// computeGSDHash derives the gsd project identity hash using the same
+// algorithm as gsd itself: SHA-256 of the remote URL when one is configured,
+// or SHA-256 of "\n"+containerWorkdir for local-only repos (matching gsd's
+// `\n${root}` template literal with the container-side git root).
+func computeGSDHash(hostRepoPath, containerWorkdir string) string {
+	var input string
+	if url := gitRemoteOriginURL(hostRepoPath); url != "" {
+		input = url
+	} else {
+		input = "\n" + containerWorkdir
+	}
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h[:])[:12]
+}
+
+// gitRemoteOriginURL returns remote.origin.url for the repo at path,
+// or "" if there is no remote or git is unavailable.
+func gitRemoteOriginURL(repoPath string) string {
+	out, err := exec.Command("git", "-C", repoPath, "config", "--get", "remote.origin.url").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func sliceContains(s []string, v string) bool {
+	for _, item := range s {
+		if item == v {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateConfigVolumes checks all volume mount paths for security issues.
