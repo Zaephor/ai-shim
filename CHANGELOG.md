@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.3.0](https://github.com/Zaephor/ai-shim/compare/v0.2.0...v0.3.0) (2026-04-26)
+
+
+### Features
+
+* **cli:** add manage delete-profile for clean profile removal ([8472bb1](https://github.com/Zaephor/ai-shim/commit/8472bb18886ce4be653d0d4e381040e9f3f7e763))
+* **cli:** add manage warm to pre-populate agent and tool caches ([29d67bb](https://github.com/Zaephor/ai-shim/commit/29d67bb624de5c4f74088a88383453f4cf0fb293))
+* **cli:** document user-defined agents and add manage attach ([ab10f14](https://github.com/Zaephor/ai-shim/commit/ab10f14b7559b2dea080de34c1d8eb6b02f5d89a))
+* **cli:** embed commit hash in dev builds via runtime/debug ([9bdd5cc](https://github.com/Zaephor/ai-shim/commit/9bdd5cccc09be606d3c8f953e8b4a68de9805935))
+* **config:** load environment variables from a dotenv-style env_file ([571e823](https://github.com/Zaephor/ai-shim/commit/571e82367a71f9a1ffa6e4f377209c9feac8554c))
+* **config:** preserve YAML order of mcp_servers through merge and injection ([a1ddcf3](https://github.com/Zaephor/ai-shim/commit/a1ddcf33c9880df741c59481f76371ccf4c98bb7))
+* **config:** profile inheritance via extends field ([14871af](https://github.com/Zaephor/ai-shim/commit/14871af7d50736bc01d23ed775c18e14a5d4f9bc))
+* **config:** provision profile tools in YAML declaration order ([09b347e](https://github.com/Zaephor/ai-shim/commit/09b347e86b108f177edb00b156e1f30afdc795e3))
+* **container:** add FindSessionByContainerName for direct attach ([7cce7bb](https://github.com/Zaephor/ai-shim/commit/7cce7bbbb1c435da3fb53a5bdfb5d377354804fe))
+* **container:** add KVM passthrough support ([39105c4](https://github.com/Zaephor/ai-shim/commit/39105c487c68a15e08919ea8aace4dbfe51be01f))
+* **dind:** share agent workspace and cache dir with DIND sidecar ([d132e14](https://github.com/Zaephor/ai-shim/commit/d132e14141a2843f49815d07aad9b7356b6fd9c8))
+* **install:** bracket provisioning with progress messages ([3d2a301](https://github.com/Zaephor/ai-shim/commit/3d2a301329574d4d265381b0954fbe5e1161b0ac))
+* **make:** add dev target for hash-identified builds without version ldflags ([c3cf358](https://github.com/Zaephor/ai-shim/commit/c3cf358b5e15f3abfceee40f716a2b6a2c842857))
+* **profiles/python:** add pre-commit as a uv-managed tool ([2df2aff](https://github.com/Zaephor/ai-shim/commit/2df2aff251c8a2171b8e61df81c77aff1c15902b))
+* **profiles:** persist shell-function version managers via ~/.bashrc ([816ed9c](https://github.com/Zaephor/ai-shim/commit/816ed9ccfea07521158dd954aca915abf0aeb7ce))
+* **runagent:** offer parallel session alongside existing one ([788b4e2](https://github.com/Zaephor/ai-shim/commit/788b4e227b9e5f835b77978697388090aa5a03e0))
+* **runner:** persist container output on exit for post-mortem debugging ([e1ee3a8](https://github.com/Zaephor/ai-shim/commit/e1ee3a80239336d7fb105911fb80c8119df47343))
+
+
+### Bug Fixes
+
+* address static code review findings across 20 packages ([c468e7d](https://github.com/Zaephor/ai-shim/commit/c468e7d88e9dea9ef2bae7718c5c858a2bc3e824))
+* **builder:** gate apt package install on root or sudo availability ([67fe17a](https://github.com/Zaephor/ai-shim/commit/67fe17adca996f49d8669a642232d96dde60378d))
+* **cli:** clear cache markers on reinstall for custom install types ([6df2e78](https://github.com/Zaephor/ai-shim/commit/6df2e78f1d25d2334702ceb6a8fbda4b00a16453))
+* **config:** merge tool definitions field-by-field ([7cb58cc](https://github.com/Zaephor/ai-shim/commit/7cb58cc55de3bcfee1893cd03a0ff5578a3fc171))
+* **config:** warn when env_var is set without data_dir ([1a34085](https://github.com/Zaephor/ai-shim/commit/1a34085ca9685fc47c78a67486a7e68b0dbe8db4))
+* **container:** accept caller-provided Pwd in BuildSpec ([2a63543](https://github.com/Zaephor/ai-shim/commit/2a635436373c2ddad4190edbc6db16c67ce9141b))
+* **container:** add role label so picker excludes DIND and cache containers ([e41ad80](https://github.com/Zaephor/ai-shim/commit/e41ad80e80f84b316d213d58ecb62d9aedee3e86))
+* **container:** fail the build when a tool's persistent cache dir cannot be created ([19f4d4e](https://github.com/Zaephor/ai-shim/commit/19f4d4e000b038c5e81b473f30a70daad792d4e4))
+* **dind:** resolve registry cache on Linux, add version label, remove unused cache bind ([686d180](https://github.com/Zaephor/ai-shim/commit/686d180c34e1e93954a9428f1c1949c088ea97d2))
+* gofmt drift and errcheck/staticcheck lint findings ([0dd0dc6](https://github.com/Zaephor/ai-shim/commit/0dd0dc64d020d63c36b76d2a0e467f243dee27bb))
+* **install:** cache custom install-type by update interval ([87830f9](https://github.com/Zaephor/ai-shim/commit/87830f945bf87c27a19c2e281e20eb5b468b6b63))
+* **profiles:** add idempotency guards and pin unstable URLs ([060d38b](https://github.com/Zaephor/ai-shim/commit/060d38b45198afaecb987efa6ff584b3ac3fa54a))
+* **provision:** propagate errors from go-install tool type ([f811160](https://github.com/Zaephor/ai-shim/commit/f811160d54206162ad3f49f01609e69c547ee837))
+* **runagent:** tighten session lifecycle and propagate tool caches to DIND ([511abc6](https://github.com/Zaephor/ai-shim/commit/511abc6cab4efb1e203db50c218fb267748e78d3))
+* **runner:** reset terminal on reattach and force inner TUI redraw ([2213548](https://github.com/Zaephor/ai-shim/commit/2213548c77bb29e13eaa081f6f0568250f7350fe))
+* **workspace:** revert hash input separator to preserve existing workspaces ([eda308f](https://github.com/Zaephor/ai-shim/commit/eda308f11e83a87291ca644dad5c44842cdf2c8a))
+
 ## [0.2.0](https://github.com/Zaephor/ai-shim/compare/v0.1.0...v0.2.0) (2026-04-12)
 
 
