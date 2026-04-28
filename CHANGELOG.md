@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/Zaephor/ai-shim/compare/v0.3.0...v0.4.0) (2026-04-28)
+
+
+### Features
+
+* **cli:** add workspace dir and dind columns to manage status ([982c2b7](https://github.com/Zaephor/ai-shim/commit/982c2b773b73dc34aab74684d2237d92833bc6ea))
+* **container:** scope gsd project state to prevent orphan detection ([262c1dc](https://github.com/Zaephor/ai-shim/commit/262c1dc773b0c44cd8599ffd4ef431b61c060cdd))
+
+
+### Bug Fixes
+
+* **container:** exclude dind containers from reattach session lookup ([c07ac51](https://github.com/Zaephor/ai-shim/commit/c07ac513502c32f093fb9b9f81712becc6b36570))
+
 ## [0.3.0](https://github.com/Zaephor/ai-shim/compare/v0.2.0...v0.3.0) (2026-04-26)
 
 
