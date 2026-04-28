@@ -835,33 +835,81 @@ func StatusWithColor(useColor bool) (string, error) {
 		return "No running ai-shim containers.\n", nil
 	}
 
+	// Build dind status map: workspace hash → dind container Docker status string.
+	dindByWorkspace := make(map[string]string)
+	for _, c := range containers {
+		if containerRole(c) == "dind" {
+			if ws := c.Labels[container.LabelWorkspace]; ws != "" {
+				dindByWorkspace[ws] = c.Status
+			}
+		}
+	}
+
 	var b strings.Builder
 	b.WriteString("Running ai-shim containers:\n\n")
-	fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", "NAME", "AGENT", "PROFILE", "IMAGE", "STATUS")
-	fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", "----", "-----", "-------", "-----", "------")
+	fmt.Fprintf(&b, "  %-35s %-12s %-10s %-32s %-22s %-18s %s\n",
+		"NAME", "AGENT", "PROFILE", "WORKSPACE", "IMAGE", "STATUS", "DIND")
+	fmt.Fprintf(&b, "  %-35s %-12s %-10s %-32s %-22s %-18s %s\n",
+		"----", "-----", "-------", "---------", "-----", "------", "----")
 
 	for _, c := range containers {
+		if role := containerRole(c); role == "dind" || role == "cache" {
+			continue
+		}
+
 		name := containerDisplayName(c)
 		agentLabel := c.Labels[container.LabelAgent]
 		profile := c.Labels[container.LabelProfile]
-
-		// Mark cache and DIND containers
-		if c.Labels[container.LabelCache] == "true" {
-			agentLabel = "(cache)"
-			profile = ""
-		} else if strings.HasSuffix(name, "-dind") {
-			agentLabel = agentLabel + " (dind)"
-		}
+		wsHash := c.Labels[container.LabelWorkspace]
+		wsDir := truncateWorkspacePath(c.Labels[container.LabelWorkspaceDir], 32)
 
 		image := c.Image
-		if len(image) > 25 {
-			image = image[:22] + "..."
+		if len(image) > 22 {
+			image = image[:19] + "..."
 		}
 
-		status := colorizeStatus(col, c.Status)
-		fmt.Fprintf(&b, "  %-35s %-15s %-10s %-25s %s\n", name, agentLabel, profile, image, status)
+		dindLabel := "none"
+		if dindDockerStatus, ok := dindByWorkspace[wsHash]; ok {
+			lower := strings.ToLower(dindDockerStatus)
+			if strings.HasPrefix(lower, "up") {
+				dindLabel = "active"
+			} else {
+				dindLabel = "stopped"
+			}
+		}
+
+		// Pad status before colorizing so ANSI codes don't break column width.
+		paddedStatus := fmt.Sprintf("%-18s", c.Status)
+		coloredStatus := colorizeStatus(col, paddedStatus)
+
+		fmt.Fprintf(&b, "  %-35s %-12s %-10s %-32s %-22s %s %s\n",
+			name, agentLabel, profile, wsDir, image, coloredStatus, dindLabel)
 	}
 	return b.String(), nil
+}
+
+// containerRole returns the role of a container ("agent", "dind", or "cache"),
+// with backward-compat fallback for containers predating LabelRole.
+func containerRole(c container_types.Summary) string {
+	if role := c.Labels[container.LabelRole]; role != "" {
+		return role
+	}
+	if c.Labels[container.LabelCache] == "true" {
+		return "cache"
+	}
+	if c.Labels[container.LabelDIND] == "true" {
+		return "dind"
+	}
+	return "agent"
+}
+
+// truncateWorkspacePath shortens path to at most maxLen characters by
+// replacing the leading portion with "..." when necessary.
+func truncateWorkspacePath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	return "..." + path[len(path)-(maxLen-3):]
 }
 
 // colorizeStatus applies color to container status strings.
@@ -1276,25 +1324,41 @@ func StatusJSON() (string, error) {
 		return "", fmt.Errorf("listing containers: %w", err)
 	}
 
+	// Build dind status map: workspace hash → dind container Docker status string.
+	dindByWorkspace := make(map[string]string)
+	for _, c := range containers {
+		if containerRole(c) == "dind" {
+			if ws := c.Labels[container.LabelWorkspace]; ws != "" {
+				dindByWorkspace[ws] = c.Status
+			}
+		}
+	}
+
 	entries := make([]StatusEntry, 0, len(containers))
 	for _, c := range containers {
-		name := containerDisplayName(c)
-		agentLabel := c.Labels[container.LabelAgent]
-		profile := c.Labels[container.LabelProfile]
+		if role := containerRole(c); role == "dind" || role == "cache" {
+			continue
+		}
 
-		if c.Labels[container.LabelCache] == "true" {
-			agentLabel = "(cache)"
-			profile = ""
-		} else if strings.HasSuffix(name, "-dind") {
-			agentLabel = agentLabel + " (dind)"
+		wsHash := c.Labels[container.LabelWorkspace]
+		dindLabel := "none"
+		if dindDockerStatus, ok := dindByWorkspace[wsHash]; ok {
+			lower := strings.ToLower(dindDockerStatus)
+			if strings.HasPrefix(lower, "up") {
+				dindLabel = "active"
+			} else {
+				dindLabel = "stopped"
+			}
 		}
 
 		entries = append(entries, StatusEntry{
-			Name:    name,
-			Agent:   agentLabel,
-			Profile: profile,
-			Image:   c.Image,
-			Status:  c.Status,
+			Name:         containerDisplayName(c),
+			Agent:        c.Labels[container.LabelAgent],
+			Profile:      c.Labels[container.LabelProfile],
+			WorkspaceDir: c.Labels[container.LabelWorkspaceDir],
+			Image:        c.Image,
+			Status:       c.Status,
+			DIND:         dindLabel,
 		})
 	}
 	return MarshalJSON(entries)

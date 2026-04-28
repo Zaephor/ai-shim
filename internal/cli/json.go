@@ -21,11 +21,13 @@ func MarshalJSON(v any) (string, error) {
 
 // StatusEntry represents a container in JSON status output.
 type StatusEntry struct {
-	Name    string `json:"name"`
-	Agent   string `json:"agent"`
-	Profile string `json:"profile"`
-	Image   string `json:"image"`
-	Status  string `json:"status"`
+	Name         string `json:"name"`
+	Agent        string `json:"agent"`
+	Profile      string `json:"profile"`
+	WorkspaceDir string `json:"workspace_dir"`
+	Image        string `json:"image"`
+	Status       string `json:"status"`
+	DIND         string `json:"dind"`
 }
 
 // AgentEntry represents an agent definition in JSON output.
