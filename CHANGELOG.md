@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Zaephor/ai-shim/compare/v0.4.1...v0.5.0) (2026-04-29)
+
+
+### Features
+
+* **cli:** move env vars to `help env` subcommand ([6ecaf67](https://github.com/Zaephor/ai-shim/commit/6ecaf67cceb96732ec4ec76194774436032d1772))
+
 ## [0.4.1](https://github.com/Zaephor/ai-shim/compare/v0.4.0...v0.4.1) (2026-04-29)
 
 
