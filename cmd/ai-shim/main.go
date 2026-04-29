@@ -262,8 +262,13 @@ Commands:
   manage switch-profile <profile> Set the default profile
   completion <bash|zsh>          Generate shell completion script
   help                           Show this help
+  help env                       Show environment variable reference
+`)
+}
 
-Environment Variables:
+func printEnvHelp() {
+	fmt.Print(`ai-shim - Environment Variable Reference
+
   AI_SHIM_IMAGE         Override container image
   AI_SHIM_VERSION       Pin agent version
   AI_SHIM_UPDATE_INTERVAL Agent update interval (always/never/1d/7d/24h or any Go duration)
@@ -307,7 +312,11 @@ func runManage(args []string) error {
 
 	switch args[0] {
 	case "help", "--help", "-h":
-		printHelp()
+		if len(args) > 1 && args[1] == "env" {
+			printEnvHelp()
+		} else {
+			printHelp()
+		}
 		return nil
 
 	case "init":
