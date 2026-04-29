@@ -1735,6 +1735,11 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 			_ = cli.VolumeRemove(ctx, containerName+"-certs", true)
 		}
 	}
+
+	// Remove session network if no containers remain attached.
+	if err := network.RemoveOrphanedForSession(ctx, cli, session.AgentName, session.Profile, session.WorkspaceHash); err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove session network: %v\n", err)
+	}
 }
 
 // manageAttachByName implements `ai-shim manage attach <container-name>`.

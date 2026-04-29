@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"time"
 
@@ -104,6 +105,42 @@ func EnsureNetwork(ctx context.Context, cli *client.Client, name string, labels 
 		Created: true,
 		client:  cli,
 	}, nil
+}
+
+// RemoveOrphanedForSession removes ai-shim networks tagged with the given
+// agent/profile/workspace labels that have no containers attached. Safe for
+// both isolated (per-session unique) and shared networks — the container-count
+// check prevents removing a shared network still used by a parallel session.
+func RemoveOrphanedForSession(ctx context.Context, cli *client.Client, agentName, profile, workspaceHash string) error {
+	f := filters.NewArgs(
+		filters.Arg("label", "ai-shim=true"),
+		filters.Arg("label", "ai-shim.agent="+agentName),
+		filters.Arg("label", "ai-shim.profile="+profile),
+		filters.Arg("label", "ai-shim.workspace="+workspaceHash),
+	)
+	networks, err := cli.NetworkList(ctx, dnetwork.ListOptions{Filters: f})
+	if err != nil {
+		return fmt.Errorf("listing networks for session cleanup: %w", err)
+	}
+
+	var errs []error
+	for _, n := range networks {
+		inspect, err := cli.NetworkInspect(ctx, n.ID, dnetwork.InspectOptions{})
+		if err != nil {
+			if cerrdefs.IsNotFound(err) {
+				continue
+			}
+			errs = append(errs, fmt.Errorf("inspecting network %s: %w", n.Name, err))
+			continue
+		}
+		if len(inspect.Containers) > 0 {
+			continue // still in use by another session
+		}
+		if err := cli.NetworkRemove(ctx, n.ID); err != nil && !cerrdefs.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("removing network %s: %w", n.Name, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Remove removes the network only if we created it.
