@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Zaephor/ai-shim/compare/v0.4.0...v0.4.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* **dind:** reap orphaned networks on session teardown ([2561b6c](https://github.com/Zaephor/ai-shim/commit/2561b6c93060610b621995a61be2d7ff93325c64))
+
 ## [0.4.0](https://github.com/Zaephor/ai-shim/compare/v0.3.0...v0.4.0) (2026-04-28)
 
 
