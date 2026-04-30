@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/Zaephor/ai-shim/compare/v0.5.0...v0.5.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* **container:** enable docker init to reap zombie processes ([3b247b3](https://github.com/Zaephor/ai-shim/commit/3b247b395eea8f7dbee0d4696207346ba6f78aab))
+
 ## [0.5.0](https://github.com/Zaephor/ai-shim/compare/v0.4.1...v0.5.0) (2026-04-29)
 
 
