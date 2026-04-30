@@ -571,3 +571,25 @@ func TestInspectImageUser_UbuntuImage(t *testing.T) {
 	assert.NotEmpty(t, user.HomeDir, "HomeDir should be non-empty")
 	assert.NotEmpty(t, user.Username, "Username should be non-empty")
 }
+
+// TestRun_DockerInitIsActivePID1 verifies that Docker's built-in init process
+// (docker-init / tini) is running as PID 1 inside containers. This is the
+// mechanism that reaps orphaned child processes (ssh, npm, git, esbuild, etc.)
+// so they do not accumulate as zombies during long agent sessions.
+//
+// The fix is Init:true on HostConfig in Run(). If that flag is ever dropped,
+// the agent binary becomes PID 1 and has no zombie-reaping logic.
+func TestRun_DockerInitIsActivePID1(t *testing.T) {
+	ctx := context.Background()
+	runner := newTestRunner(t, ctx)
+	defer runner.Close()
+
+	result, err := runner.Run(ctx, ContainerSpec{
+		Image:  testImage,
+		Cmd:    []string{"sh", "-c", "grep -qE 'docker-init|tini' /proc/1/comm"},
+		Labels: map[string]string{"ai-shim": "test"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode,
+		"PID 1 should be docker-init (tini); Init:true must be set on HostConfig in runner.Run()")
+}

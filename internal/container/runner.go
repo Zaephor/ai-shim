@@ -223,9 +223,11 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 		ExposedPorts: spec.ExposedPorts,
 	}
 
+	initEnabled := true
 	hostCfg := &container.HostConfig{
 		Mounts:       spec.Mounts,
 		AutoRemove:   !spec.Persistent,
+		Init:         &initEnabled,
 		PortBindings: spec.Ports,
 		SecurityOpt:  spec.SecurityOpt,
 		CapDrop:      spec.CapDrop,
