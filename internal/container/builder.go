@@ -98,20 +98,29 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	labels[LabelWorkspace] = wsHash
 	labels[LabelWorkspaceDir] = pwd
 
-	// gsd: compute project identity hash using gsd's own algorithm so
-	// GSD_PROJECT_ID and GSD_STATE_DIR are set correctly before launch.
-	gsdEnabled := p.Agent.Name == "gsd" || sliceContains(p.Config.AllowAgents, "gsd")
-	var gsdHash string
-	var gsdHostStateDir string
-	if gsdEnabled {
-		gsdHash = computeGSDHash(pwd, workdir)
+	// Agents that scan ~/.{agent}/projects/ for orphan detection need a scoped
+	// view so stale entries from previous containers don't trigger false warnings.
+	type projectScope struct {
+		agentName    string
+		hash         string
+		hostStateDir string
+	}
+	var activeScopes []projectScope
+	{
 		profileHome, err := p.Layout.ProfileHome(p.Profile)
 		if err != nil {
-			return ContainerSpec{}, fmt.Errorf("resolving profile home for gsd state: %w", err)
+			return ContainerSpec{}, fmt.Errorf("resolving profile home: %w", err)
 		}
-		gsdHostStateDir = filepath.Join(profileHome, ".gsd", "projects", gsdHash)
-		if err := os.MkdirAll(gsdHostStateDir, 0o755); err != nil {
-			return ContainerSpec{}, fmt.Errorf("creating gsd state dir: %w", err)
+		for _, name := range []string{"pi", "gsd"} {
+			if p.Agent.Name != name && !sliceContains(p.Config.AllowAgents, name) {
+				continue
+			}
+			hash := computeGSDHash(pwd, workdir)
+			hostStateDir := filepath.Join(profileHome, "."+name, "projects", hash)
+			if err := os.MkdirAll(hostStateDir, 0o755); err != nil {
+				return ContainerSpec{}, fmt.Errorf("creating %s state dir: %w", name, err)
+			}
+			activeScopes = append(activeScopes, projectScope{name, hash, hostStateDir})
 		}
 	}
 
@@ -120,20 +129,8 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		return ContainerSpec{}, mountsErr
 	}
 
-	if gsdEnabled {
-		// Bind-mount the real persistent state dir at the scoped path so
-		// gsd reads/writes through GSD_STATE_DIR without touching ~/.gsd/projects/.
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: gsdHostStateDir,
-			Target: "/tmp/gsd-scope/projects/" + gsdHash,
-		})
-		// Tmpfs over ~/.gsd/projects/ hides any stale entries accumulated
-		// from previous container runs at the container-local scope.
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeTmpfs,
-			Target: homeDir + "/.gsd/projects",
-		})
+	for _, s := range activeScopes {
+		mounts = append(mounts, scopeProjectMounts(s.agentName, s.hash, s.hostStateDir, homeDir, p.Platform.UID, p.Platform.GID)...)
 	}
 
 	// Tool provisioning script
@@ -243,8 +240,9 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		env = append(env, "MCP_SERVERS="+mcpJSON)
 	}
 
-	if gsdEnabled {
-		env = append(env, "GSD_PROJECT_ID="+gsdHash, "GSD_STATE_DIR=/tmp/gsd-scope")
+	for _, s := range activeScopes {
+		prefix := strings.ToUpper(s.agentName)
+		env = append(env, prefix+"_PROJECT_ID="+s.hash, prefix+"_STATE_DIR=/tmp/"+s.agentName+"-scope")
 	}
 
 	ports, exposedPorts := parsePorts(p.Config.Ports)
@@ -650,6 +648,35 @@ func WarmEntrypoint(spec *ContainerSpec) error {
 	spec.Stdin = false
 	spec.Reattach = false
 	return nil
+}
+
+// scopeProjectMounts returns the three mounts that give an agent an isolated
+// view of its projects directory: a user-owned tmpfs parent (so Docker doesn't
+// auto-create it as root:root), the real persistent bind-mount for this project,
+// and a tmpfs overlay that hides stale entries in the agent's home data dir.
+func scopeProjectMounts(agentName, hash, hostStateDir, homeDir string, uid, gid int) []mount.Mount {
+	scopeDir := "/tmp/" + agentName + "-scope"
+	return []mount.Mount{
+		{
+			Type:   mount.TypeTmpfs,
+			Target: scopeDir + "/projects",
+			TmpfsOptions: &mount.TmpfsOptions{
+				Options: [][]string{
+					{"uid", strconv.Itoa(uid)},
+					{"gid", strconv.Itoa(gid)},
+				},
+			},
+		},
+		{
+			Type:   mount.TypeBind,
+			Source: hostStateDir,
+			Target: scopeDir + "/projects/" + hash,
+		},
+		{
+			Type:   mount.TypeTmpfs,
+			Target: homeDir + "/." + agentName + "/projects",
+		},
+	}
 }
 
 // computeGSDHash derives the gsd project identity hash using the same
