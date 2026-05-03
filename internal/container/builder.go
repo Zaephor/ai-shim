@@ -130,7 +130,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 	}
 
 	for _, s := range activeScopes {
-		mounts = append(mounts, scopeProjectMounts(s.agentName, s.hash, s.hostStateDir, homeDir, p.Platform.UID, p.Platform.GID)...)
+		mounts = append(mounts, scopeProjectMounts(s.agentName, s.hash, s.hostStateDir, homeDir)...)
 	}
 
 	// Tool provisioning script
@@ -654,17 +654,14 @@ func WarmEntrypoint(spec *ContainerSpec) error {
 // view of its projects directory: a user-owned tmpfs parent (so Docker doesn't
 // auto-create it as root:root), the real persistent bind-mount for this project,
 // and a tmpfs overlay that hides stale entries in the agent's home data dir.
-func scopeProjectMounts(agentName, hash, hostStateDir, homeDir string, uid, gid int) []mount.Mount {
+func scopeProjectMounts(agentName, hash, hostStateDir, homeDir string) []mount.Mount {
 	scopeDir := "/tmp/" + agentName + "-scope"
 	return []mount.Mount{
 		{
 			Type:   mount.TypeTmpfs,
 			Target: scopeDir + "/projects",
 			TmpfsOptions: &mount.TmpfsOptions{
-				Options: [][]string{
-					{"uid", strconv.Itoa(uid)},
-					{"gid", strconv.Itoa(gid)},
-				},
+				Mode: 0o1777,
 			},
 		},
 		{
