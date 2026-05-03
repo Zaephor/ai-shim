@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/Zaephor/ai-shim/compare/v0.5.1...v0.5.2) (2026-05-03)
+
+
+### Bug Fixes
+
+* **container:** extend project-state scoping to pi and fix parent dir ownership ([1d45533](https://github.com/Zaephor/ai-shim/commit/1d4553396bb3c3dc51ea7e043b798839ee9f58d4))
+
 ## [0.5.1](https://github.com/Zaephor/ai-shim/compare/v0.5.0...v0.5.1) (2026-04-30)
 
 
