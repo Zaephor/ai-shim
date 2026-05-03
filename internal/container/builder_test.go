@@ -1192,3 +1192,210 @@ func TestWarmEntrypoint_NoExecLine(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no exec line")
 }
+
+// — project-scope tests ——————————————————————————————————————————————————
+
+func TestScopeProjectMounts_Structure(t *testing.T) {
+	mounts := scopeProjectMounts("gsd", "abc123", "/host/state/abc123", "/home/user")
+
+	require.Len(t, mounts, 3, "scopeProjectMounts must return exactly 3 mounts")
+
+	// [0] tmpfs parent with world-writable mode
+	assert.Equal(t, mount.TypeTmpfs, mounts[0].Type)
+	assert.Equal(t, "/tmp/gsd-scope/projects", mounts[0].Target)
+	require.NotNil(t, mounts[0].TmpfsOptions)
+	assert.Equal(t, os.FileMode(0o1777), mounts[0].TmpfsOptions.Mode,
+		"parent tmpfs must be mode 1777 so non-root users can write")
+
+	// [1] bind-mount of the real persistent state dir
+	assert.Equal(t, mount.TypeBind, mounts[1].Type)
+	assert.Equal(t, "/host/state/abc123", mounts[1].Source)
+	assert.Equal(t, "/tmp/gsd-scope/projects/abc123", mounts[1].Target)
+
+	// [2] tmpfs overlay hiding stale entries in the agent home data dir
+	assert.Equal(t, mount.TypeTmpfs, mounts[2].Type)
+	assert.Equal(t, "/home/user/.gsd/projects", mounts[2].Target)
+}
+
+func TestScopeProjectMounts_AgentNameDrivesPath(t *testing.T) {
+	mounts := scopeProjectMounts("pi", "deadbeef", "/host/pi/deadbeef", "/home/runner")
+
+	assert.Equal(t, "/tmp/pi-scope/projects", mounts[0].Target)
+	assert.Equal(t, "/tmp/pi-scope/projects/deadbeef", mounts[1].Target)
+	assert.Equal(t, "/home/runner/.pi/projects", mounts[2].Target)
+}
+
+func TestBuildSpec_NonScopedAgentHasNoScopeMounts(t *testing.T) {
+	p := defaultBuildParams() // agent = claude-code
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	for _, m := range spec.Mounts {
+		assert.NotContains(t, m.Target, "-scope/projects",
+			"non-scoped agent should not have scope mounts")
+	}
+	for _, e := range spec.Env {
+		assert.False(t, strings.HasPrefix(e, "PI_") || strings.HasPrefix(e, "GSD_"),
+			"non-scoped agent should not have PI_* or GSD_* env vars")
+	}
+}
+
+func TestBuildSpec_GSDAgentScopeMountsAndEnv(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	mountTargets := map[string]mount.Mount{}
+	for _, m := range spec.Mounts {
+		mountTargets[m.Target] = m
+	}
+
+	// Tmpfs parent
+	parent, ok := mountTargets["/tmp/gsd-scope/projects"]
+	require.True(t, ok, "tmpfs parent /tmp/gsd-scope/projects must be mounted")
+	assert.Equal(t, mount.TypeTmpfs, parent.Type)
+	require.NotNil(t, parent.TmpfsOptions)
+	assert.Equal(t, os.FileMode(0o1777), parent.TmpfsOptions.Mode)
+
+	// Bind-mount for project state — target path contains the hash
+	hasBind := false
+	for target, m := range mountTargets {
+		if strings.HasPrefix(target, "/tmp/gsd-scope/projects/") && m.Type == mount.TypeBind {
+			hasBind = true
+		}
+	}
+	assert.True(t, hasBind, "bind mount for project state must be under /tmp/gsd-scope/projects/")
+
+	// Tmpfs over ~/.gsd/projects
+	_, ok = mountTargets["/home/user/.gsd/projects"]
+	assert.True(t, ok, "tmpfs overlay over ~/.gsd/projects must be mounted")
+
+	// Env vars
+	envMap := map[string]string{}
+	for _, e := range spec.Env {
+		if k, v, ok2 := strings.Cut(e, "="); ok2 {
+			envMap[k] = v
+		}
+	}
+	assert.Equal(t, "/tmp/gsd-scope", envMap["GSD_STATE_DIR"])
+	assert.NotEmpty(t, envMap["GSD_PROJECT_ID"], "GSD_PROJECT_ID must be set")
+	assert.Regexp(t, `^[0-9a-f]{12}$`, envMap["GSD_PROJECT_ID"], "project ID must be 12-char hex")
+}
+
+func TestBuildSpec_PIAgentScopeMountsAndEnv(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	mountTargets := map[string]mount.Mount{}
+	for _, m := range spec.Mounts {
+		mountTargets[m.Target] = m
+	}
+
+	parent, ok := mountTargets["/tmp/pi-scope/projects"]
+	require.True(t, ok, "tmpfs parent /tmp/pi-scope/projects must be mounted")
+	assert.Equal(t, mount.TypeTmpfs, parent.Type)
+	require.NotNil(t, parent.TmpfsOptions)
+	assert.Equal(t, os.FileMode(0o1777), parent.TmpfsOptions.Mode)
+
+	_, ok = mountTargets["/home/user/.pi/projects"]
+	assert.True(t, ok, "tmpfs overlay over ~/.pi/projects must be mounted")
+
+	envMap := map[string]string{}
+	for _, e := range spec.Env {
+		if k, v, ok2 := strings.Cut(e, "="); ok2 {
+			envMap[k] = v
+		}
+	}
+	assert.Equal(t, "/tmp/pi-scope", envMap["PI_STATE_DIR"])
+	assert.NotEmpty(t, envMap["PI_PROJECT_ID"])
+	assert.Regexp(t, `^[0-9a-f]{12}$`, envMap["PI_PROJECT_ID"])
+}
+
+func TestBuildSpec_GSDInAllowAgentsScopeMountsAndEnv(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams() // primary agent = claude-code
+	p.Layout = storage.NewLayout(root)
+	p.Config.AllowAgents = []string{"gsd"}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	hasScopeMount := false
+	for _, m := range spec.Mounts {
+		if m.Target == "/tmp/gsd-scope/projects" {
+			hasScopeMount = true
+		}
+	}
+	assert.True(t, hasScopeMount, "gsd in allow_agents must trigger scope mount setup")
+
+	envMap := map[string]string{}
+	for _, e := range spec.Env {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			envMap[k] = v
+		}
+	}
+	assert.Equal(t, "/tmp/gsd-scope", envMap["GSD_STATE_DIR"])
+	assert.NotEmpty(t, envMap["GSD_PROJECT_ID"])
+}
+
+func TestBuildSpec_BothPIAndGSDActiveGetSeparateScopes(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+	p.Config.AllowAgents = []string{"gsd"}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	mountTargets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		mountTargets[m.Target] = true
+	}
+
+	assert.True(t, mountTargets["/tmp/pi-scope/projects"], "pi scope tmpfs parent must be mounted")
+	assert.True(t, mountTargets["/tmp/gsd-scope/projects"], "gsd scope tmpfs parent must be mounted")
+	assert.True(t, mountTargets["/home/user/.pi/projects"], "pi home overlay must be mounted")
+	assert.True(t, mountTargets["/home/user/.gsd/projects"], "gsd home overlay must be mounted")
+
+	envMap := map[string]string{}
+	for _, e := range spec.Env {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			envMap[k] = v
+		}
+	}
+	assert.Equal(t, "/tmp/pi-scope", envMap["PI_STATE_DIR"])
+	assert.Equal(t, "/tmp/gsd-scope", envMap["GSD_STATE_DIR"])
+	assert.NotEmpty(t, envMap["PI_PROJECT_ID"])
+	assert.NotEmpty(t, envMap["GSD_PROJECT_ID"])
+}
+
+func TestBuildSpec_ScopedAgentCreatesHostStateDir(t *testing.T) {
+	root := t.TempDir()
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(root)
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	// Find the bind-mount source — it must exist on the host
+	for _, m := range spec.Mounts {
+		if strings.HasPrefix(m.Target, "/tmp/gsd-scope/projects/") && m.Type == mount.TypeBind {
+			info, statErr := os.Stat(m.Source)
+			require.NoError(t, statErr, "host state dir %q must exist after BuildSpec", m.Source)
+			assert.True(t, info.IsDir(), "host state dir must be a directory")
+			return
+		}
+	}
+	t.Fatal("no gsd bind-mount found under /tmp/gsd-scope/projects/")
+}
