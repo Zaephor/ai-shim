@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/Zaephor/ai-shim/compare/v0.5.2...v0.5.3) (2026-05-03)
+
+
+### Bug Fixes
+
+* **container:** use tmpfs mode=1777 instead of unsupported uid/gid options ([46dcb7b](https://github.com/Zaephor/ai-shim/commit/46dcb7b701ab171341408965be55fd42efb3cbd5))
+
 ## [0.5.2](https://github.com/Zaephor/ai-shim/compare/v0.5.1...v0.5.2) (2026-05-03)
 
 
