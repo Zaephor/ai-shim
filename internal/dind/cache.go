@@ -42,7 +42,7 @@ func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir, ver
 
 	if len(containers) > 0 {
 		// Already running on host network
-		return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
+		return fmt.Sprintf("http://%s:%s", CacheHostAlias, CachePort), nil
 	}
 
 	// Ensure the cache image is pulled. Without this, ContainerCreate below
@@ -80,7 +80,8 @@ func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir, ver
 				Target: "/var/lib/registry",
 			},
 		},
-		// Bind to host so it's reachable via host.docker.internal from any container
+		// Bind to host so it's reachable at the Docker host's IP from
+		// any container on a bridge network.
 		NetworkMode:   "host",
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 	}
@@ -95,7 +96,7 @@ func EnsureCache(ctx context.Context, runner *ai_container.Runner, cacheDir, ver
 		return "", fmt.Errorf("starting cache container: %w", err)
 	}
 
-	return fmt.Sprintf("http://host.docker.internal:%s", CachePort), nil
+	return fmt.Sprintf("http://%s:%s", CacheHostAlias, CachePort), nil
 }
 
 // MaybeStopCache attempts to stop the cache container if no other ai-shim

@@ -1,6 +1,6 @@
 module github.com/Zaephor/ai-shim
 
-go 1.25.9
+go 1.25.10
 
 require (
 	github.com/containerd/errdefs v1.0.0

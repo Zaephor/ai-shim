@@ -16,14 +16,16 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	dnetwork "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
 const (
-	DefaultImage  = "docker:dind"
-	HealthTimeout = 30 * time.Second
+	DefaultImage   = "docker:dind"
+	CacheHostAlias = "ai-shim-cache" // DNS name for the pull-through cache inside DIND
+	HealthTimeout  = 30 * time.Second
 )
 
 // Sidecar manages the DIND sidecar container lifecycle.
@@ -185,11 +187,25 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	}
 	mounts = append(mounts, cfg.SharedMounts...)
 
+	// Build ExtraHosts: always map host.docker.internal for general DIND use,
+	// and add a dedicated entry for the registry cache hostname. The cache
+	// container runs on the host network, so it's reachable at the bridge
+	// network's gateway IP — but we use a custom hostname (ai-shim-cache)
+	// rather than host.docker.internal, which inside DIND resolves to DIND's
+	// own docker0 bridge (172.17.0.1), not the outer Docker host.
+	extraHosts := []string{"host.docker.internal:host-gateway"}
+	if cfg.CacheAddr != "" && cfg.NetworkID != "" {
+		gwIP, _ := networkGatewayIP(ctx, cli, cfg.NetworkID)
+		if gwIP != "" {
+			extraHosts = append(extraHosts, CacheHostAlias+":"+gwIP)
+		}
+	}
+
 	hostCfg := &container.HostConfig{
 		Privileged:  true,
 		NetworkMode: container.NetworkMode(cfg.NetworkID),
 		Mounts:      mounts,
-		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
+		ExtraHosts:  extraHosts,
 	}
 
 	// Use Sysbox if requested
@@ -463,4 +479,20 @@ func DetectSysbox(ctx context.Context, cli *client.Client) bool {
 		}
 	}
 	return false
+}
+
+// networkGatewayIP inspects a Docker network and returns its gateway IP.
+// This is the IP of the Docker host on that bridge subnet, reachable from
+// any container attached to the network.
+func networkGatewayIP(ctx context.Context, cli *client.Client, networkID string) (string, error) {
+	netInfo, err := cli.NetworkInspect(ctx, networkID, dnetwork.InspectOptions{})
+	if err != nil {
+		return "", fmt.Errorf("inspecting network %s: %w", networkID, err)
+	}
+	for _, cfg := range netInfo.IPAM.Config {
+		if cfg.Gateway != "" {
+			return cfg.Gateway, nil
+		}
+	}
+	return "", fmt.Errorf("network %s has no gateway IP in IPAM config", networkID)
 }

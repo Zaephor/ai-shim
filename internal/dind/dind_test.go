@@ -209,7 +209,7 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(cacheDir) })
 	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err)
-	assert.Contains(t, addr, "host.docker.internal")
+	assert.Contains(t, addr, CacheHostAlias)
 	assert.Contains(t, addr, CachePort)
 
 	// Cleanup
@@ -256,7 +256,7 @@ func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 
 	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err, "EnsureCache must pull the cache image when it is not present locally")
-	assert.Contains(t, addr, "host.docker.internal")
+	assert.Contains(t, addr, CacheHostAlias)
 	assert.Contains(t, addr, CachePort)
 
 	// Cleanup cache container but leave the image so other tests benefit.
