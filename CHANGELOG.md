@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/Zaephor/ai-shim/compare/v0.5.3...v0.5.4) (2026-05-21)
+
+
+### Bug Fixes
+
+* **dind:** use dedicated hostname for registry cache mirror ([078f30b](https://github.com/Zaephor/ai-shim/commit/078f30b227f18c5aa57256f9cdf3d33c89013650))
+
 ## [0.5.3](https://github.com/Zaephor/ai-shim/compare/v0.5.2...v0.5.3) (2026-05-03)
 
 
