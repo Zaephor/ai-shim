@@ -69,7 +69,7 @@ var builtins = map[string]Definition{
 	"gsd": {
 		Name:        "gsd",
 		InstallType: "npm",
-		Package:     "gsd-pi",
+		Package:     "@opengsd/gsd-pi",
 		Binary:      "gsd",
 		HomePaths:   []string{".gsd"},
 	},

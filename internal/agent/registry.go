@@ -24,7 +24,7 @@ var builtins = map[string]Definition{
 	"codex":       {Name: "codex", InstallType: "npm", Package: "@openai/codex", Binary: "codex", DataDirs: []string{".codex"}},
 	"copilot-cli": {Name: "copilot-cli", InstallType: "npm", Package: "@github/copilot", Binary: "copilot", DataDirs: []string{".copilot"}},
 	"pi":          {Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}},
-	"gsd":         {Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}},
+	"gsd":         {Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}},
 	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", DataDirs: []string{".aider"}},
 	"goose":       {Name: "goose", InstallType: "custom", Package: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", Binary: "goose", DataDirs: []string{".config/goose"}},
 	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", DataDirs: []string{".config/opencode"}},

@@ -85,7 +85,7 @@ ai-shim ships with 10 built-in agent definitions:
 | qwen-code | npm | `qwen` |
 | codex | npm | `codex` |
 | pi | npm | `pi` |
-| gsd | npm | `gsd` |
+| gsd | npm (`@opengsd/gsd-pi`) | `gsd` |
 | aider | uv | `aider` |
 | goose | custom (install script) | `goose` |
 | opencode | npm | `opencode` |

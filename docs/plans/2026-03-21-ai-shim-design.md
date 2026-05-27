@@ -227,7 +227,7 @@ Users never need to define these for supported agents. Config tiers can override
 | qwen-code | npm | `@qwen-code/qwen-code` | `qwen` | `.qwen` |
 | codex | npm | `@openai/codex` | `codex` | `.codex` |
 | pi | npm | `@mariozechner/pi-coding-agent` | `pi` | `.pi` |
-| gsd | npm | `gsd-pi` | `gsd` | `.gsd` |
+| gsd | npm | `@opengsd/gsd-pi` | `gsd` | `.gsd` |
 | aider | uv | `aider-chat` | `aider` | `.aider` |
 | goose | custom | `curl -fsSL .../download_cli.sh \| bash` | `goose` | `.config/goose` |
 | opencode | npm | `opencode-ai` | `opencode` | `.config/opencode` |

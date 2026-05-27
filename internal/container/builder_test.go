@@ -1244,7 +1244,7 @@ func TestBuildSpec_GSDAgentScopeMountsAndEnv(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
@@ -1383,7 +1383,7 @@ func TestBuildSpec_ScopedAgentCreatesHostStateDir(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
