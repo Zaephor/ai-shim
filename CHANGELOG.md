@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/Zaephor/ai-shim/compare/v0.5.4...v0.6.0) (2026-05-27)
+
+
+### Features
+
+* **agent:** update gsd registry to use @opengsd/gsd-pi scoped npm package ([8232ca3](https://github.com/Zaephor/ai-shim/commit/8232ca3d082ed17d50ce604d0d309f8d23acaa37))
+
 ## [0.5.4](https://github.com/Zaephor/ai-shim/compare/v0.5.3...v0.5.4) (2026-05-21)
 
 
