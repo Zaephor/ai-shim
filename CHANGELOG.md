@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Zaephor/ai-shim/compare/v0.6.0...v0.7.0) (2026-05-28)
+
+
+### Features
+
+* **agent:** update pi registry to [@earendil-works](https://github.com/earendil-works) scoped npm package ([c191708](https://github.com/Zaephor/ai-shim/commit/c1917089dd0f265a1d844374211487b412bfc631))
+
 ## [0.6.0](https://github.com/Zaephor/ai-shim/compare/v0.5.4...v0.6.0) (2026-05-27)
 
 
