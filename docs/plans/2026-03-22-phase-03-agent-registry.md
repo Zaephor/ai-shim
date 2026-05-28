@@ -62,7 +62,7 @@ var builtins = map[string]Definition{
 	"pi": {
 		Name:        "pi",
 		InstallType: "npm",
-		Package:     "@mariozechner/pi-coding-agent",
+		Package:     "@earendil-works/pi-coding-agent",
 		Binary:      "pi",
 		HomePaths:   []string{".pi"},
 	},

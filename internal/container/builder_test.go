@@ -1290,7 +1290,7 @@ func TestBuildSpec_PIAgentScopeMountsAndEnv(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
@@ -1351,7 +1351,7 @@ func TestBuildSpec_BothPIAndGSDActiveGetSeparateScopes(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@mariozechner/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
 	p.Config.AllowAgents = []string{"gsd"}
 
 	spec, err := BuildSpec(p)
