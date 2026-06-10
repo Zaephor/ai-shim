@@ -53,6 +53,7 @@ func (p parallelTestParams) sessionLabels() map[string]string {
 		container.LabelBase:         "true",
 		container.LabelAgent:        p.AgentName,
 		container.LabelProfile:      p.Profile,
+		container.LabelRole:         "agent",
 		container.LabelPersistent:   "true",
 		container.LabelWorkspace:    p.WsHash,
 		container.LabelWorkspaceDir: "/fake/ws/path",
