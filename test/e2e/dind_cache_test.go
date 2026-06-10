@@ -31,6 +31,11 @@ import (
 // ensures the host-side bind mount at /var/lib/registry captures pulled layers.
 func TestDINDCachePullThrough(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	// The pull-through registry mirror reaches the cache via host-gateway
+	// routing inside the DIND sidecar. That routing is unreliable when the
+	// test host is itself a container (nested DIND), so skip there — same
+	// rationale the TLS DIND tests use.
+	testutil.SkipIfNestedDocker(t)
 	if testing.Short() {
 		t.Skip("skipping slow DIND pull-through cache test")
 	}

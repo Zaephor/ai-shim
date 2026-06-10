@@ -3,8 +3,6 @@ package dind
 import (
 	"context"
 	"io"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -202,11 +200,9 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 	require.NoError(t, err)
 	defer runner.Close()
 	cli := runner.Client()
+	testutil.RequireDaemonLocalFS(t, ctx, cli)
 
-	// Use a path accessible to the Docker daemon
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache")
-	os.MkdirAll(cacheDir, 0755)
-	t.Cleanup(func() { os.RemoveAll(cacheDir) })
+	cacheDir := t.TempDir()
 	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err)
 	assert.Contains(t, addr, CacheHostAlias)
@@ -233,6 +229,7 @@ func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 	require.NoError(t, err)
 	defer runner.Close()
 	cli := runner.Client()
+	testutil.RequireDaemonLocalFS(t, ctx, cli)
 
 	// Clean up any pre-existing cache container from a prior run so we hit
 	// the cold-start code path inside EnsureCache.
@@ -250,9 +247,7 @@ func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 	_, _ = cli.ImageRemove(ctx, CacheImage, image.RemoveOptions{Force: true})
 	_, _ = cli.ImageRemove(ctx, "registry:2", image.RemoveOptions{Force: true})
 
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".ai-shim", "test-registry-cache-pull")
-	require.NoError(t, os.MkdirAll(cacheDir, 0755))
-	t.Cleanup(func() { _ = os.RemoveAll(cacheDir) })
+	cacheDir := t.TempDir()
 
 	addr, err := EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err, "EnsureCache must pull the cache image when it is not present locally")

@@ -1459,6 +1459,7 @@ func TestContainerLogs_Integration(t *testing.T) {
 	containerName := "ai-shim-test-logs-" + fmt.Sprintf("%d", time.Now().UnixNano()%100000)
 
 	// Create and start a container with ai-shim labels
+	testutil.PullImage(t, ctx, cli, "alpine:latest")
 	resp, err := cli.ContainerCreate(ctx, &container_types.Config{
 		Image: "alpine:latest",
 		Cmd:   []string{"echo", "hello"},
@@ -1503,6 +1504,7 @@ func TestCleanup_WithOrphanedContainer(t *testing.T) {
 	containerName := "ai-shim-test-cleanup-" + fmt.Sprintf("%d", time.Now().UnixNano()%100000)
 
 	// Create a stopped container with ai-shim labels (simulate orphan)
+	testutil.PullImage(t, ctx, cli, "alpine:latest")
 	resp, err := cli.ContainerCreate(ctx, &container_types.Config{
 		Image: "alpine:latest",
 		Cmd:   []string{"true"},

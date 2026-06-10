@@ -61,6 +61,7 @@ func TestFindContainerByName_FindsRunning(t *testing.T) {
 	defer cli.Close()
 
 	// Start a labelled container
+	testutil.PullImage(t, ctx, cli, "alpine:latest")
 	name := fmt.Sprintf("test-find-%d", time.Now().UnixNano()%100000)
 	resp, err := cli.ContainerCreate(ctx, &container_types.Config{
 		Image:  "alpine:latest",
