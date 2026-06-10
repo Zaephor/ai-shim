@@ -928,11 +928,20 @@ func runManageSubcommand(args []string) error {
 			invocationName = agentName + "_" + profile
 		}
 
+		// Signal-aware context so Ctrl+C exits the watch loop instead of being
+		// treated as a crash and restarted.
+		watchCtx, stopWatch := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stopWatch()
+
 		maxRetries := cli.WatchRetries()
-		exitCode, err := cli.WatchLoop(maxRetries, func() (int, error) {
+		exitCode, err := cli.WatchLoop(watchCtx, maxRetries, func() (int, error) {
 			return runAgent(invocationName, nil)
 		}, func(d time.Duration) {
-			time.Sleep(d)
+			// Interruptible wait: wake early if the user interrupts.
+			select {
+			case <-watchCtx.Done():
+			case <-time.After(d):
+			}
 		})
 		if err != nil {
 			return fmt.Errorf("watch loop for %s: %w", invocationName, err)

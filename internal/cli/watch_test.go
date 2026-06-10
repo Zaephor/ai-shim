@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func TestWatchLoop_CleanExit(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(3, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 3, runFn, noSleep)
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Equal(t, 1, callCount, "should run exactly once on clean exit")
@@ -64,7 +65,7 @@ func TestWatchLoop_RetriesOnFailure(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(3, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 3, runFn, noSleep)
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Equal(t, 3, callCount, "should retry twice then succeed")
@@ -78,7 +79,7 @@ func TestWatchLoop_ExhaustsRetries(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(3, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 3, runFn, noSleep)
 	require.NoError(t, err)
 	assert.Equal(t, 1, exitCode)
 	assert.Equal(t, 4, callCount, "should run initial + 3 retries")
@@ -92,7 +93,7 @@ func TestWatchLoop_StopsOnError(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(3, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 3, runFn, noSleep)
 	assert.Error(t, err)
 	assert.Equal(t, -1, exitCode)
 	assert.Equal(t, 1, callCount, "should stop immediately on error")
@@ -106,7 +107,7 @@ func TestWatchLoop_ZeroRetries(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(0, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 0, runFn, noSleep)
 	require.NoError(t, err)
 	assert.Equal(t, 1, exitCode)
 	assert.Equal(t, 1, callCount, "with 0 retries, should run once and stop")
@@ -126,7 +127,7 @@ func TestWatchLoop_SleepCalledBetweenRetries(t *testing.T) {
 		sleepDuration = d
 	}
 
-	exitCode, err := WatchLoop(3, runFn, sleepFn)
+	exitCode, err := WatchLoop(context.Background(), 3, runFn, sleepFn)
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Equal(t, 2, sleepCalls, "should sleep between each retry")
@@ -139,7 +140,24 @@ func TestWatchLoop_PreservesNonZeroExitCode(t *testing.T) {
 	}
 	noSleep := func(d time.Duration) {}
 
-	exitCode, err := WatchLoop(1, runFn, noSleep)
+	exitCode, err := WatchLoop(context.Background(), 1, runFn, noSleep)
 	require.NoError(t, err)
 	assert.Equal(t, 42, exitCode, "should preserve the actual exit code")
+}
+
+func TestWatchLoop_StopsOnCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled — simulates Ctrl+C before/at the run
+
+	callCount := 0
+	runFn := func() (int, error) {
+		callCount++
+		return 1, nil // always non-zero
+	}
+	noSleep := func(d time.Duration) {}
+
+	exitCode, err := WatchLoop(ctx, 5, runFn, noSleep)
+	require.NoError(t, err)
+	assert.Equal(t, 1, exitCode)
+	assert.Equal(t, 1, callCount, "cancelled context should stop after one run, not exhaust retries")
 }
