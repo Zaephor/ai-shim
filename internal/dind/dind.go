@@ -405,7 +405,7 @@ func (s *Sidecar) exec(ctx context.Context, cmd []string) (exitCode int, stdout,
 	defer attach.Close()
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader); err != nil && err != io.EOF {
+	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, attach.Reader); err != nil && !errors.Is(err, io.EOF) {
 		return -1, stdoutBuf.Bytes(), stderrBuf.Bytes(), fmt.Errorf("reading exec output: %w", err)
 	}
 
