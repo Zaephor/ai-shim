@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Zaephor/ai-shim/internal/agent"
@@ -380,7 +382,11 @@ func runManage(args []string) error {
 			repo = selfupdate.DefaultRepository
 		}
 
-		latest, err := selfupdate.CheckLatest(suOpts)
+		// Cancellable context so Ctrl+C aborts an in-flight update cleanly.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		latest, err := selfupdate.CheckLatest(ctx, suOpts)
 		if err != nil {
 			return fmt.Errorf("checking for updates: %w", err)
 		}
@@ -390,7 +396,7 @@ func runManage(args []string) error {
 		}
 		fmt.Printf("Update available: %s -> %s\n", version, latest)
 
-		release, err := selfupdate.FetchRelease(suOpts)
+		release, err := selfupdate.FetchRelease(ctx, suOpts)
 		if err != nil {
 			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
 			return fmt.Errorf("fetching release info: %w", err)
@@ -400,6 +406,19 @@ func runManage(args []string) error {
 		if err != nil {
 			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
 			return fmt.Errorf("finding download for your platform: %w", err)
+		}
+
+		// Fail closed: without a checksum manifest the download is unverifiable,
+		// and this binary is installed with the host user's privileges.
+		checksumsURL, err := selfupdate.FindChecksumsURL(release)
+		if err != nil {
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
+			return fmt.Errorf("verifying release: %w", err)
+		}
+		expectedSum, err := selfupdate.FetchExpectedChecksum(ctx, checksumsURL, selfupdate.AssetName()+".tar.gz")
+		if err != nil {
+			fmt.Printf("Download manually: https://github.com/%s/releases/latest\n", repo)
+			return fmt.Errorf("verifying release: %w", err)
 		}
 
 		exe, err := os.Executable()
@@ -412,7 +431,7 @@ func runManage(args []string) error {
 		}
 
 		fmt.Printf("Downloading %s...\n", downloadURL)
-		if err := selfupdate.DownloadAndReplace(downloadURL, exe); err != nil {
+		if err := selfupdate.DownloadAndReplace(ctx, downloadURL, exe, expectedSum); err != nil {
 			return fmt.Errorf("updating binary: %w", err)
 		}
 		fmt.Printf("Updated to %s successfully. Backup at %s\n", latest, selfupdate.BackupPath(exe))

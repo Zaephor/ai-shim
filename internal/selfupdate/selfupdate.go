@@ -2,21 +2,38 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 )
 
+// hexSHA256 matches a lowercase-or-upper 64-char hex SHA256 digest.
+var hexSHA256 = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
 // httpClient is the shared HTTP client with a timeout for all GitHub API and
 // download requests. Prevents indefinite hangs on slow/unresponsive servers.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
+
+// httpGet issues a context-aware GET so callers can cancel in-flight requests
+// (e.g. the user interrupting `ai-shim update`).
+func httpGet(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return httpClient.Do(req)
+}
 
 const (
 	// DefaultRepository is the GitHub owner/repo checked for releases when
@@ -69,9 +86,9 @@ type Asset struct {
 // CheckLatest fetches the latest release tag from GitHub. When
 // opts.Prerelease is true it considers pre-release versions; otherwise
 // only stable releases are returned.
-func CheckLatest(opts Options) (string, error) {
+func CheckLatest(ctx context.Context, opts Options) (string, error) {
 	if opts.Prerelease {
-		releases, err := fetchReleases(opts)
+		releases, err := fetchReleases(ctx, opts)
 		if err != nil {
 			return "", err
 		}
@@ -82,7 +99,7 @@ func CheckLatest(opts Options) (string, error) {
 	}
 
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", opts.apiURL(), opts.repository())
-	resp, err := httpClient.Get(url)
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return "", fmt.Errorf("checking for updates: %w", err)
 	}
@@ -133,6 +150,56 @@ func BackupPath(currentPath string) string {
 	return currentPath + ".bak"
 }
 
+// ChecksumsAssetName is the GoReleaser-published checksum manifest attached to
+// each release (see .goreleaser.yaml `checksum.name_template`).
+const ChecksumsAssetName = "checksums.txt"
+
+// FindChecksumsURL locates the checksums.txt asset in a release. Its absence is
+// an error: the updater fails closed rather than installing an unverifiable
+// binary.
+func FindChecksumsURL(release Release) (string, error) {
+	for _, asset := range release.Assets {
+		if asset.Name == ChecksumsAssetName {
+			return asset.BrowserDownloadURL, nil
+		}
+	}
+	return "", fmt.Errorf("release has no %s asset; cannot verify download integrity", ChecksumsAssetName)
+}
+
+// FetchExpectedChecksum downloads the checksums.txt manifest and returns the
+// SHA256 digest recorded for assetName. The manifest uses the standard
+// `<hex-sha256>  <filename>` line format produced by sha256sum / GoReleaser.
+func FetchExpectedChecksum(ctx context.Context, checksumsURL, assetName string) (string, error) {
+	resp, err := httpGet(ctx, checksumsURL)
+	if err != nil {
+		return "", fmt.Errorf("downloading checksums: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("downloading checksums failed with status %d", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) != 2 {
+			continue
+		}
+		sum, name := fields[0], fields[1]
+		if name == assetName {
+			if !hexSHA256.MatchString(sum) {
+				return "", fmt.Errorf("malformed checksum for %s in manifest", assetName)
+			}
+			return strings.ToLower(sum), nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("reading checksums: %w", err)
+	}
+	return "", fmt.Errorf("no checksum entry for %s in manifest", assetName)
+}
+
 // extractBinaryFromTarGz reads a tar.gz archive from r and copies the first
 // entry whose base name is "ai-shim" into dst. It streams the archive without
 // loading it entirely into memory.
@@ -169,11 +236,19 @@ func extractBinaryFromTarGz(r io.Reader, dst io.Writer) error {
 	return fmt.Errorf("ai-shim binary not found in tar.gz archive")
 }
 
-// DownloadAndReplace downloads a tar.gz release archive from url, extracts
-// the ai-shim binary from it, and replaces the file at currentPath.
-// Creates a backup at currentPath.bak before replacing.
-func DownloadAndReplace(url, currentPath string) error {
-	resp, err := httpClient.Get(url)
+// DownloadAndReplace downloads a tar.gz release archive from url, verifies its
+// SHA256 against expectedSHA256, extracts the ai-shim binary, and replaces the
+// file at currentPath. A backup is kept at currentPath.bak. The archive is
+// verified in full before any filesystem swap, so a tampered or truncated
+// download can never replace the running binary. An empty expectedSHA256 is
+// rejected — the caller must supply a checksum.
+func DownloadAndReplace(ctx context.Context, url, currentPath, expectedSHA256 string) error {
+	if !hexSHA256.MatchString(expectedSHA256) {
+		return fmt.Errorf("refusing to update without a valid expected checksum")
+	}
+	expected := strings.ToLower(expectedSHA256)
+
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return fmt.Errorf("downloading update: %w", err)
 	}
@@ -183,6 +258,35 @@ func DownloadAndReplace(url, currentPath string) error {
 		return fmt.Errorf("download failed with status %d", resp.StatusCode)
 	}
 
+	// Download the archive to a temp file while hashing it, so we can verify
+	// integrity before extracting or replacing anything.
+	archive, err := os.CreateTemp(filepath.Dir(currentPath), "ai-shim-archive-*")
+	if err != nil {
+		return fmt.Errorf("creating temp archive: %w", err)
+	}
+	archivePath := archive.Name()
+	defer func() { _ = os.Remove(archivePath) }()
+
+	const maxArchiveSize = 500 * 1024 * 1024 // 500 MB
+	hasher := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(archive, hasher), io.LimitReader(resp.Body, maxArchiveSize)); err != nil {
+		_ = archive.Close()
+		return fmt.Errorf("downloading archive: %w", err)
+	}
+	_ = archive.Close()
+
+	actual := fmt.Sprintf("%x", hasher.Sum(nil))
+	if actual != expected {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
+	}
+
+	// Integrity verified — extract the binary from the trusted archive.
+	verified, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("reopening archive: %w", err)
+	}
+	defer func() { _ = verified.Close() }()
+
 	tmpFile, err := os.CreateTemp(filepath.Dir(currentPath), "ai-shim-update-*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -190,7 +294,7 @@ func DownloadAndReplace(url, currentPath string) error {
 	tmpPath := tmpFile.Name()
 	defer func() { _ = os.Remove(tmpPath) }() // cleanup on error
 
-	if err := extractBinaryFromTarGz(resp.Body, tmpFile); err != nil {
+	if err := extractBinaryFromTarGz(verified, tmpFile); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("extracting update: %w", err)
 	}
@@ -216,9 +320,9 @@ func DownloadAndReplace(url, currentPath string) error {
 // FetchRelease fetches the full release info for the latest version.
 // Respects opts.Prerelease: when true, the newest release (including
 // pre-releases) is returned.
-func FetchRelease(opts Options) (Release, error) {
+func FetchRelease(ctx context.Context, opts Options) (Release, error) {
 	if opts.Prerelease {
-		releases, err := fetchReleases(opts)
+		releases, err := fetchReleases(ctx, opts)
 		if err != nil {
 			return Release{}, err
 		}
@@ -229,7 +333,7 @@ func FetchRelease(opts Options) (Release, error) {
 	}
 
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", opts.apiURL(), opts.repository())
-	resp, err := httpClient.Get(url)
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return Release{}, fmt.Errorf("fetching release: %w", err)
 	}
@@ -248,9 +352,9 @@ func FetchRelease(opts Options) (Release, error) {
 
 // fetchReleases returns the first page of releases (newest first, including
 // pre-releases). Used when Options.Prerelease is true.
-func fetchReleases(opts Options) ([]Release, error) {
+func fetchReleases(ctx context.Context, opts Options) ([]Release, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases?per_page=10", opts.apiURL(), opts.repository())
-	resp, err := httpClient.Get(url)
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("listing releases: %w", err)
 	}

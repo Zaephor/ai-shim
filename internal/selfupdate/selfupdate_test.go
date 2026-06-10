@@ -4,12 +4,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,6 +38,12 @@ func makeTarGz(t *testing.T, filePath string, content []byte) []byte {
 	require.NoError(t, tw.Close())
 	require.NoError(t, gz.Close())
 	return buf.Bytes()
+}
+
+// sha256Hex returns the lowercase hex SHA256 of b, matching the digests in a
+// GoReleaser checksums.txt manifest.
+func sha256Hex(b []byte) string {
+	return fmt.Sprintf("%x", sha256.Sum256(b))
 }
 
 func TestNeedsUpdate_DifferentVersions(t *testing.T) {
@@ -75,8 +84,16 @@ func TestFindAssetURL_Found(t *testing.T) {
 }
 
 func TestDownloadAndReplace_InvalidURL(t *testing.T) {
-	err := DownloadAndReplace("http://invalid.example.com/nonexistent", "/tmp/fake-binary")
+	// A valid-format checksum gets past the initial guard so the failure is the
+	// unreachable host, not the checksum check.
+	err := DownloadAndReplace(context.Background(), "http://invalid.example.com/nonexistent", "/tmp/fake-binary", strings.Repeat("a", 64))
 	assert.Error(t, err, "should error on invalid download URL")
+}
+
+func TestDownloadAndReplace_EmptyChecksumRejected(t *testing.T) {
+	err := DownloadAndReplace(context.Background(), "http://example.com/dl", "/tmp/fake-binary", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checksum")
 }
 
 func TestBackupPath(t *testing.T) {
@@ -99,7 +116,7 @@ func TestDownloadAndReplace_Success(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath, sha256Hex(archive))
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(currentPath)
@@ -110,6 +127,33 @@ func TestDownloadAndReplace_Success(t *testing.T) {
 	backupData, err := os.ReadFile(backupPath)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("old"), backupData)
+}
+
+// TestDownloadAndReplace_ChecksumMismatch verifies a tampered/wrong-checksum
+// download is rejected before any filesystem swap: the current binary is left
+// intact and no backup is created.
+func TestDownloadAndReplace_ChecksumMismatch(t *testing.T) {
+	archive := makeTarGz(t, "ai-shim", []byte("malicious replacement"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "ai-shim")
+	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
+
+	err := DownloadAndReplace(context.Background(), srv.URL+"/dl", currentPath, strings.Repeat("b", 64))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checksum mismatch")
+
+	data, err := os.ReadFile(currentPath)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("old"), data, "binary must be untouched on checksum failure")
+
+	_, statErr := os.Stat(BackupPath(currentPath))
+	assert.True(t, os.IsNotExist(statErr), "no backup should be created when verification fails")
 }
 
 // TestDownloadAndReplace_TarGzExtraction verifies that the binary is correctly
@@ -130,7 +174,7 @@ func TestDownloadAndReplace_TarGzExtraction(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old binary"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath, sha256Hex(archive))
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(currentPath)
@@ -155,7 +199,7 @@ func TestDownloadAndReplace_TarGzWithSubdir(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath, sha256Hex(archive))
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(currentPath)
@@ -164,7 +208,8 @@ func TestDownloadAndReplace_TarGzWithSubdir(t *testing.T) {
 }
 
 // TestDownloadAndReplace_TarGzBinaryNotFound verifies a clear error when the
-// archive does not contain an "ai-shim" binary.
+// archive does not contain an "ai-shim" binary. The checksum matches so the
+// failure is genuinely the missing binary, not verification.
 func TestDownloadAndReplace_TarGzBinaryNotFound(t *testing.T) {
 	archive := makeTarGz(t, "README.md", []byte("docs"))
 
@@ -178,7 +223,7 @@ func TestDownloadAndReplace_TarGzBinaryNotFound(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/ai-shim_linux_amd64.tar.gz", currentPath, sha256Hex(archive))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ai-shim")
 }
@@ -193,7 +238,7 @@ func TestDownloadAndReplace_ServerError(t *testing.T) {
 	currentPath := filepath.Join(dir, "ai-shim")
 	require.NoError(t, os.WriteFile(currentPath, []byte("old"), 0755))
 
-	err := DownloadAndReplace(srv.URL+"/ai-shim", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/ai-shim", currentPath, strings.Repeat("a", 64))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "status 404")
 }
@@ -208,7 +253,7 @@ func TestCheckLatest_WithMockServer(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	version, err := CheckLatest(Options{})
+	version, err := CheckLatest(context.Background(), Options{})
 	require.NoError(t, err)
 	assert.Equal(t, "v0.2.0", version)
 }
@@ -224,15 +269,62 @@ func TestFetchRelease_WithMockServer(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	release, err := FetchRelease(Options{})
+	release, err := FetchRelease(context.Background(), Options{})
 	require.NoError(t, err)
 	assert.Equal(t, "v0.2.0", release.TagName)
 	assert.Len(t, release.Assets, 1)
 }
 
+func TestFindChecksumsURL(t *testing.T) {
+	release := Release{
+		Assets: []Asset{
+			{Name: "ai-shim_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/dl"},
+			{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
+		},
+	}
+	url, err := FindChecksumsURL(release)
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/checksums.txt", url)
+}
+
+func TestFindChecksumsURL_Missing(t *testing.T) {
+	release := Release{
+		Assets: []Asset{
+			{Name: "ai-shim_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/dl"},
+		},
+	}
+	_, err := FindChecksumsURL(release)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checksums.txt")
+}
+
+func TestFetchExpectedChecksum(t *testing.T) {
+	want := strings.Repeat("a", 64)
+	other := strings.Repeat("b", 64)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  ai-shim_linux_amd64.tar.gz\n%s  ai-shim_darwin_arm64.tar.gz\n", want, other)
+	}))
+	defer srv.Close()
+
+	sum, err := FetchExpectedChecksum(context.Background(), srv.URL+"/checksums.txt", "ai-shim_linux_amd64.tar.gz")
+	require.NoError(t, err)
+	assert.Equal(t, want, sum)
+}
+
+func TestFetchExpectedChecksum_MissingEntry(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  some-other-file.tar.gz\n", strings.Repeat("a", 64))
+	}))
+	defer srv.Close()
+
+	_, err := FetchExpectedChecksum(context.Background(), srv.URL+"/checksums.txt", "ai-shim_linux_amd64.tar.gz")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no checksum entry")
+}
+
 func TestDownloadAndReplace_NonExistentCurrentPath(t *testing.T) {
-	// The directory /nonexistent/path/ doesn't exist, so CreateTemp fails
-	// before we even try to extract the archive.
+	// The directory /nonexistent/path/ doesn't exist, so the archive temp file
+	// cannot be created (it is placed alongside currentPath).
 	archive := makeTarGz(t, "ai-shim", []byte("binary"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/gzip")
@@ -240,9 +332,9 @@ func TestDownloadAndReplace_NonExistentCurrentPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := DownloadAndReplace(srv.URL+"/dl", "/nonexistent/path/ai-shim")
+	err := DownloadAndReplace(context.Background(), srv.URL+"/dl", "/nonexistent/path/ai-shim", sha256Hex(archive))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating temp file")
+	assert.Contains(t, err.Error(), "creating temp archive")
 }
 
 func TestDownloadAndReplace_BackupFails(t *testing.T) {
@@ -256,7 +348,7 @@ func TestDownloadAndReplace_BackupFails(t *testing.T) {
 
 	dir := t.TempDir()
 	currentPath := filepath.Join(dir, "ai-shim")
-	err := DownloadAndReplace(srv.URL+"/dl", currentPath)
+	err := DownloadAndReplace(context.Background(), srv.URL+"/dl", currentPath, sha256Hex(archive))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "backing up")
 }
@@ -271,7 +363,7 @@ func TestCheckLatest_ServerError(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	_, err := CheckLatest(Options{})
+	_, err := CheckLatest(context.Background(), Options{})
 	assert.Error(t, err)
 }
 
@@ -285,7 +377,7 @@ func TestCheckLatest_InvalidJSON(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	_, err := CheckLatest(Options{})
+	_, err := CheckLatest(context.Background(), Options{})
 	assert.Error(t, err)
 }
 
@@ -299,7 +391,7 @@ func TestFetchRelease_ServerError(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	_, err := FetchRelease(Options{})
+	_, err := FetchRelease(context.Background(), Options{})
 	assert.Error(t, err)
 }
 
@@ -354,7 +446,7 @@ func TestCheckLatest_Prerelease(t *testing.T) {
 	defer func() { GitHubAPI = origAPI }()
 
 	// With prerelease=true, the newest (pre-release) tag is returned.
-	tag, err := CheckLatest(Options{Prerelease: true})
+	tag, err := CheckLatest(context.Background(), Options{Prerelease: true})
 	require.NoError(t, err)
 	assert.Equal(t, "v0.3.0-rc1", tag)
 }
@@ -371,7 +463,7 @@ func TestCheckLatest_NonPrerelease_UsesLatestEndpoint(t *testing.T) {
 	defer func() { GitHubAPI = origAPI }()
 
 	// With prerelease=false (default), uses /releases/latest.
-	tag, err := CheckLatest(Options{Prerelease: false})
+	tag, err := CheckLatest(context.Background(), Options{Prerelease: false})
 	require.NoError(t, err)
 	assert.Equal(t, "v0.2.0", tag)
 }
@@ -392,7 +484,7 @@ func TestFetchRelease_Prerelease(t *testing.T) {
 	GitHubAPI = srv.URL
 	defer func() { GitHubAPI = origAPI }()
 
-	release, err := FetchRelease(Options{Prerelease: true})
+	release, err := FetchRelease(context.Background(), Options{Prerelease: true})
 	require.NoError(t, err)
 	assert.Equal(t, "v0.3.0-rc1", release.TagName)
 	assert.True(t, release.Prerelease)
