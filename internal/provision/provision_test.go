@@ -162,6 +162,49 @@ func TestGenerateInstallScript_InvalidChecksumIgnored(t *testing.T) {
 	assert.Contains(t, script, "curl", "tool should still be downloaded")
 }
 
+const validSHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+func TestGenerateInstallScript_TarExtractWithChecksum(t *testing.T) {
+	tools := map[string]ToolDef{
+		"rg": {Type: "tar-extract", URL: "https://example.com/rg.tar.gz", Binary: "rg", Checksum: validSHA},
+	}
+	script := GenerateInstallScript(nil, tools, "/opt/bin")
+	assert.Contains(t, script, "sha256sum -c -", "checksummed tar-extract must verify before extracting")
+	assert.Contains(t, script, validSHA)
+	assert.NotContains(t, script, "without checksum verification", "verified tool should not emit a warning")
+}
+
+func TestGenerateInstallScript_TarExtractSelectiveWithChecksum(t *testing.T) {
+	tools := map[string]ToolDef{
+		"bundle": {Type: "tar-extract-selective", URL: "https://example.com/b.tar.gz", Binary: "bundle", Files: []string{"helper"}, Checksum: validSHA},
+	}
+	script := GenerateInstallScript(nil, tools, "/opt/bin")
+	assert.Contains(t, script, "sha256sum -c -")
+	assert.Contains(t, script, validSHA)
+}
+
+func TestGenerateInstallScript_WarnsWhenNoChecksum(t *testing.T) {
+	for _, typ := range []string{"binary-download", "tar-extract", "tar-extract-selective"} {
+		tools := map[string]ToolDef{
+			"mytool": {Type: typ, URL: "https://example.com/x", Binary: "mytool"},
+		}
+		script := GenerateInstallScript(nil, tools, "/opt/bin")
+		assert.Contains(t, script, "without checksum verification",
+			"%s without a checksum should emit a soft warning", typ)
+		assert.Contains(t, script, ">&2", "warning should go to stderr")
+	}
+}
+
+func TestGenerateInstallScript_BinaryDownloadRemovesOnChecksumFailure(t *testing.T) {
+	tools := map[string]ToolDef{
+		"mybin": {Type: "binary-download", URL: "https://example.com/bin", Binary: "mybin", Checksum: validSHA},
+	}
+	script := GenerateInstallScript(nil, tools, "/opt/bin")
+	// A failed checksum must remove the downloaded file so the `if [ ! -f ]`
+	// guard does not silently reuse a corrupt download on the next run.
+	assert.Contains(t, script, "rm -f", "checksum failure should delete the bad download")
+}
+
 func TestGenerateInstallScript_AdversarialToolName(t *testing.T) {
 	tools := map[string]ToolDef{
 		"evil; rm -rf /": {Type: "binary-download", URL: "https://example.com/tool", Binary: "tool"},

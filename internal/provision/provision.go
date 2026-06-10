@@ -79,34 +79,57 @@ func GenerateInstallScript(order []string, tools map[string]ToolDef, targetDir s
 		if tool.DataDir && tool.EnvVar != "" {
 			fmt.Fprintf(&b, "export %s=\"/usr/local/share/ai-shim/cache/%s\"\n", tool.EnvVar, name)
 		}
-		b.WriteString(generateToolInstall(tool, targetDir))
+		b.WriteString(generateToolInstall(name, tool, targetDir))
 	}
 
 	return b.String()
 }
 
-func generateToolInstall(tool ToolDef, targetDir string) string {
+func generateToolInstall(name string, tool ToolDef, targetDir string) string {
 	var b strings.Builder
 
 	bin := shell.Quote(tool.Binary)
 	url := shell.Quote(tool.URL)
 	pkg := shell.Quote(tool.Package)
 
+	hasChecksum := tool.Checksum != "" && isValidChecksum(tool.Checksum)
+	// Non-fatal nudge: a download-based tool with no checksum is installed
+	// unverified. Emitted to stderr so it surfaces in container logs without
+	// blocking the launch (config Validate() is fatal, so this can't live there).
+	warn := fmt.Sprintf("  echo \"ai-shim: warning: installing %s without checksum verification\" >&2\n", name)
+
 	switch tool.Type {
 	case "binary-download":
 		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
 		fmt.Fprintf(&b, "  curl -fsSL -o \"%s\"/%s %s\n", targetDir, bin, url)
-		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
-		if tool.Checksum != "" && isValidChecksum(tool.Checksum) {
-			fmt.Fprintf(&b, "  echo '%s  %s/%s' | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; exit 1; }\n", tool.Checksum, targetDir, bin, bin)
+		if hasChecksum {
+			// Verify before use; remove the file on failure so a corrupt
+			// download is not silently reused by the `if [ ! -f ]` guard.
+			fmt.Fprintf(&b, "  echo '%s  %s/%s' | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; rm -f \"%s\"/%s; exit 1; }\n", tool.Checksum, targetDir, bin, bin, targetDir, bin)
+		} else {
+			b.WriteString(warn)
 		}
+		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")
 
 	case "tar-extract":
 		fmt.Fprintf(&b, "if [ ! -f \"%s\"/%s ]; then\n", targetDir, bin)
-		fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin)
-		fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; tmpdir=$(mktemp -d) && curl -fsSL %s | tar xz -C \"$tmpdir\" && find \"$tmpdir\" -name %s -exec mv {} \"%s/\" \\; && rm -rf \"$tmpdir\"; } || \\\n", bin, url, bin, targetDir)
-		fmt.Fprintf(&b, "  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin)
+		if hasChecksum {
+			// Download to a temp file, verify, then extract from the verified
+			// archive (cannot checksum a `curl | tar` stream).
+			b.WriteString("  _tmpf=$(mktemp)\n")
+			fmt.Fprintf(&b, "  curl -fsSL -o \"$_tmpf\" %s || { echo \"ERROR: download failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n", url, bin)
+			fmt.Fprintf(&b, "  echo '%s  '\"$_tmpf\" | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n", tool.Checksum, bin)
+			fmt.Fprintf(&b, "  tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s < \"$_tmpf\" || \\\n", targetDir, bin)
+			fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; tmpdir=$(mktemp -d) && tar xz -C \"$tmpdir\" < \"$_tmpf\" && find \"$tmpdir\" -name %s -exec mv {} \"%s/\" \\; && rm -rf \"$tmpdir\"; } || \\\n", bin, bin, targetDir)
+			fmt.Fprintf(&b, "  { echo \"ERROR: tar extract failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n", bin)
+			b.WriteString("  rm -f \"$_tmpf\"\n")
+		} else {
+			b.WriteString(warn)
+			fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards '*/'%s || \\\n", url, targetDir, bin)
+			fmt.Fprintf(&b, "  { echo \"Fallback: extracting %s via find...\"; tmpdir=$(mktemp -d) && curl -fsSL %s | tar xz -C \"$tmpdir\" && find \"$tmpdir\" -name %s -exec mv {} \"%s/\" \\; && rm -rf \"$tmpdir\"; } || \\\n", bin, url, bin, targetDir)
+			fmt.Fprintf(&b, "  { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n", bin)
+		}
 		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")
 
@@ -117,8 +140,18 @@ func generateToolInstall(tool ToolDef, targetDir string) string {
 		for i, f := range files {
 			wildcards[i] = fmt.Sprintf("'*/'%s", shell.Quote(f))
 		}
-		fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
-			url, targetDir, strings.Join(wildcards, " "), bin)
+		if hasChecksum {
+			b.WriteString("  _tmpf=$(mktemp)\n")
+			fmt.Fprintf(&b, "  curl -fsSL -o \"$_tmpf\" %s || { echo \"ERROR: download failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n", url, bin)
+			fmt.Fprintf(&b, "  echo '%s  '\"$_tmpf\" | sha256sum -c - || { echo \"ERROR: checksum verification failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n", tool.Checksum, bin)
+			fmt.Fprintf(&b, "  tar xz -C \"%s\" --strip-components=1 --wildcards %s < \"$_tmpf\" || { echo \"ERROR: tar extract failed for %s\"; rm -f \"$_tmpf\"; exit 1; }\n",
+				targetDir, strings.Join(wildcards, " "), bin)
+			b.WriteString("  rm -f \"$_tmpf\"\n")
+		} else {
+			b.WriteString(warn)
+			fmt.Fprintf(&b, "  curl -fsSL %s | tar xz -C \"%s\" --strip-components=1 --wildcards %s || { echo \"ERROR: tar extract failed for %s\"; exit 1; }\n",
+				url, targetDir, strings.Join(wildcards, " "), bin)
+		}
 		fmt.Fprintf(&b, "  chmod +x \"%s\"/%s\n", targetDir, bin)
 		b.WriteString("fi\n")
 
