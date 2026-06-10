@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -166,6 +167,14 @@ func TestRun_WithMount(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestDockerSignalArg(t *testing.T) {
+	// Docker's signal parser accepts the numeric form; Go's sig.String()
+	// ("interrupt"/"terminated"/"hangup") is rejected, so we must send numbers.
+	assert.Equal(t, "2", dockerSignalArg(syscall.SIGINT))
+	assert.Equal(t, "15", dockerSignalArg(syscall.SIGTERM))
+	assert.Equal(t, "1", dockerSignalArg(syscall.SIGHUP))
 }
 
 func TestEnsureImage_AlreadyLocal(t *testing.T) {

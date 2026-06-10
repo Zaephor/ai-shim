@@ -342,6 +342,17 @@ func (r *Runner) Reattach(ctx context.Context, containerID string, tty bool) (At
 // ordering is load-bearing: attaching after a fast-exit container has
 // terminated yields a stream that never produces data or EOF, and the
 // stdcopy.StdCopy call below would block forever.
+// dockerSignalArg renders an os.Signal in the form the Docker API expects: the
+// numeric signal (e.g. "2" for SIGINT). Docker's signal parser accepts a
+// number, "SIGINT", or "INT", but NOT Go's descriptive String() names like
+// "interrupt"/"terminated", so forwarding sig.String() silently failed.
+func dockerSignalArg(sig os.Signal) string {
+	if s, ok := sig.(syscall.Signal); ok {
+		return strconv.Itoa(int(s))
+	}
+	return sig.String()
+}
+
 func (r *Runner) streamAttached(ctx context.Context, containerID string, attachResp types.HijackedResponse, spec ContainerSpec) (AttachResult, error) {
 	defer attachResp.Close()
 
@@ -391,7 +402,7 @@ func (r *Runner) streamAttached(ctx context.Context, containerID string, attachR
 				triggerDetach()
 				return
 			}
-			if err := r.client.ContainerKill(ctx, containerID, sig.String()); err != nil {
+			if err := r.client.ContainerKill(ctx, containerID, dockerSignalArg(sig)); err != nil {
 				// The container may have already exited; this is expected on normal
 				// shutdown, so log at debug level rather than treating as an error.
 				logging.Debug("signal %s forwarding failed: %v", sig, err)
