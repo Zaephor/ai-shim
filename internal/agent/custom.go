@@ -22,6 +22,9 @@ type customAgentDef struct {
 	Binary      string   `yaml:"binary"`
 	DataDirs    []string `yaml:"data_dirs,omitempty"`
 	DataFiles   []string `yaml:"data_files,omitempty"`
+	// ProjectScope opts the agent into isolated ~/.<name>/projects/ scoping
+	// (for agents that do orphan detection over that directory).
+	ProjectScope bool `yaml:"project_scope,omitempty"`
 }
 
 // ValidateDataPath checks that a data path is safe for use as a relative path
@@ -98,12 +101,13 @@ func LoadCustomAgents(configDir string) map[string]Definition {
 
 		agentName := strings.TrimSuffix(name, ".yaml")
 		result[agentName] = Definition{
-			Name:        agentName,
-			InstallType: f.AgentDef.InstallType,
-			Package:     f.AgentDef.Package,
-			Binary:      f.AgentDef.Binary,
-			DataDirs:    filterValidDataPaths(f.AgentDef.DataDirs, agentName, "data_dir"),
-			DataFiles:   filterValidDataPaths(f.AgentDef.DataFiles, agentName, "data_file"),
+			Name:         agentName,
+			InstallType:  f.AgentDef.InstallType,
+			Package:      f.AgentDef.Package,
+			Binary:       f.AgentDef.Binary,
+			DataDirs:     filterValidDataPaths(f.AgentDef.DataDirs, agentName, "data_dir"),
+			DataFiles:    filterValidDataPaths(f.AgentDef.DataFiles, agentName, "data_file"),
+			ProjectScope: f.AgentDef.ProjectScope,
 		}
 	}
 

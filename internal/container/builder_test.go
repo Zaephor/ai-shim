@@ -1244,7 +1244,7 @@ func TestBuildSpec_GSDAgentScopeMountsAndEnv(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}, ProjectScope: true}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
@@ -1290,7 +1290,7 @@ func TestBuildSpec_PIAgentScopeMountsAndEnv(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}, ProjectScope: true}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
@@ -1351,7 +1351,7 @@ func TestBuildSpec_BothPIAndGSDActiveGetSeparateScopes(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}}
+	p.Agent = agent.Definition{Name: "pi", InstallType: "npm", Package: "@earendil-works/pi-coding-agent", Binary: "pi", DataDirs: []string{".pi"}, ProjectScope: true}
 	p.Config.AllowAgents = []string{"gsd"}
 
 	spec, err := BuildSpec(p)
@@ -1383,7 +1383,7 @@ func TestBuildSpec_ScopedAgentCreatesHostStateDir(t *testing.T) {
 	root := t.TempDir()
 	p := defaultBuildParams()
 	p.Layout = storage.NewLayout(root)
-	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}}
+	p.Agent = agent.Definition{Name: "gsd", InstallType: "npm", Package: "@opengsd/gsd-pi", Binary: "gsd", DataDirs: []string{".gsd"}, ProjectScope: true}
 
 	spec, err := BuildSpec(p)
 	require.NoError(t, err)
@@ -1398,4 +1398,45 @@ func TestBuildSpec_ScopedAgentCreatesHostStateDir(t *testing.T) {
 		}
 	}
 	t.Fatal("no gsd bind-mount found under /tmp/gsd-scope/projects/")
+}
+
+func TestBuildSpec_ProjectScopeIsDataDriven(t *testing.T) {
+	// An arbitrary agent (not pi/gsd) that opts in via ProjectScope gets the
+	// same isolated scope, proving the behavior is data-driven, not hardcoded.
+	p := defaultBuildParams()
+	p.Layout = storage.NewLayout(t.TempDir())
+	p.Agent = agent.Definition{Name: "scout", InstallType: "npm", Package: "scout-cli", Binary: "scout", ProjectScope: true}
+
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	targets := map[string]bool{}
+	for _, m := range spec.Mounts {
+		targets[m.Target] = true
+	}
+	assert.True(t, targets["/tmp/scout-scope/projects"], "opted-in agent must get its scope tmpfs")
+	assert.True(t, targets["/home/user/.scout/projects"], "opted-in agent must get its home overlay")
+
+	envMap := map[string]string{}
+	for _, e := range spec.Env {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			envMap[k] = v
+		}
+	}
+	assert.Equal(t, "/tmp/scout-scope", envMap["SCOUT_STATE_DIR"])
+	assert.NotEmpty(t, envMap["SCOUT_PROJECT_ID"])
+
+	// The same agent without the flag gets no scope at all.
+	p2 := defaultBuildParams()
+	p2.Layout = storage.NewLayout(t.TempDir())
+	p2.Agent = agent.Definition{Name: "scout", InstallType: "npm", Package: "scout-cli", Binary: "scout"}
+
+	spec2, err := BuildSpec(p2)
+	require.NoError(t, err)
+	for _, m := range spec2.Mounts {
+		assert.NotContains(t, m.Target, "scout-scope", "agent without ProjectScope must not get a scope mount")
+	}
+	for _, e := range spec2.Env {
+		assert.NotContains(t, e, "SCOUT_STATE_DIR")
+	}
 }

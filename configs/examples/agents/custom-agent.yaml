@@ -15,6 +15,9 @@ agent_def:
     - ".my-agent"
   data_files:
     - ".my-agent.json"
+  # Opt in only if the agent scans ~/.<binary>/projects/ for orphan detection;
+  # ai-shim then gives it an isolated, per-project view of that directory.
+  # project_scope: true
 
 env:
   MY_AGENT_API_KEY: "your-key-here"

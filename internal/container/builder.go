@@ -111,16 +111,27 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 		if err != nil {
 			return ContainerSpec{}, fmt.Errorf("resolving profile home: %w", err)
 		}
-		for _, name := range []string{"pi", "gsd"} {
-			if p.Agent.Name != name && !sliceContains(p.Config.AllowAgents, name) {
+		// The active agent plus any agents it may invoke; agents opt into
+		// project-scope isolation via Definition.ProjectScope rather than a
+		// hardcoded name list.
+		candidates := []agent.Definition{p.Agent}
+		for _, name := range p.Config.AllowAgents {
+			if def, ok := agent.Lookup(name); ok {
+				candidates = append(candidates, def)
+			}
+		}
+		seen := make(map[string]bool, len(candidates))
+		for _, def := range candidates {
+			if !def.ProjectScope || seen[def.Name] {
 				continue
 			}
-			hash := computeGSDHash(pwd, workdir)
-			hostStateDir := filepath.Join(profileHome, "."+name, "projects", hash)
+			seen[def.Name] = true
+			hash := computeProjectScopeHash(pwd, workdir)
+			hostStateDir := filepath.Join(profileHome, "."+def.Name, "projects", hash)
 			if err := os.MkdirAll(hostStateDir, 0o755); err != nil {
-				return ContainerSpec{}, fmt.Errorf("creating %s state dir: %w", name, err)
+				return ContainerSpec{}, fmt.Errorf("creating %s state dir: %w", def.Name, err)
 			}
-			activeScopes = append(activeScopes, projectScope{name, hash, hostStateDir})
+			activeScopes = append(activeScopes, projectScope{def.Name, hash, hostStateDir})
 		}
 	}
 
@@ -676,11 +687,11 @@ func scopeProjectMounts(agentName, hash, hostStateDir, homeDir string) []mount.M
 	}
 }
 
-// computeGSDHash derives the gsd project identity hash using the same
-// algorithm as gsd itself: SHA-256 of the remote URL when one is configured,
-// or SHA-256 of "\n"+containerWorkdir for local-only repos (matching gsd's
+// computeProjectScopeHash derives a project identity hash using the same
+// algorithm pi/gsd use: SHA-256 of the remote URL when one is configured,
+// or SHA-256 of "\n"+containerWorkdir for local-only repos (matching their
 // `\n${root}` template literal with the container-side git root).
-func computeGSDHash(hostRepoPath, containerWorkdir string) string {
+func computeProjectScopeHash(hostRepoPath, containerWorkdir string) string {
 	var input string
 	if url := gitRemoteOriginURL(hostRepoPath); url != "" {
 		input = url
@@ -699,15 +710,6 @@ func gitRemoteOriginURL(repoPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
-}
-
-func sliceContains(s []string, v string) bool {
-	for _, item := range s {
-		if item == v {
-			return true
-		}
-	}
-	return false
 }
 
 // ValidateConfigVolumes checks all volume mount paths for security issues.

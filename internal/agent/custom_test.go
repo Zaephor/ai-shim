@@ -23,6 +23,7 @@ agent_def:
     - ".myagent"
   data_files:
     - ".myagent.json"
+  project_scope: true
 env:
   MY_KEY: "value"
 `
@@ -38,6 +39,7 @@ env:
 	assert.Equal(t, "myagent", def.Binary)
 	assert.Equal(t, []string{".myagent"}, def.DataDirs)
 	assert.Equal(t, []string{".myagent.json"}, def.DataFiles)
+	assert.True(t, def.ProjectScope, "project_scope should round-trip into the definition")
 }
 
 func TestLoadCustomAgents_NoAgentDef(t *testing.T) {
