@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,8 +23,7 @@ import (
 	"github.com/Zaephor/ai-shim/internal/invocation"
 	"github.com/Zaephor/ai-shim/internal/logging"
 	"github.com/Zaephor/ai-shim/internal/network"
-	"github.com/Zaephor/ai-shim/internal/platform"
-	"github.com/Zaephor/ai-shim/internal/security"
+	"github.com/Zaephor/ai-shim/internal/orchestrate"
 	"github.com/Zaephor/ai-shim/internal/selfupdate"
 	"github.com/Zaephor/ai-shim/internal/storage"
 	"github.com/Zaephor/ai-shim/internal/workspace"
@@ -1067,76 +1067,25 @@ func runAgent(name string, args []string) (int, error) {
 	// 2. Setup storage layout
 	layout := storage.NewLayout(storage.DefaultRoot())
 
-	// 2.5 Load custom agent definitions from config
-	if customDefs := agent.LoadCustomAgents(layout.ConfigDir); customDefs != nil {
-		agent.SetCustomAgents(customDefs)
-	}
-
-	// 3. Lookup agent definition
-	agentDef, ok := agent.Lookup(agentName)
-	if !ok {
-		return 1, fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s\nUse 'ai-shim manage agents' for details", agentName, formatAgentList())
-	}
-
-	// 4. Detect platform
-	platInfo := platform.Detect()
-
-	if platInfo.UID == 0 {
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: running as root (UID 0). Container will run as root.\n")
-	}
-
-	// Check for first run
+	// Fail fast before any provisioning if the tool isn't initialized.
 	if cli.IsFirstRun(layout) {
 		cli.PrintFirstRunHelp(layout)
 		return 1, fmt.Errorf("run 'ai-shim init' to set up")
 	}
-	if err := layout.EnsureDirectories(agentName, profileName); err != nil {
-		return 1, fmt.Errorf("setting up directories: %w", err)
-	}
 
-	// 5. Resolve config
-	cfg, err := config.Resolve(layout.ConfigDir, agentName, profileName)
+	// Resolve config and provision on-disk state (shared with `manage warm`).
+	prep, err := orchestrate.Prepare(layout, agentName, profileName, orchestrate.Options{ValidateWorkingDir: true})
 	if err != nil {
-		return 1, fmt.Errorf("resolving config: %w", err)
-	}
-
-	// 5.1 Validate config
-	if errs := cfg.Validate(); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintf(os.Stderr, "ai-shim: config error: %s\n", e)
+		var unknown *orchestrate.UnknownAgentError
+		if errors.As(err, &unknown) {
+			return 1, fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s\nUse 'ai-shim manage agents' for details", unknown.Name, formatAgentList())
 		}
-		return 1, fmt.Errorf("invalid config: %d error(s)", len(errs))
-	}
-
-	// 5.5 Validate working directory
-	pwd, err := os.Getwd()
-	if err != nil {
-		return 1, fmt.Errorf("getting working directory: %w", err)
-	}
-	if err := security.ValidateWorkingDirectory(pwd); err != nil {
 		return 1, err
 	}
-
-	// 5.6 Validate config volumes
-	if errs := container.ValidateConfigVolumes(cfg.Volumes); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintf(os.Stderr, "ai-shim: invalid volume: %v\n", e)
-		}
-		return 1, fmt.Errorf("invalid volume config: %d error(s)", len(errs))
-	}
-
-	// 5.7 Pre-create agent data dirs/files for correct ownership
-	if err := layout.EnsureAgentData(profileName, agentDef.DataDirs, agentDef.DataFiles); err != nil {
-		return 1, fmt.Errorf("setting up agent data: %w", err)
-	}
-	// Also pre-create data for allowed agents
-	for _, name := range cfg.AllowAgents {
-		if allowed, ok := agent.Lookup(name); ok {
-			if err := layout.EnsureAgentData(profileName, allowed.DataDirs, allowed.DataFiles); err != nil {
-				return 1, fmt.Errorf("setting up agent data for %s: %w", name, err)
-			}
-		}
-	}
+	cfg := prep.Config
+	agentDef := prep.Agent
+	platInfo := prep.Platform
+	pwd := prep.Pwd
 
 	// 6. Create Docker runner
 	ctx := context.Background()
@@ -1200,17 +1149,10 @@ func runAgent(name string, args []string) (int, error) {
 		}
 	}
 
-	// 6.5 Ensure container image is available
-	image := cfg.GetImage()
-	if err := runner.EnsureImage(ctx, image); err != nil {
-		return 1, fmt.Errorf("preparing image: %w", err)
-	}
-
-	// 6.6 Detect home directory from container image
-	imageUser, err := runner.InspectImageUser(ctx, image)
+	// 6.5 Ensure the image is present and detect its home directory.
+	image, imageUser, err := orchestrate.EnsureImage(ctx, runner, cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: could not inspect image user, defaulting to /home/user: %v\n", err)
-		imageUser = container.ImageUser{HomeDir: "/home/user", Username: "user"}
+		return 1, err
 	}
 
 	// 7. Build container spec
@@ -1416,49 +1358,20 @@ func runAgent(name string, args []string) (int, error) {
 // to completion (so all provisioning and install caches populate), and
 // removes it.
 func manageWarm(layout storage.Layout, agentName, profileName string) error {
-	// Load custom agent definitions
-	if customDefs := agent.LoadCustomAgents(layout.ConfigDir); customDefs != nil {
-		agent.SetCustomAgents(customDefs)
-	}
-
-	agentDef, ok := agent.Lookup(agentName)
-	if !ok {
-		return fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s", agentName, formatAgentList())
-	}
-
-	platInfo := platform.Detect()
-
-	if err := layout.EnsureDirectories(agentName, profileName); err != nil {
-		return fmt.Errorf("setting up directories: %w", err)
-	}
-
-	cfg, err := config.Resolve(layout.ConfigDir, agentName, profileName)
+	// Shared launch preparation. Warm skips working-directory/volume
+	// validation (it provisions, it does not run the agent in the workspace).
+	prep, err := orchestrate.Prepare(layout, agentName, profileName, orchestrate.Options{ValidateWorkingDir: false})
 	if err != nil {
-		return fmt.Errorf("resolving config: %w", err)
-	}
-	if errs := cfg.Validate(); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintf(os.Stderr, "ai-shim: config error: %s\n", e)
+		var unknown *orchestrate.UnknownAgentError
+		if errors.As(err, &unknown) {
+			return fmt.Errorf("unknown agent: %s\n\nAvailable agents:\n%s", unknown.Name, formatAgentList())
 		}
-		return fmt.Errorf("invalid config: %d error(s)", len(errs))
+		return err
 	}
-
-	pwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getting working directory: %w", err)
-	}
-
-	// Pre-create agent data dirs/files for correct ownership
-	if err := layout.EnsureAgentData(profileName, agentDef.DataDirs, agentDef.DataFiles); err != nil {
-		return fmt.Errorf("setting up agent data: %w", err)
-	}
-	for _, name := range cfg.AllowAgents {
-		if allowed, ok := agent.Lookup(name); ok {
-			if err := layout.EnsureAgentData(profileName, allowed.DataDirs, allowed.DataFiles); err != nil {
-				return fmt.Errorf("setting up agent data for %s: %w", name, err)
-			}
-		}
-	}
+	cfg := prep.Config
+	agentDef := prep.Agent
+	platInfo := prep.Platform
+	pwd := prep.Pwd
 
 	ctx := context.Background()
 	runner, err := container.NewRunner(ctx)
@@ -1467,15 +1380,9 @@ func manageWarm(layout storage.Layout, agentName, profileName string) error {
 	}
 	defer func() { _ = runner.Close() }()
 
-	image := cfg.GetImage()
-	if err := runner.EnsureImage(ctx, image); err != nil {
-		return fmt.Errorf("preparing image: %w", err)
-	}
-
-	imageUser, err := runner.InspectImageUser(ctx, image)
+	_, imageUser, err := orchestrate.EnsureImage(ctx, runner, cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ai-shim: warning: could not inspect image user, defaulting to /home/user: %v\n", err)
-		imageUser = container.ImageUser{HomeDir: "/home/user", Username: "user"}
+		return err
 	}
 
 	spec, err := container.BuildSpec(container.BuildParams{
