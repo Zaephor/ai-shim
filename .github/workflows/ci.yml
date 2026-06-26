@@ -326,6 +326,19 @@ jobs:
           fi
           # Pre-build the test binary so the smoke step doesn't spend time compiling.
           go test -count=0 ./test/e2e/
+      - name: Pre-pull container images
+        # The smoke tests bound each operation with a per-test context deadline
+        # that does NOT exclude image-pull time. Cold on a slow Colima VM, the
+        # heavy images pull for 80-120s and consume the whole deadline before
+        # the actual operation runs (DIND health check / container create then
+        # time out). Pre-pull here so ai-shim's EnsureImage finds them present
+        # and the pull cost isn't charged to any test. The full e2e suite hid
+        # this by warming these images in earlier tests; the smoke job runs them
+        # first/cold, so it has to warm them explicitly.
+        run: |
+          docker pull docker:dind
+          docker pull ghcr.io/catthehacker/ubuntu:act-24.04
+          docker pull alpine:latest
       - name: macOS smoke tests
         run: |
           go test ./test/e2e/ -v -count=1 -timeout 600s \
