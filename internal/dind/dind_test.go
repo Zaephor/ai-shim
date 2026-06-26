@@ -320,6 +320,12 @@ func TestMaybeStopCache_RemovesActualCacheContainer(t *testing.T) {
 		_ = reader.Close()
 	}
 
+	// Force-remove any leftover cache container from a prior test (e.g. a
+	// TestDINDCachePullThrough that failed mid-run and leaked the cache by its
+	// fixed name) so ContainerCreate below doesn't hit a name conflict. The
+	// sibling TestEnsureCache_PullsImageWhenMissing does the same.
+	_ = cli.ContainerRemove(ctx, CacheContainerName, container.RemoveOptions{Force: true})
+
 	// Create a container named like the cache container with ai-shim cache labels
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: "alpine:latest",

@@ -467,11 +467,16 @@ func TestParallel_CacheOrphanGuard(t *testing.T) {
 	require.NoError(t, cli.ContainerRemove(ctx, consumerID, dockercontainer.RemoveOptions{Force: true}))
 
 	// Case 2: no consumers left → MaybeStopCache must remove the cache.
-	dind.MaybeStopCache(ctx, cli)
-
-	_, err = cli.ContainerInspect(ctx, cacheResp.ID)
-	require.Error(t, err, "cache container must be removed after last consumer exits")
-	assert.True(t,
-		cerrdefs.IsNotFound(err) || strings.Contains(err.Error(), "No such container"),
-		"error should be not-found, got: %v", err)
+	// MaybeStopCache is best-effort: it skips while any uses-cache consumer
+	// still lists as running. On a slow daemon (e.g. Colima) the consumer we
+	// just removed can briefly still appear, so the first call is a no-op.
+	// Poll: re-run MaybeStopCache until the consumer count settles and the
+	// cache is actually gone.
+	require.Eventually(t, func() bool {
+		dind.MaybeStopCache(ctx, cli)
+		_, ierr := cli.ContainerInspect(ctx, cacheResp.ID)
+		return ierr != nil &&
+			(cerrdefs.IsNotFound(ierr) || strings.Contains(ierr.Error(), "No such container"))
+	}, 30*time.Second, 500*time.Millisecond,
+		"cache container must be removed after last consumer exits")
 }

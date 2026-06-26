@@ -56,6 +56,15 @@ func TestDINDCachePullThrough(t *testing.T) {
 	// Start the pull-through registry cache.
 	cacheAddr, err := dind.EnsureCache(ctx, runner, cacheDir, "test")
 	require.NoError(t, err, "starting pull-through cache")
+	// EnsureCache creates the cache under a fixed name with an UnlessStopped
+	// restart policy, so a later failure in this test (e.g. the DIND sidecar
+	// not coming up) would otherwise leak it and name-conflict the next test
+	// that uses the cache. Always force-remove it on teardown.
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = runner.Client().ContainerRemove(cleanupCtx, dind.CacheContainerName, dockercontainer.RemoveOptions{Force: true})
+	})
 	require.Contains(t, cacheAddr, dind.CacheHostAlias,
 		"cache address must use the %s hostname", dind.CacheHostAlias)
 	t.Logf("cache address: %s", cacheAddr)
