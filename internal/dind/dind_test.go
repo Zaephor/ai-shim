@@ -33,6 +33,35 @@ func getRunner(t *testing.T) *ai_container.Runner {
 	return runner
 }
 
+// execInSidecar runs cmd inside the DIND sidecar and returns the exit code,
+// stdout, and stderr. It is a thin helper for tests that need to observe
+// runtime state (cgroup layout, daemon config) inside a started sidecar.
+func execInSidecar(t *testing.T, runner *ai_container.Runner, containerID string, cmd []string) (int, string, string) {
+	t.Helper()
+	ctx := context.Background()
+	cli := runner.Client()
+
+	execResp, err := cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	require.NoError(t, err)
+
+	attach, err := cli.ContainerExecAttach(ctx, execResp.ID, container.ExecStartOptions{})
+	require.NoError(t, err)
+	defer attach.Close()
+
+	var outBuf, errBuf strings.Builder
+	_, err = stdcopy.StdCopy(&outBuf, &errBuf, attach.Reader)
+	require.NoError(t, err)
+
+	inspect, err := cli.ContainerExecInspect(ctx, execResp.ID)
+	require.NoError(t, err)
+
+	return inspect.ExitCode, outBuf.String(), errBuf.String()
+}
+
 func TestStart_AndStop(t *testing.T) {
 	runner := getRunner(t)
 	ctx := context.Background()
@@ -347,14 +376,85 @@ func TestStart_WithMirrors_VerifyEntrypoint(t *testing.T) {
 	require.NoError(t, err)
 	defer sidecar.Stop(ctx)
 
-	// Inspect container to verify mirrors in entrypoint
+	// Inspect container to verify mirrors are passed as Cmd args.
 	inspect, err := runner.Client().ContainerInspect(ctx, sidecar.ContainerID())
 	require.NoError(t, err)
 
-	// Entrypoint should contain --registry-mirror flags
+	// Entrypoint must remain the image default (dockerd-entrypoint.sh) so the
+	// docker:dind wrapper still runs and performs cgroup v2 nesting; mirrors
+	// are passed as Cmd flags instead. Overriding Entrypoint with bare dockerd
+	// skips the wrapper and breaks nested systemd/kubelet workloads (kind).
 	entrypoint := strings.Join(inspect.Config.Entrypoint, " ")
-	assert.Contains(t, entrypoint, "--registry-mirror=https://mirror.gcr.io")
-	assert.Contains(t, entrypoint, "--registry-mirror=https://custom.mirror.io")
+	assert.Equal(t, "dockerd-entrypoint.sh", entrypoint,
+		"Entrypoint must stay as image default so the dind cgroup-nesting wrapper runs")
+	assert.NotContains(t, entrypoint, "--registry-mirror",
+		"mirrors must not be baked into Entrypoint (that bypasses the dind wrapper)")
+
+	cmd := strings.Join(inspect.Config.Cmd, " ")
+	assert.Contains(t, cmd, "--registry-mirror=https://mirror.gcr.io")
+	assert.Contains(t, cmd, "--registry-mirror=https://custom.mirror.io")
+}
+
+// TestStart_WithMirrors_NestingAndMirrorBothActive is the end-to-end regression
+// guard for the kind-in-DIND breakage. Injecting --registry-mirror flags by
+// overriding Entrypoint with bare `dockerd` bypassed the docker:dind image
+// entrypoint, which execs dockerd through /usr/local/bin/dind — the wrapper that
+// performs cgroup v2 nesting (creating the /sys/fs/cgroup/init leaf and
+// delegating controllers via subtree_control). Without nesting, systemd in a
+// kind node dies with "Failed to create /init.scope control group: Structure
+// needs cleaning" and kubelet never starts.
+//
+// The fix passes mirrors as Cmd args while leaving Entrypoint as the image
+// default, so BOTH must hold simultaneously on a *running* sidecar:
+//  1. the cgroup v2 nesting leaf exists / subtree_control is populated (wrapper ran)
+//  2. the registry mirror is active in the daemon (feature retained)
+//
+// TestStart_WithMirrors_VerifyEntrypoint asserts the static container config;
+// this test asserts the observable runtime effect, which is what actually broke.
+func TestStart_WithMirrors_NestingAndMirrorBothActive(t *testing.T) {
+	runner := getRunner(t)
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-mirrors-nesting", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	const mirror = "https://mirror.gcr.io"
+	sidecar, err := Start(ctx, runner, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind",
+		Mirrors:   []string{mirror},
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	id := sidecar.ContainerID()
+
+	// Scenario 1: cgroup v2 nesting performed by the dind wrapper. The wrapper
+	// only nests on cgroup v2 hosts; on cgroup v1 the regression cannot occur,
+	// so skip that leg rather than failing.
+	code, _, _ := execInSidecar(t, runner, id, []string{"test", "-f", "/sys/fs/cgroup/cgroup.controllers"})
+	if code != 0 {
+		t.Skip("host is not cgroup v2; cgroup nesting check not applicable")
+	}
+
+	code, _, _ = execInSidecar(t, runner, id, []string{"test", "-d", "/sys/fs/cgroup/init"})
+	assert.Equal(t, 0, code,
+		"/sys/fs/cgroup/init leaf must exist — the dind wrapper creates it during cgroup v2 nesting; "+
+			"its absence means the wrapper was bypassed (bare-dockerd entrypoint regression)")
+
+	code, subtree, stderr := execInSidecar(t, runner, id, []string{"cat", "/sys/fs/cgroup/cgroup.subtree_control"})
+	require.Equal(t, 0, code, "reading subtree_control failed: %s", stderr)
+	assert.NotEmpty(t, strings.TrimSpace(subtree),
+		"cgroup v2 subtree_control must be populated by the dind nesting wrapper; empty breaks nested kubelet/systemd")
+
+	// Scenario 2: the registry mirror survived the entrypoint fix and is live in
+	// the daemon (not merely present in the container config).
+	code, info, stderr := execInSidecar(t, runner, id, []string{"docker", "info", "--format", "{{json .RegistryConfig.Mirrors}}"})
+	require.Equal(t, 0, code, "docker info failed: %s", stderr)
+	assert.Contains(t, info, mirror,
+		"registry mirror must be active in the daemon — the mirror feature must survive the cgroup-nesting fix")
 }
 
 func TestWaitForReady_Timeout(t *testing.T) {

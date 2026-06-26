@@ -112,17 +112,23 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		return nil, fmt.Errorf("creating DIND socket volume: %w", err)
 	}
 
-	// Build dockerd command with mirrors (cache first = highest priority)
-	var entrypoint []string
-	dockerdArgs := []string{"dockerd"}
+	// Pass registry-mirror flags as Cmd args, NOT as Entrypoint. The image's
+	// default entrypoint (dockerd-entrypoint.sh) execs dockerd through the
+	// /usr/local/bin/dind wrapper, which performs cgroup v2 nesting (moving
+	// procs into a leaf cgroup and delegating controllers via subtree_control).
+	// Overriding Entrypoint with bare dockerd skips that wrapper, leaving the
+	// sidecar's cgroup root undelegated — nested systemd (e.g. kind node
+	// kubelet) then fails with "Failed to create /init.scope control group:
+	// Structure needs cleaning". The entrypoint script prepends `dockerd` and
+	// the correct --host/TLS flags when the first Cmd arg starts with "-", so
+	// leading-dash mirror flags pass through cleanly (cache first = highest
+	// priority).
+	var cmd []string
 	if cfg.CacheAddr != "" {
-		dockerdArgs = append(dockerdArgs, "--registry-mirror="+cfg.CacheAddr)
+		cmd = append(cmd, "--registry-mirror="+cfg.CacheAddr)
 	}
 	for _, mirror := range cfg.Mirrors {
-		dockerdArgs = append(dockerdArgs, "--registry-mirror="+mirror)
-	}
-	if len(dockerdArgs) > 1 {
-		entrypoint = dockerdArgs
+		cmd = append(cmd, "--registry-mirror="+mirror)
 	}
 
 	// Copy labels to avoid mutating the caller's map.
@@ -159,11 +165,11 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	}
 
 	containerCfg := &container.Config{
-		Image:      image,
-		Hostname:   cfg.Hostname,
-		Labels:     labels,
-		Env:        []string{tlsEnv},
-		Entrypoint: entrypoint,
+		Image:    image,
+		Hostname: cfg.Hostname,
+		Labels:   labels,
+		Env:      []string{tlsEnv},
+		Cmd:      cmd,
 	}
 
 	mounts := []mount.Mount{
