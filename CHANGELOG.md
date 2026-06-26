@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/Zaephor/ai-shim/compare/v0.7.0...v0.8.0) (2026-06-26)
+
+
+### Features
+
+* drive project-scope isolation off agent definitions ([591be79](https://github.com/Zaephor/ai-shim/commit/591be797f2f382a59439a504e2a6166615a8fff5))
+* **provision:** verify tool download checksums and warn when absent ([532699e](https://github.com/Zaephor/ai-shim/commit/532699ec652ce8a13e8331d26d9a4ce887c91957))
+* **selfupdate:** verify release checksums before replacing binary ([bf16682](https://github.com/Zaephor/ai-shim/commit/bf1668211f71292370555007ce153f3b7ad7055c))
+
+
+### Bug Fixes
+
+* **cli:** exit watch loop on interrupt instead of restarting ([134aebb](https://github.com/Zaephor/ai-shim/commit/134aebb05037dfb17a1d068eb677284c70076b1f))
+* **container:** forward signals to Docker in numeric form ([7c05762](https://github.com/Zaephor/ai-shim/commit/7c0576238096fa51304c535f2e5b6ffdb6738eaa))
+* **dind:** pass registry mirrors as Cmd to preserve cgroup v2 nesting ([0bda187](https://github.com/Zaephor/ai-shim/commit/0bda1877853346df0862499a7fe693cd436f2c7b))
+* **profiles:** pin tokei to v12.1.2 for a working release binary ([183d7c9](https://github.com/Zaephor/ai-shim/commit/183d7c9c5ff40004003cc00348c78fe3341a98a4))
+
 ## [0.7.0](https://github.com/Zaephor/ai-shim/compare/v0.6.0...v0.7.0) (2026-05-28)
 
 
