@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,8 +119,17 @@ func TestFindSessionByContainerName_RejectsStopped(t *testing.T) {
 		t.Fatal("timed out waiting for container to exit")
 	}
 
-	session, err := container.FindSessionByContainerName(ctx, cli, name)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not running")
+	// ContainerWait(NotRunning) can return a beat before ContainerList — which
+	// FindSessionByContainerName relies on — reflects the exited state, so the
+	// daemon may briefly still report State=="running". That makes the lookup
+	// fall through to the agent-label check and return a different error. Poll
+	// until the daemon settles so the assertion is deterministic under load;
+	// this race only surfaced on a loaded PR-triggered runner, never on push.
+	var session *container.RunningSession
+	require.Eventually(t, func() bool {
+		session, err = container.FindSessionByContainerName(ctx, cli, name)
+		return err != nil && strings.Contains(err.Error(), "not running")
+	}, 10*time.Second, 100*time.Millisecond,
+		"expected a 'not running' rejection once the daemon reflects the exited state")
 	assert.Nil(t, session)
 }
