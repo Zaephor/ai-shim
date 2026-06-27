@@ -13,28 +13,32 @@ type ResourceLimits struct {
 
 // Config represents the fully resolved configuration for an agent+profile invocation.
 type Config struct {
-	Variables    map[string]string       `yaml:"variables,omitempty" json:"variables,omitempty"`
-	Env          map[string]string       `yaml:"env,omitempty" json:"env,omitempty"`
-	Image        string                  `yaml:"image,omitempty" json:"image,omitempty"`
-	Hostname     string                  `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	Version      string                  `yaml:"version,omitempty" json:"version,omitempty"`
-	Args         []string                `yaml:"args,omitempty" json:"args,omitempty"`
-	Volumes      []string                `yaml:"volumes,omitempty" json:"volumes,omitempty"`
-	Ports        []string                `yaml:"ports,omitempty" json:"ports,omitempty"`
-	Packages     []string                `yaml:"packages,omitempty" json:"packages,omitempty"`
-	NetworkScope string                  `yaml:"network_scope,omitempty" json:"network_scope,omitempty"`
-	DINDHostname string                  `yaml:"dind_hostname,omitempty" json:"dind_hostname,omitempty"`
-	DIND         *bool                   `yaml:"dind,omitempty" json:"dind,omitempty"`
-	DINDGpu      *bool                   `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
-	GPU          *bool                   `yaml:"gpu,omitempty" json:"gpu,omitempty"`
-	KVM          *bool                   `yaml:"kvm,omitempty" json:"kvm,omitempty"`
-	DINDKVM      *bool                   `yaml:"dind_kvm,omitempty" json:"dind_kvm,omitempty"`
-	DINDMirrors  []string                `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
-	DINDCache    *bool                   `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
-	DINDTLS      *bool                   `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
-	AllowAgents  []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
-	Isolated     *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
-	MCPServers   map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+	Variables    map[string]string `yaml:"variables,omitempty" json:"variables,omitempty"`
+	Env          map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	Image        string            `yaml:"image,omitempty" json:"image,omitempty"`
+	Hostname     string            `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Version      string            `yaml:"version,omitempty" json:"version,omitempty"`
+	Args         []string          `yaml:"args,omitempty" json:"args,omitempty"`
+	Volumes      []string          `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Ports        []string          `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Packages     []string          `yaml:"packages,omitempty" json:"packages,omitempty"`
+	NetworkScope string            `yaml:"network_scope,omitempty" json:"network_scope,omitempty"`
+	DINDHostname string            `yaml:"dind_hostname,omitempty" json:"dind_hostname,omitempty"`
+	DIND         *bool             `yaml:"dind,omitempty" json:"dind,omitempty"`
+	DINDGpu      *bool             `yaml:"dind_gpu,omitempty" json:"dind_gpu,omitempty"`
+	GPU          *bool             `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+	KVM          *bool             `yaml:"kvm,omitempty" json:"kvm,omitempty"`
+	DINDKVM      *bool             `yaml:"dind_kvm,omitempty" json:"dind_kvm,omitempty"`
+	DINDMirrors  []string          `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
+	DINDCache    *bool             `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
+	DINDTLS      *bool             `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
+	// DINDSharedNetns controls whether the agent container joins the DIND
+	// sidecar's network namespace (so they share 127.0.0.1). Default: true.
+	// Only meaningful when DIND is enabled.
+	DINDSharedNetns *bool                   `yaml:"dind_shared_netns,omitempty" json:"dind_shared_netns,omitempty"`
+	AllowAgents     []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
+	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
+	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
 	// MCPServersOrder holds mcp_servers names in the order they appear in
 	// YAML so the MCP_SERVERS JSON blob handed to agents can be emitted in
 	// declaration order rather than Go map-iteration (random) order.
@@ -132,6 +136,11 @@ func (c Config) IsDINDTLSEnabled() bool { return c.DINDTLS != nil && *c.DINDTLS 
 
 // IsIsolated returns true if agent isolation is enabled (default: true).
 func (c Config) IsIsolated() bool { return c.Isolated == nil || *c.Isolated }
+
+// IsDINDSharedNetns returns true if the agent should share the DIND sidecar's
+// network namespace (default: true). Only meaningful when DIND is enabled;
+// callers must gate on IsDINDEnabled().
+func (c Config) IsDINDSharedNetns() bool { return c.DINDSharedNetns == nil || *c.DINDSharedNetns }
 
 // GetImage returns the configured image or the default.
 func (c Config) GetImage() string {

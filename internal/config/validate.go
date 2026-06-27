@@ -62,6 +62,10 @@ func (c Config) Validate() []string {
 	warnings = append(warnings, validateTools(c.Tools)...)
 	warnings = append(warnings, validateMCPServers(c.MCPServers)...)
 
+	if c.IsDINDEnabled() && c.IsDINDSharedNetns() && len(c.Ports) > 0 {
+		warnings = append(warnings, "dind_shared_netns is on and ports are set: published ports are ignored under a shared DIND network namespace (set dind_shared_netns: false to publish them)")
+	}
+
 	return warnings
 }
 

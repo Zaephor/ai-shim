@@ -49,6 +49,12 @@ func TestIsIsolated(t *testing.T) {
 	assert.False(t, Config{Isolated: testutil.BoolPtr(false)}.IsIsolated())
 }
 
+func TestIsDINDSharedNetns(t *testing.T) {
+	assert.True(t, Config{}.IsDINDSharedNetns(), "nil should default to true")
+	assert.True(t, Config{DINDSharedNetns: testutil.BoolPtr(true)}.IsDINDSharedNetns())
+	assert.False(t, Config{DINDSharedNetns: testutil.BoolPtr(false)}.IsDINDSharedNetns())
+}
+
 func TestGetImage(t *testing.T) {
 	assert.Equal(t, "ghcr.io/catthehacker/ubuntu:act-24.04", Config{}.GetImage())
 	assert.Equal(t, "custom:latest", Config{Image: "custom:latest"}.GetImage())

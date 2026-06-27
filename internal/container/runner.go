@@ -92,6 +92,7 @@ type ContainerSpec struct {
 	GPU          bool
 	KVM          bool
 	NetworkID    string          // Docker network ID to attach container to
+	NetworkMode  string          // when set (e.g. "container:<id>"), join that netns; mutually exclusive with NetworkID
 	Resources    *ResourceLimits // optional resource constraints
 	SecurityOpt  []string        // Docker SecurityOpt (e.g. no-new-privileges)
 	CapDrop      []string        // Linux capabilities to drop
@@ -233,6 +234,13 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 		CapDrop:      spec.CapDrop,
 	}
 
+	// When NetworkMode is set (e.g. "container:<dindID>"), the container joins
+	// another container's network namespace. This is mutually exclusive with
+	// attaching to a bridge via EndpointsConfig (see below).
+	if spec.NetworkMode != "" {
+		hostCfg.NetworkMode = container.NetworkMode(spec.NetworkMode)
+	}
+
 	if spec.GPU {
 		hostCfg.DeviceRequests = []container.DeviceRequest{
 			{Count: -1, Capabilities: [][]string{{"gpu"}}},
@@ -264,8 +272,11 @@ func (r *Runner) Run(ctx context.Context, spec ContainerSpec) (AttachResult, err
 		}
 	}
 
+	// EndpointsConfig (bridge attach) cannot be combined with a container: network
+	// mode — Docker rejects the pair. When NetworkMode is set, the container
+	// inherits its netns owner's network, so skip the bridge attachment.
 	networkCfg := &network.NetworkingConfig{}
-	if spec.NetworkID != "" {
+	if spec.NetworkMode == "" && spec.NetworkID != "" {
 		networkCfg.EndpointsConfig = map[string]*network.EndpointSettings{
 			spec.NetworkID: {},
 		}

@@ -283,6 +283,7 @@ func printEnvHelp() {
   AI_SHIM_DIND_HOSTNAME DIND container hostname
   AI_SHIM_DIND_CACHE    Enable registry cache (0/1)
   AI_SHIM_DIND_TLS      Enable TLS for DIND socket (0/1)
+  AI_SHIM_DIND_SHARED_NETNS Share DIND network namespace with agent (0/1, default on)
   AI_SHIM_SECURITY_PROFILE Security profile (default/strict/none)
   AI_SHIM_GIT_NAME      Git user.name for container commits
   AI_SHIM_GIT_EMAIL     Git user.email for container commits
@@ -1332,6 +1333,25 @@ func runAgent(name string, args []string) (int, error) {
 			})
 			spec.Env = append(spec.Env, "DOCKER_TLS_VERIFY=1")
 			spec.Env = append(spec.Env, "DOCKER_CERT_PATH=/certs/client")
+		}
+
+		// Optionally share the DIND sidecar's network namespace so the agent
+		// and DIND share 127.0.0.1. This lets loopback-bound tooling inside
+		// DIND (notably kind, whose kubeconfig points at 127.0.0.1:<port>) be
+		// reached from the agent. The agent joins DIND's netns as a dependent;
+		// DIND (created above) owns the namespace and keeps the bridge, its
+		// ExtraHosts, and hostname. A container in container: network mode
+		// cannot also attach a bridge, set its own hostname, or publish ports,
+		// so clear those on the agent spec.
+		if cfg.IsDINDSharedNetns() {
+			spec.NetworkMode = "container:" + sidecar.ContainerID()
+			spec.NetworkID = ""
+			spec.Hostname = ""
+			if len(spec.Ports) > 0 || len(spec.ExposedPorts) > 0 {
+				fmt.Fprintf(os.Stderr, "ai-shim: warning: published ports are ignored when the agent shares the DIND network namespace; set dind_shared_netns: false (or AI_SHIM_DIND_SHARED_NETNS=0) to publish ports from the agent\n")
+				spec.Ports = nil
+				spec.ExposedPorts = nil
+			}
 		}
 	}
 

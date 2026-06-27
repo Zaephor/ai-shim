@@ -109,6 +109,14 @@
 # Enable TLS for the DIND Docker socket. Default: false
 # dind_tls: false
 
+# Share the DIND sidecar's network namespace with the agent container so they
+# share 127.0.0.1. This lets loopback-bound tooling inside DIND (notably `kind`,
+# whose kubeconfig points at 127.0.0.1:<port>) be reached from the agent.
+# Default: true. Set false to keep the agent on its own network namespace/bridge
+# for isolation. Only applies when dind: true. Note: published agent ports are
+# ignored while this is on (a shared-netns container cannot publish its own ports).
+# dind_shared_netns: true
+
 # Self-update settings for the `ai-shim update` command.
 # selfupdate:
 #   repository: Zaephor/ai-shim       # GitHub owner/repo for release checks

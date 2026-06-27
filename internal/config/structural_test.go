@@ -38,6 +38,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		DINDMirrors:     []string{"mirror"},
 		DINDCache:       boolPtr(true),
 		DINDTLS:         boolPtr(true),
+		DINDSharedNetns: boolPtr(true),
 		AllowAgents:     []string{"agent"},
 		Isolated:        boolPtr(false),
 		MCPServers:      map[string]MCPServerDef{"s": {Command: "cmd"}},
@@ -89,6 +90,7 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 		"AI_SHIM_DIND_HOSTNAME":         "dind-host",
 		"AI_SHIM_DIND_CACHE":            "1",
 		"AI_SHIM_DIND_TLS":              "1",
+		"AI_SHIM_DIND_SHARED_NETNS":     "0",
 		"AI_SHIM_SECURITY_PROFILE":      "strict",
 		"AI_SHIM_UPDATE_INTERVAL":       "7d",
 		"AI_SHIM_GIT_NAME":              "Test User",
@@ -116,6 +118,8 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	assert.Equal(t, "dind-host", cfg.DINDHostname, "AI_SHIM_DIND_HOSTNAME")
 	assert.True(t, cfg.IsCacheEnabled(), "AI_SHIM_DIND_CACHE")
 	assert.True(t, cfg.IsDINDTLSEnabled(), "AI_SHIM_DIND_TLS")
+	require.NotNil(t, cfg.DINDSharedNetns, "AI_SHIM_DIND_SHARED_NETNS")
+	assert.False(t, *cfg.DINDSharedNetns, "AI_SHIM_DIND_SHARED_NETNS=0 → false")
 	assert.Equal(t, "strict", cfg.SecurityProfile, "AI_SHIM_SECURITY_PROFILE")
 	assert.Equal(t, "7d", cfg.UpdateInterval, "AI_SHIM_UPDATE_INTERVAL")
 	require.NotNil(t, cfg.Git, "AI_SHIM_GIT_NAME/EMAIL")
@@ -153,6 +157,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		DINDMirrors:     []string{"mirror"},
 		DINDCache:       boolPtr(true),
 		DINDTLS:         boolPtr(true),
+		DINDSharedNetns: boolPtr(true),
 		AllowAgents:     []string{"agent"},
 		Isolated:        boolPtr(false),
 		MCPServers:      map[string]MCPServerDef{"s": {Command: "cmd"}},

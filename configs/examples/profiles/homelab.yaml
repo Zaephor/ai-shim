@@ -19,6 +19,12 @@ dind_cache: true
 # Enable KVM passthrough if running VMs or QEMU-based workloads.
 # kvm: true
 
+# This profile forwards agent ports to the host (below), so the agent needs its
+# own network namespace. Disable shared-netns (a container sharing the DIND
+# netns cannot publish its own ports). Default is true; only flip it off when
+# you publish ports from the agent like this.
+dind_shared_netns: false
+
 # Forward common self-hosted service ports.
 ports:
   - "80:80"

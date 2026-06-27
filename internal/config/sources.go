@@ -95,6 +95,9 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.DINDTLS != nil {
 			sources.Fields["dind_tls"] = name
 		}
+		if cfg.DINDSharedNetns != nil {
+			sources.Fields["dind_shared_netns"] = name
+		}
 
 		if cfg.Resources != nil {
 			sources.Fields["resources"] = name

@@ -59,6 +59,15 @@ func TestMerge_BoolPtrsLastWins(t *testing.T) {
 	assert.Equal(t, false, *result.GPU, "preserved bool")
 }
 
+func TestMerge_DINDSharedNetnsLastWins(t *testing.T) {
+	// Explicit false in an override must win over an inherited true, and a nil
+	// override must preserve the base value (tri-state cascade).
+	base := Config{DINDSharedNetns: testutil.BoolPtr(true)}
+	over := Config{DINDSharedNetns: testutil.BoolPtr(false)}
+	assert.Equal(t, false, *Merge(base, over).DINDSharedNetns, "explicit false overrides")
+	assert.Equal(t, true, *Merge(base, Config{}).DINDSharedNetns, "nil override preserves base")
+}
+
 func TestMerge_ToolsPerKeyReplace(t *testing.T) {
 	base := Config{
 		Tools: map[string]ToolDef{

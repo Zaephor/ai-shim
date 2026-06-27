@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,6 +29,26 @@ func TestConfig_Validate_InvalidNetworkScope(t *testing.T) {
 	errs := cfg.Validate()
 	assert.Len(t, errs, 1)
 	assert.Contains(t, errs[0], "invalid network_scope")
+}
+
+func TestValidate_SharedNetnsWithPortsWarns(t *testing.T) {
+	cfg := Config{DIND: testutil.BoolPtr(true), Ports: []string{"8080:80"}}
+	errs := cfg.Validate()
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "dind_shared_netns is on and ports are set") {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected shared-netns+ports warning, got: %v", errs)
+}
+
+func TestValidate_SharedNetnsOffWithPortsNoWarn(t *testing.T) {
+	// Explicitly off → publishing ports is fine, no warning.
+	cfg := Config{DIND: testutil.BoolPtr(true), DINDSharedNetns: testutil.BoolPtr(false), Ports: []string{"8080:80"}}
+	for _, e := range cfg.Validate() {
+		assert.NotContains(t, e, "dind_shared_netns is on and ports are set")
+	}
 }
 
 func TestValidate_ResourceLimits(t *testing.T) {
