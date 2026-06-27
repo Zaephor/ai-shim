@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Zaephor/ai-shim/compare/v0.8.0...v0.9.0) (2026-06-27)
+
+
+### Features
+
+* **dind:** share DIND netns with agent by default (dind_shared_netns) ([4f11fd5](https://github.com/Zaephor/ai-shim/commit/4f11fd500075f9afcd7defa01797d9f52fb43204))
+
 ## [0.8.0](https://github.com/Zaephor/ai-shim/compare/v0.7.0...v0.8.0) (2026-06-26)
 
 
