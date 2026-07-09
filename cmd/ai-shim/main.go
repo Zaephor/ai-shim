@@ -1720,6 +1720,18 @@ func dindSessionFilters(session *container.RunningSession) filters.Args {
 	)
 }
 
+// holderSessionFilters locates the netns holder for a session (holder mode).
+func holderSessionFilters(session *container.RunningSession) filters.Args {
+	return filters.NewArgs(
+		filters.Arg("label", container.LabelBase+"=true"),
+		filters.Arg("label", container.LabelRole+"=netns-holder"),
+		filters.Arg("label", container.LabelAgent+"="+session.AgentName),
+		filters.Arg("label", container.LabelProfile+"="+session.Profile),
+		filters.Arg("label", container.LabelWorkspace+"="+session.WorkspaceHash),
+		filters.Arg("status", "running"),
+	)
+}
+
 // stopDINDForSession finds and stops the DIND sidecar associated with a session,
 // including removing its socket and certs volumes to avoid leaking Docker volumes.
 func stopDINDForSession(ctx context.Context, cli *client.Client, session *container.RunningSession) {
@@ -1748,6 +1760,26 @@ func stopDINDForSession(ctx context.Context, cli *client.Client, session *contai
 		if containerName != "" {
 			_ = cli.VolumeRemove(ctx, containerName+"-socket", true)
 			_ = cli.VolumeRemove(ctx, containerName+"-certs", true)
+		}
+	}
+
+	// Remove the netns holder (holder mode only). It has no associated
+	// volumes, so unlike the DIND sidecar above there is nothing to clean up
+	// besides the container itself. This must happen before
+	// RemoveOrphanedForSession below: the holder stays attached to the
+	// session's bridge network for as long as it runs, so leaving it running
+	// would make the network appear non-orphaned and leak it too.
+	holderList, err := cli.ContainerList(ctx, container_types.ListOptions{Filters: holderSessionFilters(session)})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to list netns holder for %s/%s: %v\n", session.AgentName, session.Profile, err)
+	}
+	for _, c := range holderList {
+		stopTimeout := 5
+		if err := cli.ContainerStop(ctx, c.ID, container_types.StopOptions{Timeout: &stopTimeout}); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to stop netns holder container %s: %v\n", c.ID, err)
+		}
+		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to remove netns holder container %s: %v\n", c.ID, err)
 		}
 	}
 

@@ -853,7 +853,7 @@ func StatusWithColor(useColor bool) (string, error) {
 		"----", "-----", "-------", "---------", "-----", "------", "----")
 
 	for _, c := range containers {
-		if role := containerRole(c); role == "dind" || role == "cache" {
+		if role := containerRole(c); role == "dind" || role == "cache" || role == "netns-holder" {
 			continue
 		}
 
@@ -1336,7 +1336,7 @@ func StatusJSON() (string, error) {
 
 	entries := make([]StatusEntry, 0, len(containers))
 	for _, c := range containers {
-		if role := containerRole(c); role == "dind" || role == "cache" {
+		if role := containerRole(c); role == "dind" || role == "cache" || role == "netns-holder" {
 			continue
 		}
 

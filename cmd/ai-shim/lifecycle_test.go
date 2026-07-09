@@ -86,6 +86,50 @@ func TestDINDSessionFilters_IncludesWorkspace(t *testing.T) {
 		"DIND session filter must include workspace hash to avoid touching sibling DINDs in parallel sessions")
 }
 
+// TestHolderSessionFilters_IncludesWorkspace guards Fix #1 (final review):
+// stopDINDForSession must also locate the netns holder (holder mode) so it
+// gets torn down alongside the DIND sidecar. Like dindSessionFilters, the
+// holder filter must be scoped by workspace hash to avoid touching a
+// sibling session's holder.
+func TestHolderSessionFilters_IncludesWorkspace(t *testing.T) {
+	session := &container.RunningSession{
+		AgentName:     "claude-code",
+		Profile:       "default",
+		WorkspaceHash: "ws-hash-xyz",
+	}
+	f := holderSessionFilters(session)
+	labels := f.Get("label")
+
+	assert.Contains(t, labels, container.LabelBase+"=true")
+	assert.Contains(t, labels, container.LabelRole+"=netns-holder")
+	assert.Contains(t, labels, container.LabelAgent+"=claude-code")
+	assert.Contains(t, labels, container.LabelProfile+"=default")
+	assert.Contains(t, labels, container.LabelWorkspace+"=ws-hash-xyz",
+		"holder session filter must include workspace hash to avoid touching sibling holders in parallel sessions")
+
+	status := f.Get("status")
+	assert.Contains(t, status, "running")
+}
+
+// TestStopDINDForSession_RemovesNetnsHolder guards Fix #1 (final review) at
+// the source-text level: stopDINDForSession must locate and remove the
+// netns holder before removing the session network, otherwise the holder
+// (still attached to the bridge) keeps the network from being seen as
+// orphaned and both leak.
+func TestStopDINDForSession_RemovesNetnsHolder(t *testing.T) {
+	src := readMainSource(t)
+	body := extractFuncBody(t, src, "stopDINDForSession")
+	assert.Contains(t, body, "holderSessionFilters(session)",
+		"stopDINDForSession must list containers via holderSessionFilters to find the netns holder")
+
+	holderIdx := strings.Index(body, "holderSessionFilters(session)")
+	networkIdx := strings.Index(body, "network.RemoveOrphanedForSession")
+	require.NotEqual(t, -1, holderIdx, "holderSessionFilters call not found")
+	require.NotEqual(t, -1, networkIdx, "RemoveOrphanedForSession call not found")
+	assert.Less(t, holderIdx, networkIdx,
+		"netns holder must be removed before RemoveOrphanedForSession runs, or the still-attached holder will make the network look non-orphaned")
+}
+
 // TestBuildDINDSharedMounts_WorkspaceAlwaysPresent covers the existing base
 // behaviour: the workspace is always propagated to the DIND sidecar.
 func TestBuildDINDSharedMounts_WorkspaceAlwaysPresent(t *testing.T) {

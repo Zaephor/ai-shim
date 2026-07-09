@@ -1246,6 +1246,34 @@ func TestCleanup_NoOrphans(t *testing.T) {
 	assert.Empty(t, result.Failed)
 }
 
+// TestContainerRole_NetnsHolder guards Fix #2 (final review): the netns
+// holder container (holder mode) carries LabelRole=netns-holder, and
+// containerRole must surface that role verbatim so callers can filter it
+// out like "dind"/"cache".
+func TestContainerRole_NetnsHolder(t *testing.T) {
+	c := container_types.Summary{
+		Labels: map[string]string{
+			container.LabelRole: "netns-holder",
+		},
+	}
+	assert.Equal(t, "netns-holder", containerRole(c))
+}
+
+// TestStatus_SkipsNetnsHolderRole guards Fix #2 (final review): without
+// this, `manage status` / `manage status --json` render the netns holder
+// (holder mode) as a phantom agent row, doubling the apparent session
+// count. Status()/StatusJSON() require a live Docker daemon with a running
+// holder container to exercise end-to-end, so this asserts the skip
+// condition at the source-text level instead.
+func TestStatus_SkipsNetnsHolderRole(t *testing.T) {
+	data, err := os.ReadFile("manage.go")
+	require.NoError(t, err)
+	src := string(data)
+	want := `role == "dind" || role == "cache" || role == "netns-holder"`
+	assert.Equal(t, 2, strings.Count(src, want),
+		"both the status text renderer and StatusJSON must skip role==netns-holder alongside dind/cache")
+}
+
 func TestContainerDisplayName_WithNames(t *testing.T) {
 	c := container_types.Summary{
 		Names: []string{"/my-container"},

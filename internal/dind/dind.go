@@ -259,7 +259,10 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	// network's gateway IP — but we use a custom hostname (ai-shim-cache)
 	// rather than host.docker.internal, which inside DIND resolves to DIND's
 	// own docker0 bridge (172.17.0.1), not the outer Docker host.
-	extraHosts := BuildNetnsExtraHosts(ctx, cli, cfg.NetworkID, cfg.CacheAddr)
+	var extraHosts []string
+	if cfg.JoinNetns == "" {
+		extraHosts = BuildNetnsExtraHosts(ctx, cli, cfg.NetworkID, cfg.CacheAddr)
+	}
 
 	hostCfg := dindNetworkHostConfig(cfg, extraHosts)
 	hostCfg.Privileged = true
