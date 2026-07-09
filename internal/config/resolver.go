@@ -168,7 +168,8 @@ func parseBoolEnv(key string) *bool {
 //   - AI_SHIM_DIND_HOSTNAME — override DIND sidecar hostname
 //   - AI_SHIM_DIND_CACHE    — toggle pull-through registry cache (0/1/true/false)
 //   - AI_SHIM_DIND_TLS      — toggle TLS for DIND socket (0/1/true/false)
-//   - AI_SHIM_DIND_SHARED_NETNS — toggle agent sharing DIND netns (0/1/true/false)
+//   - AI_SHIM_NETNS_MODE — netns owner: agent|dind|holder (default holder)
+//   - AI_SHIM_DIND_NETNS_HOLDER_IMAGE — image for the holder (default: DIND image)
 //   - AI_SHIM_GIT_NAME      — git user.name for container commits
 //   - AI_SHIM_GIT_EMAIL     — git user.email for container commits
 //   - AI_SHIM_SECURITY_PROFILE — container security profile (default/strict/none)
@@ -215,8 +216,11 @@ func loadEnvOverrides() Config {
 	if b := parseBoolEnv("AI_SHIM_DIND_TLS"); b != nil {
 		cfg.DINDTLS = b
 	}
-	if b := parseBoolEnv("AI_SHIM_DIND_SHARED_NETNS"); b != nil {
-		cfg.DINDSharedNetns = b
+	if v := os.Getenv("AI_SHIM_NETNS_MODE"); v != "" {
+		cfg.NetnsMode = v
+	}
+	if v := os.Getenv("AI_SHIM_DIND_NETNS_HOLDER_IMAGE"); v != "" {
+		cfg.DINDNetnsHolderImage = v
 	}
 
 	if v := os.Getenv("AI_SHIM_SECURITY_PROFILE"); v != "" {

@@ -45,8 +45,11 @@ func Merge(base, over Config) Config {
 	if over.DINDTLS != nil {
 		result.DINDTLS = over.DINDTLS
 	}
-	if over.DINDSharedNetns != nil {
-		result.DINDSharedNetns = over.DINDSharedNetns
+	if over.NetnsMode != "" {
+		result.NetnsMode = over.NetnsMode
+	}
+	if over.DINDNetnsHolderImage != "" {
+		result.DINDNetnsHolderImage = over.DINDNetnsHolderImage
 	}
 	if over.Resources != nil {
 		if result.Resources == nil {

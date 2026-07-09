@@ -59,13 +59,18 @@ func TestMerge_BoolPtrsLastWins(t *testing.T) {
 	assert.Equal(t, false, *result.GPU, "preserved bool")
 }
 
-func TestMerge_DINDSharedNetnsLastWins(t *testing.T) {
-	// Explicit false in an override must win over an inherited true, and a nil
-	// override must preserve the base value (tri-state cascade).
-	base := Config{DINDSharedNetns: testutil.BoolPtr(true)}
-	over := Config{DINDSharedNetns: testutil.BoolPtr(false)}
-	assert.Equal(t, false, *Merge(base, over).DINDSharedNetns, "explicit false overrides")
-	assert.Equal(t, true, *Merge(base, Config{}).DINDSharedNetns, "nil override preserves base")
+func TestMerge_NetnsModeLastWins(t *testing.T) {
+	base := Config{NetnsMode: "dind"}
+	over := Config{NetnsMode: "holder"}
+	assert.Equal(t, "holder", Merge(base, over).NetnsMode, "explicit override wins")
+	assert.Equal(t, "dind", Merge(base, Config{}).NetnsMode, "empty override preserves base")
+}
+
+func TestMerge_HolderImageLastWins(t *testing.T) {
+	base := Config{DINDNetnsHolderImage: "a"}
+	over := Config{DINDNetnsHolderImage: "b"}
+	assert.Equal(t, "b", Merge(base, over).DINDNetnsHolderImage)
+	assert.Equal(t, "a", Merge(base, Config{}).DINDNetnsHolderImage)
 }
 
 func TestMerge_ToolsPerKeyReplace(t *testing.T) {

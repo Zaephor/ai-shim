@@ -36,7 +36,7 @@ func TestValidate_SharedNetnsWithPortsWarns(t *testing.T) {
 	errs := cfg.Validate()
 	found := false
 	for _, e := range errs {
-		if strings.Contains(e, "dind_shared_netns is on and ports are set") {
+		if strings.Contains(e, "netns_mode is shared and ports are set") {
 			found = true
 		}
 	}
@@ -44,10 +44,10 @@ func TestValidate_SharedNetnsWithPortsWarns(t *testing.T) {
 }
 
 func TestValidate_SharedNetnsOffWithPortsNoWarn(t *testing.T) {
-	// Explicitly off → publishing ports is fine, no warning.
-	cfg := Config{DIND: testutil.BoolPtr(true), DINDSharedNetns: testutil.BoolPtr(false), Ports: []string{"8080:80"}}
+	// netns_mode=agent (not shared) → publishing ports is fine, no warning.
+	cfg := Config{DIND: testutil.BoolPtr(true), NetnsMode: "agent", Ports: []string{"8080:80"}}
 	for _, e := range cfg.Validate() {
-		assert.NotContains(t, e, "dind_shared_netns is on and ports are set")
+		assert.NotContains(t, e, "netns_mode is shared and ports are set")
 	}
 }
 

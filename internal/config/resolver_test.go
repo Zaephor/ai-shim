@@ -389,3 +389,19 @@ func TestResolveWithSources_EmptyNamesAllowed(t *testing.T) {
 	_, _, err := ResolveWithSources(dir, "", "")
 	require.NoError(t, err)
 }
+
+func TestResolver_NetnsModeEnv(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agents"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "profiles"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "agent-profiles"), 0755))
+	writeYAML(t, filepath.Join(dir, "default.yaml"), "image: test\n")
+
+	t.Setenv("AI_SHIM_NETNS_MODE", "dind")
+	t.Setenv("AI_SHIM_DIND_NETNS_HOLDER_IMAGE", "busybox:latest")
+
+	cfg, err := Resolve(dir, "test", "test")
+	require.NoError(t, err)
+	assert.Equal(t, "dind", cfg.NetnsMode)
+	assert.Equal(t, "busybox:latest", cfg.DINDNetnsHolderImage)
+}
