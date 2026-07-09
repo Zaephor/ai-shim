@@ -42,10 +42,10 @@ type Config struct {
 	// DINDNetnsHolderImage overrides the image used for the netns holder in
 	// "holder" mode. Empty reuses the DIND image (no extra pull). The image
 	// must provide a `sleep` binary.
-	DINDNetnsHolderImage string `yaml:"dind_netns_holder_image,omitempty" json:"dind_netns_holder_image,omitempty"`
+	DINDNetnsHolderImage string                  `yaml:"dind_netns_holder_image,omitempty" json:"dind_netns_holder_image,omitempty"`
 	AllowAgents          []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
-	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
-	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+	Isolated             *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
+	MCPServers           map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
 	// MCPServersOrder holds mcp_servers names in the order they appear in
 	// YAML so the MCP_SERVERS JSON blob handed to agents can be emitted in
 	// declaration order rather than Go map-iteration (random) order.
