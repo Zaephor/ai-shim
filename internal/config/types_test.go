@@ -49,10 +49,24 @@ func TestIsIsolated(t *testing.T) {
 	assert.False(t, Config{Isolated: testutil.BoolPtr(false)}.IsIsolated())
 }
 
-func TestIsDINDSharedNetns(t *testing.T) {
-	assert.True(t, Config{}.IsDINDSharedNetns(), "nil should default to true")
-	assert.True(t, Config{DINDSharedNetns: testutil.BoolPtr(true)}.IsDINDSharedNetns())
-	assert.False(t, Config{DINDSharedNetns: testutil.BoolPtr(false)}.IsDINDSharedNetns())
+func TestGetNetnsMode(t *testing.T) {
+	assert.Equal(t, NetnsModeHolder, Config{}.GetNetnsMode(), "unset defaults to holder")
+	assert.Equal(t, NetnsModeAgent, Config{NetnsMode: "agent"}.GetNetnsMode())
+	assert.Equal(t, NetnsModeDIND, Config{NetnsMode: "dind"}.GetNetnsMode())
+}
+
+func TestIsNetnsShared(t *testing.T) {
+	assert.False(t, Config{NetnsMode: "agent"}.IsNetnsShared())
+	assert.True(t, Config{NetnsMode: "dind"}.IsNetnsShared())
+	assert.True(t, Config{NetnsMode: "holder"}.IsNetnsShared())
+	assert.True(t, Config{}.IsNetnsShared(), "default holder is shared")
+}
+
+func TestUsesNetnsHolder(t *testing.T) {
+	assert.False(t, Config{NetnsMode: "agent"}.UsesNetnsHolder())
+	assert.False(t, Config{NetnsMode: "dind"}.UsesNetnsHolder())
+	assert.True(t, Config{NetnsMode: "holder"}.UsesNetnsHolder())
+	assert.True(t, Config{}.UsesNetnsHolder(), "default is holder")
 }
 
 func TestGetImage(t *testing.T) {

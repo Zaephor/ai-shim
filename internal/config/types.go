@@ -32,11 +32,18 @@ type Config struct {
 	DINDMirrors  []string          `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
 	DINDCache    *bool             `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
 	DINDTLS      *bool             `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
-	// DINDSharedNetns controls whether the agent container joins the DIND
-	// sidecar's network namespace (so they share 127.0.0.1). Default: true.
-	// Only meaningful when DIND is enabled.
-	DINDSharedNetns *bool                   `yaml:"dind_shared_netns,omitempty" json:"dind_shared_netns,omitempty"`
-	AllowAgents     []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
+	// NetnsMode selects which container owns the network namespace the agent
+	// uses: "agent" (agent keeps its own netns on the bridge), "dind" (agent
+	// joins the DIND sidecar's netns), or "holder" (a dedicated holder owns
+	// the netns and both agent and DIND join it, so DIND death does not
+	// destroy the agent's networking). Default: "holder". Only meaningful
+	// when DIND is enabled.
+	NetnsMode string `yaml:"netns_mode,omitempty" json:"netns_mode,omitempty"`
+	// DINDNetnsHolderImage overrides the image used for the netns holder in
+	// "holder" mode. Empty reuses the DIND image (no extra pull). The image
+	// must provide a `sleep` binary.
+	DINDNetnsHolderImage string `yaml:"dind_netns_holder_image,omitempty" json:"dind_netns_holder_image,omitempty"`
+	AllowAgents          []string                `yaml:"allow_agents,omitempty" json:"allow_agents,omitempty"`
 	Isolated        *bool                   `yaml:"isolated,omitempty" json:"isolated,omitempty"`
 	MCPServers      map[string]MCPServerDef `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
 	// MCPServersOrder holds mcp_servers names in the order they appear in
@@ -137,10 +144,33 @@ func (c Config) IsDINDTLSEnabled() bool { return c.DINDTLS != nil && *c.DINDTLS 
 // IsIsolated returns true if agent isolation is enabled (default: true).
 func (c Config) IsIsolated() bool { return c.Isolated == nil || *c.Isolated }
 
-// IsDINDSharedNetns returns true if the agent should share the DIND sidecar's
-// network namespace (default: true). Only meaningful when DIND is enabled;
-// callers must gate on IsDINDEnabled().
-func (c Config) IsDINDSharedNetns() bool { return c.DINDSharedNetns == nil || *c.DINDSharedNetns }
+// Netns mode values. Default (unset) is NetnsModeHolder.
+const (
+	NetnsModeAgent  = "agent"
+	NetnsModeDIND   = "dind"
+	NetnsModeHolder = "holder"
+)
+
+// GetNetnsMode returns the configured netns mode, defaulting to holder.
+// Only meaningful when DIND is enabled; callers must gate on IsDINDEnabled().
+func (c Config) GetNetnsMode() string {
+	if c.NetnsMode == "" {
+		return NetnsModeHolder
+	}
+	return c.NetnsMode
+}
+
+// IsNetnsShared reports whether the agent shares another container's netns
+// (true for dind and holder modes).
+func (c Config) IsNetnsShared() bool {
+	m := c.GetNetnsMode()
+	return m == NetnsModeDIND || m == NetnsModeHolder
+}
+
+// UsesNetnsHolder reports whether a dedicated netns holder container is used.
+func (c Config) UsesNetnsHolder() bool {
+	return c.GetNetnsMode() == NetnsModeHolder
+}
 
 // GetImage returns the configured image or the default.
 func (c Config) GetImage() string {
