@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### ⚠ BREAKING CHANGES
+
+* **dind:** `dind_shared_netns` (and `AI_SHIM_DIND_SHARED_NETNS`) are removed. Use `netns_mode` instead: `dind_shared_netns: true` → `netns_mode: dind`, `dind_shared_netns: false` → `netns_mode: agent`. The new default is `netns_mode: holder`, which runs a netns-holder container so the agent survives DIND death.
+
 ## [0.9.0](https://github.com/Zaephor/ai-shim/compare/v0.8.0...v0.9.0) (2026-06-27)
 
 

@@ -189,6 +189,15 @@ dind_mirrors:               # registry mirrors (default: mirror.gcr.io)
   - https://mirror.gcr.io
 dind_cache: false            # enable pull-through registry cache
 
+# Which container owns the network namespace the agent joins (only applies
+# when dind: true): agent | dind | holder. Default: holder -- a dedicated
+# netns-holder container owns the shared netns, so the agent keeps its
+# network even if the DIND sidecar restarts or crashes. Use dind to share
+# the DIND sidecar's netns directly (loses networking if DIND restarts).
+# Use agent to give the agent its own namespace so it can publish ports
+# (ports published from the agent are ignored in dind/holder mode).
+# netns_mode: holder
+
 # Cross-agent access: mount other agents' bins AND data directories
 # allow_agents:
 #   - gemini-cli
@@ -239,6 +248,14 @@ See `configs/examples/` for annotated example files and
   profile, workspace, profile-workspace, or fully isolated (default)
 - **Registry mirrors** -- DIND sidecar uses configurable registry mirrors
   (default: `mirror.gcr.io`) for faster and more reliable image pulls
+- **Network namespace ownership (`netns_mode`)** -- when `dind: true`,
+  controls which container owns the network namespace the agent joins:
+  `agent` (agent gets its own namespace and can publish ports), `dind`
+  (agent shares the DIND sidecar's namespace directly), or `holder`
+  (default -- a dedicated netns-holder container owns the shared namespace,
+  so the agent survives a DIND restart/crash). Published agent ports are
+  ignored in `dind`/`holder` mode since a shared-netns container cannot
+  publish its own ports.
 - **Pull-through cache** -- opt-in registry cache for offline-capable and
   faster container image pulls via `dind_cache`
 - **Image digest pinning** -- pin images to a specific `@sha256:` digest for
