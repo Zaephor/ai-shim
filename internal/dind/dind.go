@@ -76,6 +76,37 @@ type Config struct {
 	Version      string // ai-shim version (informational label)
 }
 
+// dockerdArgs builds the leading-dash Cmd args passed to the DIND entrypoint:
+// registry mirrors (cache first, highest priority), then --group so the socket
+// is created with the agent's group on every daemon start (survives restart).
+func dockerdArgs(cfg Config) []string {
+	var cmd []string
+	if cfg.CacheAddr != "" {
+		cmd = append(cmd, "--registry-mirror="+cfg.CacheAddr)
+	}
+	for _, mirror := range cfg.Mirrors {
+		cmd = append(cmd, "--registry-mirror="+mirror)
+	}
+	if cfg.SocketGID != 0 {
+		cmd = append(cmd, "--group="+strconv.Itoa(cfg.SocketGID))
+	}
+	return cmd
+}
+
+// BuildNetnsExtraHosts returns the /etc/hosts entries the netns owner needs.
+// In shared-netns modes these live on the owner (DIND or the holder) and are
+// inherited by every joiner. Always maps host.docker.internal; adds the
+// registry-cache alias pointing at the bridge gateway when a cache is set.
+func BuildNetnsExtraHosts(ctx context.Context, cli *client.Client, networkID, cacheAddr string) []string {
+	hosts := []string{"host.docker.internal:host-gateway"}
+	if cacheAddr != "" && networkID != "" {
+		if gwIP, _ := networkGatewayIP(ctx, cli, networkID); gwIP != "" {
+			hosts = append(hosts, CacheHostAlias+":"+gwIP)
+		}
+	}
+	return hosts
+}
+
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
 // The caller must provide a pre-created network via cfg.NetworkID.
 // Start calls runner.EnsureImage internally so callers do not need to
@@ -123,13 +154,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	// the correct --host/TLS flags when the first Cmd arg starts with "-", so
 	// leading-dash mirror flags pass through cleanly (cache first = highest
 	// priority).
-	var cmd []string
-	if cfg.CacheAddr != "" {
-		cmd = append(cmd, "--registry-mirror="+cfg.CacheAddr)
-	}
-	for _, mirror := range cfg.Mirrors {
-		cmd = append(cmd, "--registry-mirror="+mirror)
-	}
+	cmd := dockerdArgs(cfg)
 
 	// Copy labels to avoid mutating the caller's map.
 	// Override role from the parent's "agent" to "dind" so the session
@@ -199,13 +224,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	// network's gateway IP — but we use a custom hostname (ai-shim-cache)
 	// rather than host.docker.internal, which inside DIND resolves to DIND's
 	// own docker0 bridge (172.17.0.1), not the outer Docker host.
-	extraHosts := []string{"host.docker.internal:host-gateway"}
-	if cfg.CacheAddr != "" && cfg.NetworkID != "" {
-		gwIP, _ := networkGatewayIP(ctx, cli, cfg.NetworkID)
-		if gwIP != "" {
-			extraHosts = append(extraHosts, CacheHostAlias+":"+gwIP)
-		}
-	}
+	extraHosts := BuildNetnsExtraHosts(ctx, cli, cfg.NetworkID, cfg.CacheAddr)
 
 	hostCfg := &container.HostConfig{
 		Privileged:  true,

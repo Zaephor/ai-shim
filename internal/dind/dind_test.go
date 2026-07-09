@@ -789,3 +789,19 @@ func TestStart_InvalidCPULimit(t *testing.T) {
 	require.Error(t, err, "Start should return an error for an invalid CPU limit")
 	assert.Contains(t, err.Error(), "not-a-float", "error should include the bad value")
 }
+
+func TestDockerdArgs(t *testing.T) {
+	assert.Nil(t, dockerdArgs(Config{}), "no mirrors, no cache, no socket gid -> nil")
+
+	got := dockerdArgs(Config{CacheAddr: "http://cache:5000", Mirrors: []string{"https://m1"}, SocketGID: 2000})
+	assert.Equal(t, []string{
+		"--registry-mirror=http://cache:5000",
+		"--registry-mirror=https://m1",
+		"--group=2000",
+	}, got, "cache mirror first, then mirrors, then --group")
+}
+
+func TestBuildNetnsExtraHosts_NoCache(t *testing.T) {
+	assert.Equal(t, []string{"host.docker.internal:host-gateway"},
+		BuildNetnsExtraHosts(context.Background(), nil, "", ""))
+}
