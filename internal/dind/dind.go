@@ -65,6 +65,15 @@ type Config struct {
 	// group "docker" (GID 2375), which the agent's GID is not a member of.
 	SocketGID int
 
+	// JoinNetns, when set, makes the sidecar join the given container's
+	// network namespace (NetworkMode = container:<id>) instead of attaching
+	// to the bridge. Used in holder mode. Joining clears the bridge attach,
+	// ExtraHosts, and Hostname (inherited from the netns owner).
+	JoinNetns string
+	// AutoRestart applies RestartPolicy unless-stopped so a dead daemon
+	// (e.g. OOM) is restarted into its surviving netns.
+	AutoRestart bool
+
 	// SharedMounts are bind mounts the DIND sidecar must see at the same
 	// paths the agent sees. When the agent issues `docker run -v X:Y`
 	// against DIND, Docker resolves X in DIND's filesystem — not the
@@ -105,6 +114,32 @@ func BuildNetnsExtraHosts(ctx context.Context, cli *client.Client, networkID, ca
 		}
 	}
 	return hosts
+}
+
+// dindHostname returns the hostname to set on the container config; a netns
+// joiner must not set its own hostname (Docker rejects it), so it is cleared.
+func dindHostname(cfg Config) string {
+	if cfg.JoinNetns != "" {
+		return ""
+	}
+	return cfg.Hostname
+}
+
+// dindNetworkHostConfig fills the network-related fields of the HostConfig.
+// In join mode the sidecar shares the owner's netns (so no bridge, no
+// ExtraHosts); otherwise it attaches to the bridge with the given ExtraHosts.
+func dindNetworkHostConfig(cfg Config, extraHosts []string) *container.HostConfig {
+	hc := &container.HostConfig{}
+	if cfg.JoinNetns != "" {
+		hc.NetworkMode = container.NetworkMode("container:" + cfg.JoinNetns)
+	} else {
+		hc.NetworkMode = container.NetworkMode(cfg.NetworkID)
+		hc.ExtraHosts = extraHosts
+	}
+	if cfg.AutoRestart {
+		hc.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyUnlessStopped}
+	}
+	return hc
 }
 
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
@@ -191,7 +226,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 
 	containerCfg := &container.Config{
 		Image:    image,
-		Hostname: cfg.Hostname,
+		Hostname: dindHostname(cfg),
 		Labels:   labels,
 		Env:      []string{tlsEnv},
 		Cmd:      cmd,
@@ -226,12 +261,9 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	// own docker0 bridge (172.17.0.1), not the outer Docker host.
 	extraHosts := BuildNetnsExtraHosts(ctx, cli, cfg.NetworkID, cfg.CacheAddr)
 
-	hostCfg := &container.HostConfig{
-		Privileged:  true,
-		NetworkMode: container.NetworkMode(cfg.NetworkID),
-		Mounts:      mounts,
-		ExtraHosts:  extraHosts,
-	}
+	hostCfg := dindNetworkHostConfig(cfg, extraHosts)
+	hostCfg.Privileged = true
+	hostCfg.Mounts = mounts
 
 	// Use Sysbox if requested
 	if cfg.UseSysbox {

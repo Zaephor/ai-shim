@@ -805,3 +805,22 @@ func TestBuildNetnsExtraHosts_NoCache(t *testing.T) {
 	assert.Equal(t, []string{"host.docker.internal:host-gateway"},
 		BuildNetnsExtraHosts(context.Background(), nil, "", ""))
 }
+
+func TestDINDHostConfig_JoinNetnsAndRestart(t *testing.T) {
+	h := dindNetworkHostConfig(Config{NetworkID: "netabc", AutoRestart: false},
+		[]string{"host.docker.internal:host-gateway"})
+	assert.Equal(t, container.NetworkMode("netabc"), h.NetworkMode)
+	assert.NotEmpty(t, h.ExtraHosts)
+	assert.Empty(t, h.RestartPolicy.Name)
+
+	j := dindNetworkHostConfig(Config{JoinNetns: "holderid", AutoRestart: true},
+		[]string{"host.docker.internal:host-gateway"})
+	assert.Equal(t, container.NetworkMode("container:holderid"), j.NetworkMode)
+	assert.Nil(t, j.ExtraHosts)
+	assert.Equal(t, container.RestartPolicyUnlessStopped, j.RestartPolicy.Name)
+}
+
+func TestDINDContainerHostname_ClearedWhenJoining(t *testing.T) {
+	assert.Equal(t, "", dindHostname(Config{JoinNetns: "x", Hostname: "dind"}))
+	assert.Equal(t, "dind", dindHostname(Config{Hostname: "dind"}))
+}
