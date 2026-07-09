@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.0](https://github.com/Zaephor/ai-shim/compare/v0.9.0...v0.10.0) (2026-07-09)
+
+
+### Features
+
+* **config:** add netns_mode selector, drop dind_shared_netns field ([189a3cf](https://github.com/Zaephor/ai-shim/commit/189a3cfee6077c52561a49fc7a11463ea09d1ea7))
+* **config:** validate netns_mode enum and DIND requirement ([debcba9](https://github.com/Zaephor/ai-shim/commit/debcba99a2702ed2cab7a12c2601563d757878cd))
+* **config:** wire netns_mode env, source-tracking, and merge ([bfc98e9](https://github.com/Zaephor/ai-shim/commit/bfc98e96c5a0d65e65e221a83331cad9a61847ed))
+* **dind:** add netns holder container ([a2bea09](https://github.com/Zaephor/ai-shim/commit/a2bea09925de652363bc0fb1b6501984c55101d3))
+* **dind:** support joining a netns owner and auto-restart policy ([f694b38](https://github.com/Zaephor/ai-shim/commit/f694b3839e556e983be7cbf0d913a5fff2539fa2))
+* orchestrate netns_mode launch with holder and DIND auto-restart ([9d873a2](https://github.com/Zaephor/ai-shim/commit/9d873a21979bba89d571407a988ca1ccf8a45e62))
+
+
+### Bug Fixes
+
+* clean up netns holder on teardown and hide it from status ([6db1431](https://github.com/Zaephor/ai-shim/commit/6db1431f16f317df2842afd60afd9ed1a823de51))
+* **test:** make netns survival e2e portable via kill+rejoin ([778f159](https://github.com/Zaephor/ai-shim/commit/778f159b56c3a37091587b2576d7d9321dfa5195))
+
 ## [Unreleased]
 
 ### ⚠ BREAKING CHANGES
