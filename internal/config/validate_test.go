@@ -338,3 +338,33 @@ func TestValidate_Tools_Custom_WithInstall_NoWarning(t *testing.T) {
 		assert.NotContains(t, e, "install or package", "should not warn about missing install/package when Install is set")
 	}
 }
+
+func TestValidate_InvalidNetnsModeWarns(t *testing.T) {
+	cfg := Config{DIND: testutil.BoolPtr(true), NetnsMode: "bogus"}
+	found := false
+	for _, e := range cfg.Validate() {
+		if strings.Contains(e, "invalid netns_mode") {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected invalid netns_mode warning")
+}
+
+func TestValidate_SharedNetnsRequiresDIND(t *testing.T) {
+	cfg := Config{DIND: testutil.BoolPtr(false), NetnsMode: "holder"}
+	found := false
+	for _, e := range cfg.Validate() {
+		if strings.Contains(e, "requires DIND") {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected DIND-required warning")
+}
+
+func TestValidate_ValidNetnsModeNoWarn(t *testing.T) {
+	cfg := Config{DIND: testutil.BoolPtr(true), NetnsMode: "holder"}
+	for _, e := range cfg.Validate() {
+		assert.NotContains(t, e, "invalid netns_mode")
+		assert.NotContains(t, e, "requires DIND")
+	}
+}

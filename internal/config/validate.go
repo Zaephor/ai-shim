@@ -45,11 +45,29 @@ func ValidateNetworkScope(scope string) error {
 	return nil
 }
 
+// ValidateNetnsMode checks the netns_mode value and its DIND requirement.
+func ValidateNetnsMode(mode string, dindEnabled bool) error {
+	switch mode {
+	case "", NetnsModeAgent, NetnsModeDIND, NetnsModeHolder:
+		// valid
+	default:
+		return fmt.Errorf("invalid netns_mode %q (valid: agent, dind, holder)", mode)
+	}
+	if mode != "" && mode != NetnsModeAgent && !dindEnabled {
+		return fmt.Errorf("netns_mode %q requires DIND to be enabled", mode)
+	}
+	return nil
+}
+
 // Validate checks the resolved config for common mistakes.
 func (c Config) Validate() []string {
 	var warnings []string
 
 	if err := ValidateNetworkScope(c.NetworkScope); err != nil {
+		warnings = append(warnings, err.Error())
+	}
+
+	if err := ValidateNetnsMode(c.NetnsMode, c.IsDINDEnabled()); err != nil {
 		warnings = append(warnings, err.Error())
 	}
 
