@@ -295,15 +295,16 @@ func TestParallel_KillOneSibling(t *testing.T) {
 }
 
 // TestParallel_DINDWorkspaceFilterIsolation covers the load-bearing invariant
-// for the DIND sidecar: stopDINDForSession must scope its lookup to the
-// session's workspace hash. If the filter ever loses the workspace scope
-// (regression: two sessions in DIFFERENT workspaces for the same agent+
-// profile are matched against each other), killing one session would tear
-// down the other session's DIND sidecar.
+// for the DIND sidecar: container.DINDSessionFilters must scope its lookup to
+// the session, not just to workspace/agent/profile. This test's scenario is
+// two different workspaces, each running one session, so a filter that lost
+// its session scope but kept workspace scope would still pass here — the
+// session-scoping regression is what TestParallel_SidecarFiltersAreSessionScoped
+// pins directly with same-workspace siblings. This test's job is to confirm
+// the production filter also holds up across workspaces.
 //
-// We replicate the production filter here as a test-only query — we cannot
-// invoke the unexported stopDINDForSession from cmd/ai-shim. The assertion
-// is: a filter scoped to workspace A's hash returns only A's DIND, not B's.
+// The assertion is: a lookup for session A's DIND returns only A's DIND, not
+// B's, and stopping A's DIND leaves B's running.
 func TestParallel_DINDWorkspaceFilterIsolation(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	if testing.Short() {
@@ -328,12 +329,19 @@ func TestParallel_DINDWorkspaceFilterIsolation(t *testing.T) {
 	paramsB := base
 	paramsB.WsHash = base.WsHash + "-B"
 
+	// Session names are per-workspace here: this test's scenario is two
+	// workspaces, each running one session.
+	sessionName := func(p parallelTestParams) string {
+		return "ai-shim-sess-" + p.WsHash
+	}
+
 	makeDINDLabels := func(p parallelTestParams) map[string]string {
 		return map[string]string{
 			container.LabelBase:      "true",
 			container.LabelAgent:     p.AgentName,
 			container.LabelProfile:   p.Profile,
 			container.LabelWorkspace: p.WsHash,
+			container.LabelSession:   sessionName(p),
 			container.LabelDIND:      "true",
 		}
 	}
@@ -346,19 +354,18 @@ func TestParallel_DINDWorkspaceFilterIsolation(t *testing.T) {
 	dindBID := startFakeSession(t, ctx, cli, dindB, makeDINDLabels(paramsB))
 	waitForRunning(t, ctx, cli, dindBID)
 
-	// Replicate cmd/ai-shim/main.go dindSessionFilters exactly. If this
-	// filter ever drops the workspace scope, the assertion below fails —
-	// which is precisely the regression we want to guard against.
+	// Call the production filter directly. The previous version of this test
+	// hand-copied the filter, so a filter that lost its scoping still passed.
 	queryWorkspace := func(p parallelTestParams) []dockercontainer.Summary {
-		f := filters.NewArgs(
-			filters.Arg("label", container.LabelBase+"=true"),
-			filters.Arg("label", container.LabelDIND+"=true"),
-			filters.Arg("label", container.LabelAgent+"="+p.AgentName),
-			filters.Arg("label", container.LabelProfile+"="+p.Profile),
-			filters.Arg("label", container.LabelWorkspace+"="+p.WsHash),
-			filters.Arg("status", "running"),
-		)
-		list, err := cli.ContainerList(ctx, dockercontainer.ListOptions{Filters: f})
+		session := &container.RunningSession{
+			ContainerName: sessionName(p),
+			AgentName:     p.AgentName,
+			Profile:       p.Profile,
+			WorkspaceHash: p.WsHash,
+		}
+		list, err := cli.ContainerList(ctx, dockercontainer.ListOptions{
+			Filters: container.DINDSessionFilters(session),
+		})
 		require.NoError(t, err)
 		return list
 	}
@@ -479,4 +486,78 @@ func TestParallel_CacheOrphanGuard(t *testing.T) {
 			(cerrdefs.IsNotFound(ierr) || strings.Contains(ierr.Error(), "No such container"))
 	}, 30*time.Second, 500*time.Millisecond,
 		"cache container must be removed after last consumer exits")
+}
+
+// TestParallel_SidecarFiltersAreSessionScoped asserts at the filter level
+// what internal/dind covers at the behavioral level: two sessions in the
+// SAME workspace share every label except the session label, so a lookup
+// scoped by anything coarser matches both and tears down a still-running
+// session's sidecars.
+func TestParallel_SidecarFiltersAreSessionScoped(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	if testing.Short() {
+		t.Skip("skipping slow parallel session test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runner, err := container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
+
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	params := newTestParams(t)
+	stamp := time.Now().UnixNano()
+	nameA := fmt.Sprintf("ai-shim-sess-a-%d", stamp)
+	nameB := fmt.Sprintf("ai-shim-sess-b-%d", stamp)
+
+	sidecarLabels := func(sessionName, role string) map[string]string {
+		l := params.sessionLabels()
+		l[container.LabelSession] = sessionName
+		l[container.LabelRole] = role
+		if role == "dind" {
+			l[container.LabelDIND] = "true"
+		}
+		return l
+	}
+
+	dindA := startFakeSession(t, ctx, cli, nameA+"-dind", sidecarLabels(nameA, "dind"))
+	holderA := startFakeSession(t, ctx, cli, nameA+"-netns", sidecarLabels(nameA, "netns-holder"))
+	dindB := startFakeSession(t, ctx, cli, nameB+"-dind", sidecarLabels(nameB, "dind"))
+	holderB := startFakeSession(t, ctx, cli, nameB+"-netns", sidecarLabels(nameB, "netns-holder"))
+	for _, id := range []string{dindA, holderA, dindB, holderB} {
+		waitForRunning(t, ctx, cli, id)
+	}
+
+	sessA := &container.RunningSession{
+		ContainerName: nameA,
+		AgentName:     params.AgentName,
+		Profile:       params.Profile,
+		WorkspaceHash: params.WsHash,
+	}
+
+	dindHits, err := cli.ContainerList(ctx, dockercontainer.ListOptions{
+		Filters: container.DINDSessionFilters(sessA),
+	})
+	require.NoError(t, err)
+	require.Len(t, dindHits, 1, "session A's DIND filter must match exactly one sidecar, not the sibling's too")
+	assert.Equal(t, dindA, dindHits[0].ID)
+
+	holderHits, err := cli.ContainerList(ctx, dockercontainer.ListOptions{
+		Filters: container.HolderSessionFilters(sessA),
+	})
+	require.NoError(t, err)
+	require.Len(t, holderHits, 1, "session A's holder filter must match exactly one holder, not the sibling's too")
+	assert.Equal(t, holderA, holderHits[0].ID)
+
+	// Session B's sidecars must be untouched by A's lookups.
+	for _, id := range []string{dindB, holderB} {
+		insp, err := cli.ContainerInspect(ctx, id)
+		require.NoError(t, err)
+		require.NotNil(t, insp.State)
+		assert.True(t, insp.State.Running, "sibling session B's sidecar %s must still be running", id)
+	}
 }
