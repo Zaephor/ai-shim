@@ -9,6 +9,8 @@ import (
 	ai_container "github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/testutil"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	dnetwork "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +23,13 @@ import (
 // `sleep infinity` as PID 1 matters: PID 1 installs no default SIGTERM
 // handler, so these containers ignore SIGTERM exactly as the real holder
 // does. A teardown that stops them gracefully waits out its full timeout.
-func teardownFixture(t *testing.T, ctx context.Context, cli *client.Client, name, sessionName, role string) string {
+//
+// If networkName is non-empty, the fixture is attached to that network
+// instead of the default bridge — used to pin the holder-before-network-
+// removal ordering, where the fixture must actually be attached to the
+// network RemoveOrphanedForSession inspects for RemoveOrphanedForSession's
+// container-count check to have teeth.
+func teardownFixture(t *testing.T, ctx context.Context, cli *client.Client, name, sessionName, role, networkName string) string {
 	t.Helper()
 
 	labels := map[string]string{
@@ -36,6 +44,15 @@ func teardownFixture(t *testing.T, ctx context.Context, cli *client.Client, name
 		labels[ai_container.LabelDIND] = "true"
 	}
 
+	var netConfig *dnetwork.NetworkingConfig
+	if networkName != "" {
+		netConfig = &dnetwork.NetworkingConfig{
+			EndpointsConfig: map[string]*dnetwork.EndpointSettings{
+				networkName: {},
+			},
+		}
+	}
+
 	resp, err := cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:      "alpine:latest",
@@ -43,7 +60,7 @@ func teardownFixture(t *testing.T, ctx context.Context, cli *client.Client, name
 			Labels:     labels,
 		},
 		&container.HostConfig{AutoRemove: false},
-		nil, nil, name,
+		netConfig, nil, name,
 	)
 	require.NoError(t, err, "creating fixture %q", name)
 
@@ -91,10 +108,10 @@ func TestStopForSession_LeavesSiblingSidecarsAlone(t *testing.T) {
 	sessionA := fmt.Sprintf("ai-shim-teardown-a-%d", stamp)
 	sessionB := fmt.Sprintf("ai-shim-teardown-b-%d", stamp)
 
-	dindA := teardownFixture(t, ctx, cli, sessionA+"-dind", sessionA, "dind")
-	holderA := teardownFixture(t, ctx, cli, sessionA+"-netns", sessionA, "netns-holder")
-	dindB := teardownFixture(t, ctx, cli, sessionB+"-dind", sessionB, "dind")
-	holderB := teardownFixture(t, ctx, cli, sessionB+"-netns", sessionB, "netns-holder")
+	dindA := teardownFixture(t, ctx, cli, sessionA+"-dind", sessionA, "dind", "")
+	holderA := teardownFixture(t, ctx, cli, sessionA+"-netns", sessionA, "netns-holder", "")
+	dindB := teardownFixture(t, ctx, cli, sessionB+"-dind", sessionB, "dind", "")
+	holderB := teardownFixture(t, ctx, cli, sessionB+"-netns", sessionB, "netns-holder", "")
 
 	err = StopForSession(ctx, cli, &ai_container.RunningSession{
 		ContainerName: sessionA,
@@ -134,4 +151,64 @@ func TestStopForSession_NoMatchIsNotAnError(t *testing.T) {
 		WorkspaceHash: "wshash",
 	})
 	assert.NoError(t, err, "a session with no sidecars must tear down cleanly")
+}
+
+// TestStopForSession_RemovesNetworkOnlyAfterHolderStops pins the ordering
+// documented in StopForSession: the netns holder must be stopped before
+// network.RemoveOrphanedForSession runs. A still-running holder stays
+// attached to the session's network, so RemoveOrphanedForSession's
+// container-count check would see it as non-orphaned and leave it running —
+// this network's cleanup fixture only matches the holder-then-network order
+// because the DIND and holder fixtures below are actually attached to it.
+func TestStopForSession_RemovesNetworkOnlyAfterHolderStops(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	if testing.Short() {
+		t.Skip("skipping Docker-backed teardown test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runner, err := ai_container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	stamp := time.Now().UnixNano()
+	sessionName := fmt.Sprintf("ai-shim-teardown-order-%d", stamp)
+	netName := fmt.Sprintf("ai-shim-teardown-order-net-%d", stamp)
+
+	_, err = cli.NetworkCreate(ctx, netName, dnetwork.CreateOptions{
+		Labels: map[string]string{
+			ai_container.LabelBase:      "true",
+			ai_container.LabelAgent:     "test-teardown",
+			ai_container.LabelProfile:   "default",
+			ai_container.LabelWorkspace: "wshash",
+		},
+	})
+	require.NoError(t, err, "creating fixture network %q", netName)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = cli.NetworkRemove(cleanupCtx, netName)
+	})
+
+	teardownFixture(t, ctx, cli, sessionName+"-dind", sessionName, "dind", netName)
+	teardownFixture(t, ctx, cli, sessionName+"-netns", sessionName, "netns-holder", netName)
+
+	err = StopForSession(ctx, cli, &ai_container.RunningSession{
+		ContainerName: sessionName,
+		AgentName:     "test-teardown",
+		Profile:       "default",
+		WorkspaceHash: "wshash",
+	})
+	require.NoError(t, err)
+
+	networks, err := cli.NetworkList(ctx, dnetwork.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("name", "^"+netName+"$")),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, networks,
+		"session network must be removed: it only looks orphaned once the holder that kept it attached is stopped first")
 }
