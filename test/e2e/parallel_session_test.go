@@ -28,8 +28,8 @@ import (
 //     newest.
 //   - Killing one sibling (the interactive k<N> path) must leave the other
 //     sibling's container AND its DIND sidecar untouched. This is enforced
-//     by the workspace-hash filter in the DIND-cleanup lookup — the load-
-//     bearing assertion is the regression guard for that filter.
+//     by scoping the DIND-cleanup lookup to the session label alone — the
+//     load-bearing assertion is the regression guard for that filter.
 //   - After the last consumer is killed, the shared registry cache is
 //     garbage-collected by dind.MaybeStopCache.
 //
@@ -378,7 +378,7 @@ func TestParallel_DINDWorkspaceFilterIsolation(t *testing.T) {
 	require.Len(t, hitsB, 1, "workspace-B DIND filter must return exactly 1 sidecar")
 	assert.Equal(t, dindBID, hitsB[0].ID, "filter for workspace B must return B's DIND only")
 
-	// Stop A's DIND (simulating stopDINDForSession for session A). B's must
+	// Stop A's DIND (simulating dind.StopForSession for session A). B's must
 	// still be running afterwards.
 	stopTimeout := 5
 	require.NoError(t, cli.ContainerStop(ctx, dindAID, dockercontainer.StopOptions{Timeout: &stopTimeout}))
