@@ -1627,6 +1627,14 @@ func parseMultiChoice(input string, n int) (string, int) {
 
 // handleReattach reconnects to an existing container session.
 func handleReattach(ctx context.Context, runner *container.Runner, session *container.RunningSession, cfg config.Config, logDir string) (int, error) {
+	if _, joined, alive := container.NetnsOwnerAlive(ctx, runner.Client(), session.ContainerID); joined && !alive {
+		fmt.Fprintf(os.Stderr,
+			"ai-shim: warning: the network namespace owner for %s is gone.\n"+
+				"ai-shim: this session has no network connectivity and cannot regain it.\n"+
+				"ai-shim: stop the session and start a new one to restore networking.\n",
+			session.ContainerName)
+	}
+
 	fmt.Fprintf(os.Stderr, "ai-shim: reattaching to %s...\n", session.ContainerName)
 
 	// Show recent container logs for context.
