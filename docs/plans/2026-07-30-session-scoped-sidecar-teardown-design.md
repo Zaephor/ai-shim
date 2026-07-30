@@ -1,7 +1,7 @@
 # Session-scoped sidecar teardown — design
 
 **Date:** 2026-07-30
-**Status:** approved (brainstorm), pending implementation plan
+**Status:** implemented
 **Scope:** Give every session a unique container label and scope sidecar
 teardown to it, so ending one session cannot destroy a sibling session's DIND
 sidecar and netns holder.
