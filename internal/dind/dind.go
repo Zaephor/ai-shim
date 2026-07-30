@@ -142,6 +142,26 @@ func dindNetworkHostConfig(cfg Config, extraHosts []string) *container.HostConfi
 	return hc
 }
 
+// sidecarLabels builds the DIND container's label map from the session's
+// labels. It copies to avoid mutating the caller's map, and overrides role
+// from the parent's "agent" to "dind" so the session picker and cleanup
+// queries can distinguish agent containers from their sidecars via a
+// positive label filter. Every other label — including LabelSession, which
+// teardown matches on — is inherited unchanged.
+func sidecarLabels(cfg Config) map[string]string {
+	labels := make(map[string]string, len(cfg.Labels)+4)
+	for k, v := range cfg.Labels {
+		labels[k] = v
+	}
+	labels[ai_container.LabelRole] = "dind"
+	labels[ai_container.LabelDIND] = "true"
+	labels[ai_container.LabelVersion] = cfg.Version
+	if cfg.CacheAddr != "" {
+		labels[ai_container.LabelUsesCache] = "true"
+	}
+	return labels
+}
+
 // Start creates and starts the DIND sidecar, returning a Sidecar handle.
 // The caller must provide a pre-created network via cfg.NetworkID.
 // Start calls runner.EnsureImage internally so callers do not need to
@@ -191,20 +211,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	// priority).
 	cmd := dockerdArgs(cfg)
 
-	// Copy labels to avoid mutating the caller's map.
-	// Override role from the parent's "agent" to "dind" so the session
-	// picker and cleanup queries can distinguish agent containers from
-	// their sidecars via a positive label filter.
-	labels := make(map[string]string, len(cfg.Labels)+3)
-	for k, v := range cfg.Labels {
-		labels[k] = v
-	}
-	labels[ai_container.LabelRole] = "dind"
-	labels[ai_container.LabelDIND] = "true"
-	labels[ai_container.LabelVersion] = cfg.Version
-	if cfg.CacheAddr != "" {
-		labels[ai_container.LabelUsesCache] = "true"
-	}
+	labels := sidecarLabels(cfg)
 
 	// TLS configuration
 	var tlsEnv string

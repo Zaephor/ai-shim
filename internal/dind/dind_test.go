@@ -824,3 +824,27 @@ func TestDINDContainerHostname_ClearedWhenJoining(t *testing.T) {
 	assert.Equal(t, "", dindHostname(Config{JoinNetns: "x", Hostname: "dind"}))
 	assert.Equal(t, "dind", dindHostname(Config{Hostname: "dind"}))
 }
+
+func TestSidecarLabels_PreservesSessionLabel(t *testing.T) {
+	cfg := Config{
+		Version:   "1.2.3",
+		CacheAddr: "127.0.0.1:5000",
+		Labels: map[string]string{
+			ai_container.LabelBase:    "true",
+			ai_container.LabelSession: "claude-code-work-abc123-deadbeef",
+			ai_container.LabelRole:    "agent",
+		},
+	}
+
+	got := sidecarLabels(cfg)
+
+	assert.Equal(t, "claude-code-work-abc123-deadbeef", got[ai_container.LabelSession],
+		"the DIND sidecar must inherit its session's label or teardown cannot find it")
+	assert.Equal(t, "dind", got[ai_container.LabelRole], "role must be overridden from agent to dind")
+	assert.Equal(t, "true", got[ai_container.LabelDIND])
+	assert.Equal(t, "1.2.3", got[ai_container.LabelVersion])
+	assert.Equal(t, "true", got[ai_container.LabelUsesCache])
+
+	assert.Equal(t, "agent", cfg.Labels[ai_container.LabelRole],
+		"sidecarLabels must not mutate the caller's map")
+}

@@ -232,3 +232,18 @@ func TestCleanupStaleContainers_Signature(t *testing.T) {
 	assert.Contains(t, body, "cleanupStaleContainers(ctx, runner, agentName, profileName, wsHash)",
 		"runAgent must pass wsHash to cleanupStaleContainers (Fix #4)")
 }
+
+func TestDINDHolderLabels_PreservesSessionLabel(t *testing.T) {
+	base := map[string]string{
+		container.LabelBase:    "true",
+		container.LabelSession: "claude-code-work-abc123-deadbeef",
+		container.LabelRole:    "agent",
+	}
+
+	got := dindHolderLabels(base)
+
+	assert.Equal(t, "claude-code-work-abc123-deadbeef", got[container.LabelSession],
+		"the netns holder must inherit its session's label or teardown cannot find it")
+	assert.Equal(t, "netns-holder", got[container.LabelRole])
+	assert.Equal(t, "agent", base[container.LabelRole], "dindHolderLabels must not mutate the caller's map")
+}
