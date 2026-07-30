@@ -1440,3 +1440,25 @@ func TestBuildSpec_ProjectScopeIsDataDriven(t *testing.T) {
 		assert.NotContains(t, e, "SCOUT_STATE_DIR")
 	}
 }
+
+func TestBuildSpec_SessionLabelMatchesContainerName(t *testing.T) {
+	p := defaultBuildParams()
+	spec, err := BuildSpec(p)
+	require.NoError(t, err)
+
+	assert.Equal(t, spec.Name, spec.Labels[LabelSession],
+		"session label must carry the agent container name so sidecars can be tied to exactly one session")
+}
+
+// Two specs built from identical params must still get distinct session
+// labels: the container name carries a random suffix, and that uniqueness is
+// what keeps one session's teardown off its siblings' sidecars.
+func TestBuildSpec_SessionLabelIsUniquePerSpec(t *testing.T) {
+	first, err := BuildSpec(defaultBuildParams())
+	require.NoError(t, err)
+	second, err := BuildSpec(defaultBuildParams())
+	require.NoError(t, err)
+
+	assert.NotEqual(t, first.Labels[LabelSession], second.Labels[LabelSession],
+		"parallel sessions for the same agent+profile+workspace must not share a session label")
+}

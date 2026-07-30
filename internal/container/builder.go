@@ -97,6 +97,7 @@ func BuildSpec(p BuildParams) (ContainerSpec, error) {
 
 	labels[LabelWorkspace] = wsHash
 	labels[LabelWorkspaceDir] = pwd
+	labels[LabelSession] = name
 
 	// Agents that scan ~/.{agent}/projects/ for orphan detection need a scoped
 	// view so stale entries from previous containers don't trigger false warnings.
