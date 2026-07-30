@@ -8,9 +8,11 @@ import (
 
 	ai_container "github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/testutil"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dnetwork "github.com/docker/docker/api/types/network"
+	dvolume "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,6 +115,23 @@ func TestStopForSession_LeavesSiblingSidecarsAlone(t *testing.T) {
 	dindB := teardownFixture(t, ctx, cli, sessionB+"-dind", sessionB, "dind", "")
 	holderB := teardownFixture(t, ctx, cli, sessionB+"-netns", sessionB, "netns-holder", "")
 
+	// Volumes are named after the DIND container StopForSession finds, not
+	// the fixture helper's own bookkeeping, so create them here to exercise
+	// the removal loop instead of always hitting its not-found branch.
+	socketVol := sessionA + "-dind-socket"
+	certsVol := sessionA + "-dind-certs"
+	for _, name := range []string{socketVol, certsVol} {
+		_, err := cli.VolumeCreate(ctx, dvolume.CreateOptions{Name: name})
+		require.NoError(t, err, "creating fixture volume %q", name)
+		t.Cleanup(func(name string) func() {
+			return func() {
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				_ = cli.VolumeRemove(cleanupCtx, name, true)
+			}
+		}(name))
+	}
+
 	err = StopForSession(ctx, cli, &ai_container.RunningSession{
 		ContainerName: sessionA,
 		AgentName:     "test-teardown",
@@ -127,6 +146,12 @@ func TestStopForSession_LeavesSiblingSidecarsAlone(t *testing.T) {
 		"sibling session B's DIND must survive: destroying it strands a running agent")
 	assert.True(t, running(t, ctx, cli, holderB),
 		"sibling session B's netns holder must survive: destroying it is unrecoverable")
+
+	for _, name := range []string{socketVol, certsVol} {
+		_, err := cli.VolumeInspect(ctx, name)
+		assert.True(t, cerrdefs.IsNotFound(err),
+			"session A's volume %q must be removed by teardown, got err=%v", name, err)
+	}
 }
 
 // TestStopForSession_NoMatchIsNotAnError covers the upgrade case and the

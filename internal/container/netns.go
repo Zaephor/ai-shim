@@ -11,10 +11,10 @@ import (
 // container's network namespace.
 const netnsOwnerPrefix = "container:"
 
-// ParseNetnsOwner returns the container ID whose network namespace the given
+// parseNetnsOwner returns the container ID whose network namespace the given
 // network mode joins, and whether the mode is that kind at all. Any other
 // mode — bridge, host, none, a named network — returns ok=false.
-func ParseNetnsOwner(networkMode string) (string, bool) {
+func parseNetnsOwner(networkMode string) (string, bool) {
 	if !strings.HasPrefix(networkMode, netnsOwnerPrefix) {
 		return "", false
 	}
@@ -41,7 +41,7 @@ func NetnsOwnerAlive(ctx context.Context, cli *client.Client, containerID string
 	if err != nil || insp.HostConfig == nil {
 		return "", false, false
 	}
-	ownerID, ok := ParseNetnsOwner(string(insp.HostConfig.NetworkMode))
+	ownerID, ok := parseNetnsOwner(string(insp.HostConfig.NetworkMode))
 	if !ok {
 		return "", false, false
 	}

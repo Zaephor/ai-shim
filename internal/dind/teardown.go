@@ -24,9 +24,20 @@ import (
 // holder cannot be recovered, because a container:<id> dependent never
 // regains eth0.
 //
-// Best-effort: every failure is collected and the teardown continues, so one
-// wedged container cannot strand the rest. The joined error is for reporting,
-// not control flow.
+// Best-effort: every individual container or volume failure is collected and
+// the teardown continues, so one wedged container cannot strand the rest.
+// The joined error is for reporting, not control flow. This does not extend
+// to failing to enumerate what to tear down in the first place: if the
+// initial DIND lookup errors, StopForSession returns immediately rather than
+// force-removing the netns holder out from under a DIND it never found —
+// that DIND rejoins no namespace and restarts forever, which is worse than
+// the leak a failed lookup leaves behind.
+//
+// Rollout note: a session already running when this binary starts carries no
+// ai-shim.session label (it was launched by an earlier binary), so this
+// lookup will not match its sidecars — its DIND, netns holder and volumes
+// leak silently. Drain all active sessions before deploying a binary with
+// this change; `ai-shim manage cleanup` removes anything left behind.
 func StopForSession(ctx context.Context, cli *client.Client, session *ai_container.RunningSession) error {
 	var errs []error
 
@@ -34,9 +45,8 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 		Filters: ai_container.DINDSessionFilters(session),
 	})
 	if err != nil {
-		errs = append(errs, fmt.Errorf("listing DIND containers for session %s: %w", session.ContainerName, err))
-	}
-	if len(list) == 0 {
+		return fmt.Errorf("listing DIND containers for session %s: %w", session.ContainerName, err)
+	} else if len(list) == 0 {
 		logging.Debug("no DIND sidecar found for session %s", session.ContainerName)
 	}
 

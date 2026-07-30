@@ -30,9 +30,9 @@ func TestParseNetnsOwner(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotID, gotOK := ParseNetnsOwner(tt.networkMode)
+			gotID, gotOK := parseNetnsOwner(tt.networkMode)
 			if gotID != tt.wantID || gotOK != tt.wantOK {
-				t.Errorf("ParseNetnsOwner(%q) = (%q, %v), want (%q, %v)",
+				t.Errorf("parseNetnsOwner(%q) = (%q, %v), want (%q, %v)",
 					tt.networkMode, gotID, gotOK, tt.wantID, tt.wantOK)
 			}
 		})
