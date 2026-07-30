@@ -212,3 +212,41 @@ func TestStopForSession_RemovesNetworkOnlyAfterHolderStops(t *testing.T) {
 	assert.Empty(t, networks,
 		"session network must be removed: it only looks orphaned once the holder that kept it attached is stopped first")
 }
+
+// TestStopForSession_DoesNotWaitOutHolderSIGTERM pins the holder's removal
+// to a force-remove. The holder is `sleep infinity` as PID 1, which ignores
+// SIGTERM, so a graceful stop can only wait out its full timeout before the
+// daemon force-kills it anyway. The fixture reproduces that exactly, so a
+// reintroduced ContainerStop shows up as elapsed time.
+func TestStopForSession_DoesNotWaitOutHolderSIGTERM(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	if testing.Short() {
+		t.Skip("skipping Docker-backed teardown test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runner, err := ai_container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	session := fmt.Sprintf("ai-shim-teardown-stall-%d", time.Now().UnixNano())
+	holder := teardownFixture(t, ctx, cli, session+"-netns", session, "netns-holder", "")
+
+	start := time.Now()
+	err = StopForSession(ctx, cli, &ai_container.RunningSession{
+		ContainerName: session,
+		AgentName:     "test-teardown",
+		Profile:       "default",
+		WorkspaceHash: "wshash",
+	})
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.False(t, running(t, ctx, cli, holder), "the netns holder must be gone")
+	assert.Less(t, elapsed, 4*time.Second,
+		"holder removal waited on SIGTERM (%s); sleep as PID 1 ignores it, so the wait can only ever time out", elapsed)
+}

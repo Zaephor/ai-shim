@@ -76,10 +76,10 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 		errs = append(errs, fmt.Errorf("listing netns holder for session %s: %w", session.ContainerName, err))
 	}
 	for _, c := range holderList {
-		stopTimeout := 5
-		if err := cli.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &stopTimeout}); err != nil {
-			errs = append(errs, fmt.Errorf("stopping netns holder %s: %w", c.ID, err))
-		}
+		// Force-remove rather than stop-then-remove. The holder is `sleep
+		// infinity` as PID 1, which installs no SIGTERM handler, so a
+		// graceful stop can only wait out its full timeout before the
+		// daemon force-kills it anyway. Holder.Stop does the same.
 		if err := cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true}); err != nil {
 			errs = append(errs, fmt.Errorf("removing netns holder %s: %w", c.ID, err))
 		}
