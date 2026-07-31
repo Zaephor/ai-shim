@@ -209,32 +209,28 @@ func TestJourney_StatusWhileRunning(t *testing.T) {
 		})
 	}()
 
-	// Wait for the container to start.
-	var started bool
-	for attempt := 0; attempt < 20; attempt++ {
-		time.Sleep(500 * time.Millisecond)
-		containers, listErr := runner.Client().ContainerList(ctx, dockercontainer.ListOptions{
-			All: true,
-		})
+	// Wait for the container to be RUNNING, not merely created.
+	//
+	// This must list exactly the way Status does — no All, so running-only.
+	// Polling with All:true matches a container in "created", which Status
+	// deliberately excludes, so the test would race the created→running
+	// transition and assert against a Status that legitimately reported
+	// nothing. That window widens under load, so it passed a focused run and
+	// failed the full suite.
+	require.Eventually(t, func() bool {
+		containers, listErr := runner.Client().ContainerList(ctx, dockercontainer.ListOptions{})
 		if listErr != nil {
-			continue
+			return false
 		}
 		for _, c := range containers {
 			for _, name := range c.Names {
 				if strings.Contains(name, containerName) {
-					started = true
-					break
+					return true
 				}
 			}
-			if started {
-				break
-			}
 		}
-		if started {
-			break
-		}
-	}
-	require.True(t, started, "container should have started within 10s")
+		return false
+	}, 15*time.Second, 250*time.Millisecond, "container should be running within 15s")
 
 	// Call Status and verify it contains the container name.
 	statusOutput, err := cli.Status()
