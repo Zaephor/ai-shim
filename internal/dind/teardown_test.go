@@ -275,3 +275,70 @@ func TestStopForSession_DoesNotWaitOutHolderSIGTERM(t *testing.T) {
 	assert.Less(t, elapsed, 4*time.Second,
 		"holder removal waited on SIGTERM (%s); sleep as PID 1 ignores it, so the wait can only ever time out", elapsed)
 }
+
+// TestStopForSession_RemovesExitedDIND covers the crash-looping sidecar. A
+// DIND carries RestartPolicyUnlessStopped, so one that is between restarts —
+// or has exited outright — is not "running". While the filters carried
+// status=running and StopForSession listed with All defaulted to false, such
+// a sidecar was invisible to teardown: it outlived the session that owned it
+// and its socket and certs volumes leaked with it.
+func TestStopForSession_RemovesExitedDIND(t *testing.T) {
+	testutil.SkipIfNoDocker(t)
+	if testing.Short() {
+		t.Skip("skipping Docker-backed teardown test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runner, err := ai_container.NewRunner(ctx)
+	require.NoError(t, err)
+	defer runner.Close()
+	cli := runner.Client()
+	require.NoError(t, runner.EnsureImage(ctx, "alpine:latest"))
+
+	stamp := time.Now().UnixNano()
+	session := fmt.Sprintf("ai-shim-teardown-exited-%d", stamp)
+
+	dindID := teardownFixture(t, ctx, cli, session+"-dind", session, "dind", "")
+
+	// Drive the fixture to "exited". `sleep infinity` as PID 1 ignores
+	// SIGTERM, so a graceful stop would burn its full timeout; kill instead.
+	require.NoError(t, cli.ContainerKill(ctx, dindID, "SIGKILL"))
+	require.Eventually(t, func() bool {
+		insp, err := cli.ContainerInspect(ctx, dindID)
+		return err == nil && insp.State != nil && !insp.State.Running
+	}, 30*time.Second, 200*time.Millisecond, "fixture DIND must reach a non-running state")
+
+	socketVol := session + "-dind-socket"
+	certsVol := session + "-dind-certs"
+	for _, name := range []string{socketVol, certsVol} {
+		_, err := cli.VolumeCreate(ctx, dvolume.CreateOptions{Name: name})
+		require.NoError(t, err, "creating fixture volume %q", name)
+		t.Cleanup(func(name string) func() {
+			return func() {
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				_ = cli.VolumeRemove(cleanupCtx, name, true)
+			}
+		}(name))
+	}
+
+	err = StopForSession(ctx, cli, &ai_container.RunningSession{
+		ContainerName: session,
+		AgentName:     "test-teardown",
+		Profile:       "default",
+		WorkspaceHash: "wshash",
+	})
+	require.NoError(t, err)
+
+	_, err = cli.ContainerInspect(ctx, dindID)
+	assert.True(t, cerrdefs.IsNotFound(err),
+		"an exited DIND must still be removed by teardown, got err=%v", err)
+
+	for _, name := range []string{socketVol, certsVol} {
+		_, err := cli.VolumeInspect(ctx, name)
+		assert.True(t, cerrdefs.IsNotFound(err),
+			"an exited DIND's volume %q must be removed too, got err=%v", name, err)
+	}
+}

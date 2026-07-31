@@ -22,7 +22,9 @@ func TestDINDSessionFilters_ScopedToSession(t *testing.T) {
 	assert.Contains(t, f.Get("label"), LabelDIND+"=true")
 	assert.Contains(t, f.Get("label"), LabelSession+"=claude-code-work-abc123-aaaaaaaa",
 		"DIND teardown must match the one session that owns the sidecar")
-	assert.Contains(t, f.Get("status"), "running")
+	assert.Empty(t, f.Get("status"),
+		"the filter matches by identity; liveness is the caller's choice via ListOptions.All, "+
+			"and a status here hides a crash-looping sidecar from teardown")
 }
 
 func TestHolderSessionFilters_ScopedToSession(t *testing.T) {
@@ -32,7 +34,9 @@ func TestHolderSessionFilters_ScopedToSession(t *testing.T) {
 	assert.Contains(t, f.Get("label"), LabelRole+"=netns-holder")
 	assert.Contains(t, f.Get("label"), LabelSession+"=claude-code-work-abc123-aaaaaaaa",
 		"holder teardown must match the one session that owns the holder")
-	assert.Contains(t, f.Get("status"), "running")
+	assert.Empty(t, f.Get("status"),
+		"the filter matches by identity; liveness is the caller's choice via ListOptions.All, "+
+			"and a status here hides a crash-looping sidecar from teardown")
 }
 
 // Parallel sessions share agent, profile and workspace labels. If either

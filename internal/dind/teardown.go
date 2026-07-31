@@ -42,6 +42,7 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 	var errs []error
 
 	list, err := cli.ContainerList(ctx, container.ListOptions{
+		All:     true,
 		Filters: ai_container.DINDSessionFilters(session),
 	})
 	if err != nil {
@@ -80,6 +81,7 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 	// session's bridge network for as long as it runs, so leaving it would
 	// make the network look non-orphaned and leak it too.
 	holderList, err := cli.ContainerList(ctx, container.ListOptions{
+		All:     true,
 		Filters: ai_container.HolderSessionFilters(session),
 	})
 	if err != nil {
