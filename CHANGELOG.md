@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.11.0](https://github.com/Zaephor/ai-shim/compare/v0.10.0...v0.11.0) (2026-07-31)
+
+
+### Features
+
+* **container:** add per-session label set from container name ([5b3702e](https://github.com/Zaephor/ai-shim/commit/5b3702e38b1407e35a69af2c4b91c34f12ea2bae))
+* **reattach:** report a destroyed netns owner before attaching ([ba5995f](https://github.com/Zaephor/ai-shim/commit/ba5995f2167b889027f8658a0ab3de741e2b57e7))
+
+
+### Bug Fixes
+
+* **cleanup:** scope sidecar teardown to the owning session ([6b445f3](https://github.com/Zaephor/ai-shim/commit/6b445f3cf980ebb538d469f6a6221dfdb956b81d))
+* **dind:** keep teardown from wedging a live sidecar on lookup failure ([50d8920](https://github.com/Zaephor/ai-shim/commit/50d8920058feb48b9b87c13198c522af066d40c0))
+
+
+### Performance Improvements
+
+* **dind:** force-remove netns holder instead of waiting on SIGTERM ([95c8f26](https://github.com/Zaephor/ai-shim/commit/95c8f264d884a35cc7c60b97b11f857d1211df2f))
+
 ## [0.10.0](https://github.com/Zaephor/ai-shim/compare/v0.9.0...v0.10.0) (2026-07-09)
 
 
