@@ -1,7 +1,7 @@
 # Cleanup scope and sidecar state — design
 
 **Date:** 2026-07-31
-**Status:** designed
+**Status:** implemented
 **Scope:** Stop `manage cleanup` from force-removing running containers, and
 let session-scoped sidecar teardown reach sidecars that are not running.
 
@@ -90,8 +90,6 @@ sidecar teardown reaches its own session's sidecars in any state.
 - Session-liveness scoping — protecting a *stopped* sidecar whose session is
   still live, or a volume whose session label matches a running container.
   Deferred; recorded under Future work.
-- A `--force` flag restoring today's sweep. Deferred; recorded under Future
-  work with its adoption trigger.
 - Adding `./internal/cli/` to the Docker CI job. The coverage gap is real and
   recorded under Future work, but the tests here are placed to land in jobs
   that already exist.
@@ -182,17 +180,30 @@ the existing `TestCleanup_*` tests would never guard anything in CI.
 | In-use volume is skipped, not reported in `Failed` | `test/e2e` | Docker job |
 | Filters carry no `status` key | `internal/container` | every job |
 | Exited DIND is torn down and its socket/certs volumes removed | `internal/dind` | Docker job |
+| `--force` removes a running container | `test/e2e` | Docker job |
 
 The e2e cleanup test must create its own labeled fixtures and remove them in
 `t.Cleanup`, since `Cleanup` operates daemon-wide and the suite shares a
 daemon with other tests.
 
+## `--force`
+
+`cleanup --force` (`-f`) restores the unscoped sweep behind an explicit flag
+and a stderr warning naming the blast radius.
+
+It ships in this change rather than being deferred, because the shipped
+`[Unreleased]` rollout note directs operators at `manage cleanup` to reclaim
+sidecars leaked by pre-label sessions. Those sidecars carry
+`RestartPolicyUnlessStopped`, so they are still running and are not orphans
+by state — without the flag, the documented rollout path stops working the
+moment this change lands.
+
 ## Risk
 
 `manage cleanup` stops reaping a container that is wedged but still reports
 `running`. That is a real capability loss for anyone using the command as a
-blunt instrument. The workaround is `docker rm -f` by name, or the deferred
-`--force` flag. Recorded in the CHANGELOG under `[Unreleased]`.
+blunt instrument. The workaround is `docker rm -f` by name, or `manage
+cleanup --force`. Recorded in the CHANGELOG under `[Unreleased]`.
 
 No rollout constraint: unlike the session-label change, neither fix depends on
 labels applied at launch, so both take effect for already-running sessions the
@@ -200,9 +211,6 @@ moment the new binary runs.
 
 ## Future work (with adoption triggers)
 
-- **`cleanup --force`** — restore the unscoped sweep behind an explicit flag
-  and a printed warning. Adopt when a user reports needing to reap a wedged
-  container that reports `running`.
 - **Session-liveness scoping** — keep a stopped sidecar, volume or network
   whose `ai-shim.session` label matches a container that is still running.
   Adopt when a crash-looping sidecar belonging to a live session is observed

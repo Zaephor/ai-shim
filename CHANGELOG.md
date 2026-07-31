@@ -42,7 +42,8 @@
 ### ⚠ BREAKING CHANGES
 
 * **dind:** `dind_shared_netns` (and `AI_SHIM_DIND_SHARED_NETNS`) are removed. Use `netns_mode` instead: `dind_shared_netns: true` → `netns_mode: dind`, `dind_shared_netns: false` → `netns_mode: agent`. The new default is `netns_mode: holder`, which runs a netns-holder container so the agent survives DIND death.
-* **dind:** teardown now scopes sidecar removal to a unique per-session label; adopting this requires draining all active sessions first, since sessions launched by an earlier binary carry no `ai-shim.session` label and their DIND sidecar, netns holder and volumes will not be removed by the new teardown (`ai-shim manage cleanup` removes them).
+* **dind:** teardown now scopes sidecar removal to a unique per-session label; adopting this requires draining all active sessions first, since sessions launched by an earlier binary carry no `ai-shim.session` label and their DIND sidecar, netns holder and volumes will not be removed by the new teardown. Leaked sidecars carry a restart policy and are therefore still running, so reclaiming them needs `ai-shim manage cleanup --force` — plain `ai-shim manage cleanup` removes only containers that are not running.
+* **cleanup:** `ai-shim manage cleanup` no longer removes running containers. It previously force-removed every `ai-shim`-labelled container on the host regardless of state or workspace, including live sessions belonging to other users of the same Docker daemon. It now removes only exited, created and dead containers, matching the behavior its help text and the README have always described. Use `ai-shim manage cleanup --force` to restore the old sweep.
 
 ## [0.9.0](https://github.com/Zaephor/ai-shim/compare/v0.8.0...v0.9.0) (2026-06-27)
 

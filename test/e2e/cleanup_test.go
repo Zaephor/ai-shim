@@ -133,9 +133,8 @@ func TestCleanup_KeepsRunningRemovesExited(t *testing.T) {
 }
 
 // TestCleanup_ForceRemovesRunning covers the documented rollout path. A
-// sidecar leaked by a session launched before the ai-shim.session label
-// existed carries RestartPolicyUnlessStopped, so it is still running and is
-// not an orphan by state. --force is the only way to reclaim it.
+// running fixture is not an orphan by state — isOrphanedContainer inspects
+// only c.State — so plain cleanup leaves it alone; only --force removes it.
 func TestCleanup_ForceRemovesRunning(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	if testing.Short() {

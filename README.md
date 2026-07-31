@@ -366,7 +366,8 @@ ai-shim manage symlinks create <agent> [profile] [dir]
                                 # max 63 chars (matches Docker container naming)
 ai-shim manage symlinks remove <path>
                                 # remove a symlink
-ai-shim manage cleanup          # remove orphaned ai-shim containers
+ai-shim manage cleanup          # remove orphaned (non-running) ai-shim containers
+ai-shim manage cleanup --force  # also remove RUNNING containers, all workspaces
 ai-shim manage status           # show running ai-shim containers
 ai-shim manage logs [agent] [profile]
                                 # show launch/exit log or container logs

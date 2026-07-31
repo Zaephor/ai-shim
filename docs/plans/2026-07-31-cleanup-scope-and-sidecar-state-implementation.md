@@ -110,7 +110,7 @@ and `HolderSessionFilters` returns exactly:
 
 - [ ] **Step 4: Run the filter tests to verify they pass**
 
-Run: `go test ./internal/container/ -run 'SessionFilters' -v -count=1`
+Run: `go test ./internal/container/ -run 'SessionFilters|SidecarFilters' -v -count=1`
 
 Expected: PASS, including the pre-existing `TestSidecarFilters_DoNotUseWorkspaceScoping`.
 
@@ -571,6 +571,7 @@ MSG
 
 **Files:**
 - Modify: `internal/cli/manage.go:776-806`
+- Modify: `internal/cli/cleanup_select.go`
 - Create: (none)
 - Test: `internal/cli/cleanup_select_test.go`
 
