@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"testing"
 
 	container_types "github.com/docker/docker/api/types/container"
@@ -30,6 +31,52 @@ func TestIsOrphanedContainer(t *testing.T) {
 		t.Run(tc.state, func(t *testing.T) {
 			got := isOrphanedContainer(container_types.Summary{State: tc.state})
 			assert.Equal(t, tc.want, got, tc.why)
+		})
+	}
+}
+
+// TestIsInUseError distinguishes the daemon's in-use refusals from real
+// failures. After cleanup stopped removing live containers, their volumes
+// and networks stay attached, and the daemon refuses to remove them. That is
+// the correct outcome, not a failure to report to the user.
+//
+// Matching is on the message rather than errdefs because the daemon maps
+// both of these to a generic conflict, which would also swallow unrelated
+// conflicts such as a name collision.
+func TestIsInUseError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "volume in use",
+			err:  errors.New("Error response from daemon: remove ai-shim-vol: volume is in use - [69ddd49dc028]"),
+			want: true,
+		},
+		{
+			name: "network has active endpoints",
+			err:  errors.New(`Error response from daemon: error while removing network: network ai-shim-net has active endpoints (name:"c" id:"ed84de40e81a")`),
+			want: true,
+		},
+		{
+			name: "unrelated conflict is a real failure",
+			err:  errors.New("Error response from daemon: a volume with the name ai-shim-vol already exists"),
+			want: false,
+		},
+		{
+			name: "permission denied is a real failure",
+			err:  errors.New("permission denied while trying to connect to the Docker daemon socket"),
+			want: false,
+		},
+		{
+			name: "nil is not an in-use error",
+			err:  nil,
+			want: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isInUseError(tc.err))
 		})
 	}
 }

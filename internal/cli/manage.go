@@ -797,10 +797,15 @@ func Cleanup(force bool) (CleanupResult, error) {
 		result.Errors = append(result.Errors, fmt.Sprintf("listing networks: %v", err))
 	} else {
 		for _, n := range networks {
-			if err := cli.NetworkRemove(ctx, n.ID); err != nil && !cerrdefs.IsNotFound(err) {
-				result.Failed = append(result.Failed, fmt.Sprintf("network %s: %v", n.Name, err))
-			} else {
+			err := cli.NetworkRemove(ctx, n.ID)
+			switch {
+			case err == nil:
 				result.RemovedNetworks = append(result.RemovedNetworks, n.Name)
+			case cerrdefs.IsNotFound(err), isInUseError(err):
+				// Already gone, or still serving a live session. Neither is
+				// a failure and neither is a removal.
+			default:
+				result.Failed = append(result.Failed, fmt.Sprintf("network %s: %v", n.Name, err))
 			}
 		}
 	}
@@ -813,10 +818,15 @@ func Cleanup(force bool) (CleanupResult, error) {
 		result.Errors = append(result.Errors, fmt.Sprintf("listing volumes: %v", err))
 	} else {
 		for _, v := range volumes.Volumes {
-			if err := cli.VolumeRemove(ctx, v.Name, true); err != nil {
-				result.Failed = append(result.Failed, fmt.Sprintf("volume %s: %v", v.Name, err))
-			} else {
+			err := cli.VolumeRemove(ctx, v.Name, true)
+			switch {
+			case err == nil:
 				result.RemovedVolumes = append(result.RemovedVolumes, v.Name)
+			case cerrdefs.IsNotFound(err), isInUseError(err):
+				// Already gone, or still mounted by a live session. The
+				// force argument suppresses not-found, not in-use.
+			default:
+				result.Failed = append(result.Failed, fmt.Sprintf("volume %s: %v", v.Name, err))
 			}
 		}
 	}
