@@ -540,7 +540,7 @@ func printSubcommandHelp(cmd string) error {
 		"doctor":         "Usage: ai-shim manage doctor\n\n  Run diagnostic checks (Docker, storage, image availability).",
 		"symlinks":       "Usage: ai-shim manage symlinks <create|list|remove> [args...]\n\n  create <agent> [profile] [dir]  Create a symlink\n  list [dir]                      List ai-shim symlinks\n  remove <path>                   Remove a symlink\n\nName rules:\n  Agent and profile names must start with a letter or digit and may only\n  contain ASCII letters, digits, '.', '_', and '-' (max 63 characters).\n  These restrictions match Docker container naming so the resulting\n  containers and on-disk paths are always well-formed.",
 		"dry-run":        "Usage: ai-shim manage dry-run <agent> <profile> [args...]\n\n  Preview the full container configuration without launching.",
-		"cleanup":        "Usage: ai-shim manage cleanup\n\n  Remove orphaned ai-shim containers, networks, and volumes.",
+		"cleanup":        "Usage: ai-shim manage cleanup [--force]\n\n  Remove orphaned ai-shim containers, networks, and volumes.\n  An orphan is a container that is not running; live sessions are left\n  alone, in every workspace.\n\n  --force, -f  Also remove RUNNING containers, in every workspace and for\n               every user of this Docker daemon. Needed only to reclaim\n               sidecars leaked by sessions launched before the\n               ai-shim.session label existed.",
 		"status":         "Usage: ai-shim manage status\n\n  Show running ai-shim containers.",
 		"backup":         "Usage: ai-shim manage backup <profile> [output-path]\n\n  Create a tar.gz backup of a profile's home directory.",
 		"restore":        "Usage: ai-shim manage restore <profile> <archive-path>\n\n  Restore a profile from a tar.gz backup.",
@@ -829,7 +829,18 @@ func runManageSubcommand(args []string) error {
 		return nil
 
 	case "cleanup":
-		result, err := cli.Cleanup()
+		force := false
+		for _, a := range args[1:] {
+			if a == "--force" || a == "-f" {
+				force = true
+			}
+		}
+		if force {
+			fmt.Fprintln(os.Stderr,
+				"ai-shim: warning: --force removes RUNNING ai-shim containers in every workspace, "+
+					"including sessions belonging to other users of this Docker daemon")
+		}
+		result, err := cli.Cleanup(force)
 		if err != nil {
 			return fmt.Errorf("cleaning up orphaned resources: %w", err)
 		}

@@ -251,7 +251,7 @@ func TestImagePinLabel(t *testing.T) {
 
 func TestCleanup_ReturnsResult(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	result, err := Cleanup()
+	result, err := Cleanup(false)
 	require.NoError(t, err)
 	// Verify the result type has container, network, and volume fields.
 	// With no orphaned resources these are nil slices, but the fields must exist.
@@ -1240,7 +1240,7 @@ func TestStatusJSON_NoContainers(t *testing.T) {
 
 func TestCleanup_NoOrphans(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
-	result, err := Cleanup()
+	result, err := Cleanup(false)
 	require.NoError(t, err)
 	// Nothing to clean if no ai-shim containers exist
 	assert.Empty(t, result.Failed)
@@ -1553,7 +1553,7 @@ func TestCleanup_WithOrphanedContainer(t *testing.T) {
 	require.Len(t, containers, 1, "orphaned container should exist before cleanup")
 
 	// Run Cleanup
-	result, err := Cleanup()
+	result, err := Cleanup(false)
 	require.NoError(t, err)
 
 	// The orphaned container should have been removed

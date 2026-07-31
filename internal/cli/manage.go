@@ -743,7 +743,21 @@ type CleanupResult struct {
 }
 
 // Cleanup finds and removes orphaned ai-shim containers, networks, and volumes.
-func Cleanup() (CleanupResult, error) {
+//
+// An orphan is a container that is not running — see isOrphanedContainer.
+// Containers belonging to live sessions are left alone, in any workspace and
+// for any user of the daemon. Because the passes run containers-first and
+// Docker refuses to remove an in-use volume or network, keeping a live
+// container also keeps that session's volumes and network.
+//
+// force restores the pre-2026-07-31 behavior: every ai-shim-labelled
+// container is force-removed regardless of state or workspace. It exists for
+// the rollout case in the CHANGELOG — sidecars leaked by a session launched
+// before the ai-shim.session label existed are still running, carry
+// RestartPolicyUnlessStopped, and are therefore not orphans by state. It
+// will also destroy any live session sharing the daemon, so callers must
+// warn before passing true.
+func Cleanup(force bool) (CleanupResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 	defer cancel()
 	cli, err := docker.NewClient(ctx)
@@ -764,6 +778,9 @@ func Cleanup() (CleanupResult, error) {
 	}
 
 	for _, c := range containers {
+		if !force && !isOrphanedContainer(c) {
+			continue
+		}
 		name := containerDisplayName(c)
 		if err := cli.ContainerRemove(ctx, c.ID, container_types.RemoveOptions{Force: true}); err != nil {
 			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", name, err))

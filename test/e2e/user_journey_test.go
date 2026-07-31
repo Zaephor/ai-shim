@@ -459,7 +459,7 @@ func TestJourney_CleanupRemovesOrphans(t *testing.T) {
 	require.NotEmpty(t, containers, "stopped container should still exist before cleanup")
 
 	// Run cleanup
-	result, err := cli.Cleanup()
+	result, err := cli.Cleanup(false)
 	require.NoError(t, err)
 
 	// Verify the container was removed
