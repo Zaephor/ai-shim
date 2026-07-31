@@ -823,8 +823,10 @@ func Cleanup(force bool) (CleanupResult, error) {
 			case err == nil:
 				result.RemovedVolumes = append(result.RemovedVolumes, v.Name)
 			case cerrdefs.IsNotFound(err), isInUseError(err):
-				// Already gone, or still mounted by a live session. The
-				// force argument suppresses not-found, not in-use.
+				// Already gone, or still referenced by a container — Docker
+				// refuses volume removal for any referencing container,
+				// running or not. The force argument suppresses not-found,
+				// not in-use.
 			default:
 				result.Failed = append(result.Failed, fmt.Sprintf("volume %s: %v", v.Name, err))
 			}

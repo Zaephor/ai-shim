@@ -262,7 +262,7 @@ Commands:
   manage backup <profile> [path]  Backup profile to tar.gz
   manage restore <profile> <archive> Restore profile from tar.gz
   manage disk-usage              Show storage usage breakdown
-  manage cleanup                 Remove orphaned containers
+  manage cleanup                 Remove orphaned containers (--force for all)
   manage status                  Show running containers
   manage agent-versions          Show installed agent versions
   manage reinstall <agent>       Force reinstall an agent
@@ -516,7 +516,7 @@ Subcommands:
   backup          Backup a profile
   restore         Restore a profile from backup
   disk-usage      Show storage usage breakdown
-  cleanup         Remove orphaned containers, networks, volumes
+  cleanup         Remove orphaned containers, networks, volumes (--force for all)
   logs            Show launch/exit logs or container logs
   agent-versions  Show installed agent versions
   reinstall       Force reinstall an agent
@@ -833,7 +833,9 @@ func runManageSubcommand(args []string) error {
 		for _, a := range args[1:] {
 			if a == "--force" || a == "-f" {
 				force = true
+				continue
 			}
+			return fmt.Errorf("unknown argument for cleanup: %s\nUsage: ai-shim manage cleanup [--force]", a)
 		}
 		if force {
 			fmt.Fprintln(os.Stderr,

@@ -37,7 +37,10 @@ import (
 // ai-shim.session label (it was launched by an earlier binary), so this
 // lookup will not match its sidecars — its DIND, netns holder and volumes
 // leak silently. Drain all active sessions before deploying a binary with
-// this change; `ai-shim manage cleanup` removes anything left behind.
+// this change; `ai-shim manage cleanup --force` removes anything left
+// behind. Plain `ai-shim manage cleanup` will not: the leaked sidecar still
+// carries its restart policy, so it is still running and is not an orphan
+// by state.
 func StopForSession(ctx context.Context, cli *client.Client, session *ai_container.RunningSession) error {
 	var errs []error
 
@@ -60,10 +63,10 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 		}
 
 		stopTimeout := 5
-		if err := cli.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &stopTimeout}); err != nil {
+		if err := cli.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &stopTimeout}); err != nil && !cerrdefs.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("stopping DIND container %s: %w", c.ID, err))
 		}
-		if err := cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true}); err != nil {
+		if err := cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("removing DIND container %s: %w", c.ID, err))
 		}
 

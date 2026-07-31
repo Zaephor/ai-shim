@@ -31,12 +31,15 @@ func isOrphanedContainer(c container_types.Summary) bool {
 }
 
 // isInUseError reports whether err is the daemon refusing to remove a volume
-// or network because something is still attached to it.
+// or network because a container still references it. For a volume, Docker
+// refuses removal for a reference from any existing container, running or
+// not; for a network, it refuses while a container endpoint is still
+// attached.
 //
-// Since cleanup stopped removing live containers, their volumes and networks
-// necessarily stay in use, and the daemon rejects removing them. Reporting
-// that as a removal failure is wrong: the resource belongs to a running
-// session and retaining it is the intended outcome.
+// Since cleanup stopped removing live containers, a running session's
+// volumes and networks necessarily stay referenced, and the daemon rejects
+// removing them. Reporting that as a removal failure is wrong: the resource
+// belongs to a running session and retaining it is the intended outcome.
 //
 // The match is on the message. containerd/errdefs maps both refusals to a
 // generic conflict, which would also swallow unrelated conflicts such as a

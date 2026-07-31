@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -135,10 +136,21 @@ func TestCleanup_KeepsRunningRemovesExited(t *testing.T) {
 // TestCleanup_ForceRemovesRunning covers the documented rollout path. A
 // running fixture is not an orphan by state — isOrphanedContainer inspects
 // only c.State — so plain cleanup leaves it alone; only --force removes it.
+//
+// cli.Cleanup(true) force-removes every ai-shim-labelled container on the
+// daemon, not just this test's fixture. On a workstation that destroys the
+// developer's own live agent sessions, DIND sidecars and netns holders; in
+// CI, running alongside other packages' fixtures (no -p 1) it can reap
+// containers TestStopForSession_LeavesSiblingSidecarsAlone depends on being
+// present mid-run. Gate it to the E2E CI job, which owns the daemon
+// exclusively.
 func TestCleanup_ForceRemovesRunning(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
 	if testing.Short() {
 		t.Skip("skipping Docker-backed cleanup test")
+	}
+	if os.Getenv("AI_SHIM_CI") != "1" {
+		t.Skip("skipping: force-removes every ai-shim container on the daemon; gated to CI (AI_SHIM_CI=1) to avoid destroying a developer's own live sessions or racing concurrent test packages")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
