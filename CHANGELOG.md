@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.12.0](https://github.com/Zaephor/ai-shim/compare/v0.11.0...v0.12.0) (2026-08-01)
+
+
+### Features
+
+* **cleanup:** add the orphaned-container state predicate ([1004721](https://github.com/Zaephor/ai-shim/commit/10047210e21edba4c1b22173d934b7991810eab4))
+
+
+### Bug Fixes
+
+* **cleanup:** correct rollout docs and gate a daemon-wide test ([716d09c](https://github.com/Zaephor/ai-shim/commit/716d09ca48a86efced721dd87798fea3aafc4cbe))
+* **cleanup:** report in-use volumes and networks as skips ([2dc9ddf](https://github.com/Zaephor/ai-shim/commit/2dc9ddf84b3e189220d712de40f89dd1b4a22d25))
+* **cleanup:** stop removing running containers by default ([54f38b9](https://github.com/Zaephor/ai-shim/commit/54f38b9b37d879b76d13891319f43d19586399bc))
+* **dind:** tear down sidecars that are not currently running ([d41d14c](https://github.com/Zaephor/ai-shim/commit/d41d14c26d0c6535c8c199b39260318467c861b0))
+
 ## [0.11.0](https://github.com/Zaephor/ai-shim/compare/v0.10.0...v0.11.0) (2026-07-31)
 
 
