@@ -13,9 +13,10 @@ packages:
   - unzip
   - groff
 
-# Mount AWS credentials (read-only recommended).
+# Mount AWS credentials read-only. Drop ":ro" if you use `aws sso login`,
+# which writes its token cache under ~/.aws.
 volumes:
-  - "/home/user/.aws:/home/user/.aws"
+  - "/home/user/.aws:/home/user/.aws:ro"
 
 tools:
   # aws-cli v2 -- official AWS CLI

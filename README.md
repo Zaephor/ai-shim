@@ -227,6 +227,15 @@ packages:
 Scalars (image, version, hostname) use last-wins. Maps (env, variables, tools)
 merge per-key. Lists (volumes, args, allow_agents) append across tiers.
 
+Volumes use `host:container[:ro|rw]` and default to writable. They are
+mounted into the agent container and, when DIND is enabled, into the DIND
+sidecar at the same path and mode, so `docker run -v <container-path>:...`
+from inside the agent sees the same files. If two entries target the same
+container path, the later one wins (for example, a profile can re-mount a
+default volume as `:ro`). Unknown modes are an error. ai-shim releases
+before read-only support treat `:ro` as part of the path and mount it
+writable, so upgrade before relying on it.
+
 See `configs/examples/` for annotated example files and
 `docs/plans/2026-03-21-ai-shim-design.md` for the full design document.
 

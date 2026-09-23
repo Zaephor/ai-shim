@@ -12,7 +12,8 @@ packages:
   - curl
   - unzip
 
-# Mount Azure config (read-only recommended).
+# Mount Azure config. Left writable: az writes its token cache under
+# this directory.
 volumes:
   - "/home/user/.azure:/home/user/.azure"
 

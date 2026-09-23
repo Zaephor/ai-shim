@@ -35,10 +35,12 @@
 # args:
 #   - "--no-telemetry"
 
-# Additional bind-mount volumes (host:container format).
+# Additional bind-mount volumes (host:container[:ro|rw] format, default rw).
 # Automatic mounts for storage, workspace, and home are always included.
+# Volumes are also mounted into the DIND sidecar at the same path and mode.
 # volumes:
 #   - "/host/path:/container/path"
+#   - "/host/secrets:/container/secrets:ro"
 
 # Port mappings (host:container format).
 # ports:

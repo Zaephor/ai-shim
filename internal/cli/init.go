@@ -109,6 +109,7 @@ func Init(layout storage.Layout) error {
 #   EDITOR: "vim"
 # volumes:
 #   - "/host/path:/container/path"
+#   - "/host/secrets:/container/secrets:ro"
 # security_profile: strict
 `), 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "ai-shim: warning: failed to write example %s: %v\n", profileExample, err)

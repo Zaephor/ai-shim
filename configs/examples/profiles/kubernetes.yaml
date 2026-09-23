@@ -12,9 +12,10 @@ packages:
   - git
   - curl
 
-# Mount kubeconfig (read-only recommended).
+# Mount kubeconfig read-only. Only the file is mounted so kubectl can
+# still write its discovery cache under ~/.kube/cache.
 volumes:
-  - "/home/user/.kube:/home/user/.kube"
+  - "/home/user/.kube/config:/home/user/.kube/config:ro"
 
 env:
   KUBECONFIG: /home/user/.kube/config

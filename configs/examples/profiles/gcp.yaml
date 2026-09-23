@@ -12,7 +12,8 @@ packages:
   - curl
   - python3
 
-# Mount gcloud config (read-only recommended).
+# Mount gcloud config. Left writable: gcloud refreshes tokens and writes
+# logs under this directory.
 volumes:
   - "/home/user/.config/gcloud:/home/user/.config/gcloud"
 

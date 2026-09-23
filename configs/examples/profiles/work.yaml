@@ -19,9 +19,9 @@ git:
   name: "Work User"
   email: "user@corp.example.com"
 
-# Mount a shared credentials directory (read-only via Docker).
+# Mount SSH keys read-only.
 volumes:
-  - "/home/user/.ssh:/home/user/.ssh"
+  - "/home/user/.ssh:/home/user/.ssh:ro"
 
 # Forward a local dev server port.
 ports:
