@@ -8,6 +8,7 @@ import (
 	"github.com/Zaephor/ai-shim/internal/config"
 	"github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/storage"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +71,7 @@ func TestStaleContainerFilters_IncludesWorkspace(t *testing.T) {
 // behaviour: the workspace is always propagated to the DIND sidecar.
 func TestBuildDINDSharedMounts_WorkspaceAlwaysPresent(t *testing.T) {
 	layout := storage.NewLayout(t.TempDir())
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, nil, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	found := false
@@ -93,7 +94,7 @@ func TestBuildDINDSharedMounts_ToolCachesPropagated(t *testing.T) {
 		"act": {Type: "binary-download", URL: "https://example.com/act", Binary: "act"}, // no data_dir
 		"gvm": {Type: "custom", Install: "echo hi", DataDir: true, EnvVar: "GVM_ROOT", CacheScope: "profile"},
 	}
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", tools, []string{"nvm", "act", "gvm"}, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", tools, []string{"nvm", "act", "gvm"}, nil, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	expectedNVM, err := storage.ToolCachePath(layout, "nvm", "", "claude-code", "default")
@@ -125,7 +126,7 @@ func TestBuildDINDSharedMounts_ToolCachesPropagated(t *testing.T) {
 // TestBuildDINDSharedMounts_NoToolsNoDIND covers the empty-tools case.
 func TestBuildDINDSharedMounts_NoToolsNoDIND(t *testing.T) {
 	layout := storage.NewLayout(t.TempDir())
-	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, layout, "claude-code", "default")
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, nil, layout, "claude-code", "default")
 	require.NoError(t, err)
 
 	// Only the workspace bind.
@@ -182,4 +183,49 @@ func TestDINDHolderLabels_PreservesSessionLabel(t *testing.T) {
 		"the netns holder must inherit its session's label or teardown cannot find it")
 	assert.Equal(t, "netns-holder", got[container.LabelRole])
 	assert.Equal(t, "agent", base[container.LabelRole], "dindHolderLabels must not mutate the caller's map")
+}
+
+// TestBuildDINDSharedMounts_UserVolumesPropagated: user volumes reach the
+// DIND sidecar at the same target as in the agent, with the same mode, so
+// `docker run -v <target>:...` from the agent resolves to the same files.
+func TestBuildDINDSharedMounts_UserVolumesPropagated(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	vols := []container.Volume{
+		{Source: "/home/u/.aws", Target: "/home/u/.aws", ReadOnly: true},
+		{Source: "/host/data", Target: "/data"},
+	}
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, vols, layout, "claude-code", "default")
+	require.NoError(t, err)
+
+	got := map[string]mount.Mount{}
+	for _, m := range mounts {
+		got[m.Target] = m
+	}
+	require.Contains(t, got, "/home/u/.aws")
+	require.Contains(t, got, "/data")
+	assert.Equal(t, "/home/u/.aws", got["/home/u/.aws"].Source)
+	assert.True(t, got["/home/u/.aws"].ReadOnly, ":ro volume must be read-only in DIND")
+	assert.Equal(t, "/host/data", got["/data"].Source)
+	assert.False(t, got["/data"].ReadOnly, "writable volume must stay writable in DIND")
+}
+
+// TestBuildDINDSharedMounts_ReservedTargetsSkipped: DIND owns /var/run
+// (socket volume), /certs (TLS volume) and /var/lib/docker (daemon state);
+// a user volume at or under those would break the daemon.
+func TestBuildDINDSharedMounts_ReservedTargetsSkipped(t *testing.T) {
+	layout := storage.NewLayout(t.TempDir())
+	vols := []container.Volume{
+		{Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
+		{Source: "/host/certs", Target: "/certs"},
+		{Source: "/host/lib", Target: "/var/lib/docker/volumes"},
+		{Source: "/host/ok", Target: "/var/lib/dockerish"},
+	}
+	mounts, err := buildDINDSharedMounts("/host/pwd", "/workspace/abc", nil, nil, vols, layout, "claude-code", "default")
+	require.NoError(t, err)
+
+	var targets []string
+	for _, m := range mounts {
+		targets = append(targets, m.Target)
+	}
+	assert.Equal(t, []string{"/workspace/abc", "/var/lib/dockerish"}, targets)
 }

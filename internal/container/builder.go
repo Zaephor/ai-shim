@@ -18,7 +18,6 @@ import (
 	"github.com/Zaephor/ai-shim/internal/install"
 	"github.com/Zaephor/ai-shim/internal/platform"
 	"github.com/Zaephor/ai-shim/internal/provision"
-	"github.com/Zaephor/ai-shim/internal/security"
 	"github.com/Zaephor/ai-shim/internal/shell"
 	"github.com/Zaephor/ai-shim/internal/storage"
 	"github.com/Zaephor/ai-shim/internal/workspace"
@@ -403,26 +402,19 @@ func buildMounts(p BuildParams, pwd, workdir, homeDir string) ([]mount.Mount, er
 	}
 
 	// Custom volumes from config (validated)
-	for _, vol := range p.Config.Volumes {
-		parts := strings.SplitN(vol, ":", 2)
-		if len(parts) != 2 {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping malformed volume %q (expected source:target)\n", vol)
-			continue
-		}
-		if err := security.ValidateVolumePath(parts[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume %s: %v\n", vol, err)
-			continue
-		}
-		// Validate target path — reject traversal attempts.
-		target := filepath.Clean(parts[1])
-		if !filepath.IsAbs(target) || strings.Contains(target, "..") {
-			fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid volume target %q: must be absolute path without traversal\n", parts[1])
-			continue
-		}
+	volumes, volErrs, overridden := ResolveVolumes(p.Config.Volumes)
+	for _, err := range volErrs {
+		fmt.Fprintf(os.Stderr, "ai-shim: skipping invalid %v\n", err)
+	}
+	for _, msg := range overridden {
+		fmt.Fprintf(os.Stderr, "ai-shim: %s\n", msg)
+	}
+	for _, v := range volumes {
 		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: parts[0],
-			Target: target,
+			Type:     mount.TypeBind,
+			Source:   v.Source,
+			Target:   v.Target,
+			ReadOnly: v.ReadOnly,
 		})
 	}
 
@@ -713,17 +705,9 @@ func gitRemoteOriginURL(repoPath string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// ValidateConfigVolumes checks all volume mount paths for security issues.
+// ValidateConfigVolumes checks every volume entry's syntax, mode, and
+// mount paths.
 func ValidateConfigVolumes(volumes []string) []error {
-	var errs []error
-	for _, vol := range volumes {
-		parts := strings.SplitN(vol, ":", 2)
-		if len(parts) < 2 {
-			continue
-		}
-		if err := security.ValidateVolumePath(parts[0]); err != nil {
-			errs = append(errs, fmt.Errorf("volume %s: %w", vol, err))
-		}
-	}
+	_, errs, _ := ResolveVolumes(volumes)
 	return errs
 }

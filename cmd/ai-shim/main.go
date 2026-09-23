@@ -101,10 +101,13 @@ func cleanupStaleContainers(ctx context.Context, runner *container.Runner, agent
 //     this, an install script that calls `docker -v $TOOL_CACHE_DIR:/x`
 //     from the agent hits an empty overlay in DIND and silently drops
 //     the tool's persisted state (same bug class as commit 78c975b).
+//   - User volumes (source → same target as in the agent, same ro/rw
+//     mode): so `docker run -v <target>:...` from the agent sees the
+//     same files. Targets at or under DIND's own paths are skipped.
 //
 // ToolsOrder is consulted when non-empty so mount order is deterministic;
 // otherwise the tools map is iterated directly.
-func buildDINDSharedMounts(pwd, workdir string, tools map[string]config.ToolDef, toolsOrder []string, layout storage.Layout, agentName, profileName string) ([]mount.Mount, error) {
+func buildDINDSharedMounts(pwd, workdir string, tools map[string]config.ToolDef, toolsOrder []string, volumes []container.Volume, layout storage.Layout, agentName, profileName string) ([]mount.Mount, error) {
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeBind,
@@ -140,7 +143,32 @@ func buildDINDSharedMounts(pwd, workdir string, tools map[string]config.ToolDef,
 			Target: hostPath,
 		})
 	}
+	for _, v := range volumes {
+		if dindReservedTarget(v.Target) {
+			fmt.Fprintf(os.Stderr, "ai-shim: not mounting volume %s into DIND sidecar: target is reserved by the DIND daemon\n", v.Target)
+			continue
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   v.Source,
+			Target:   v.Target,
+			ReadOnly: v.ReadOnly,
+		})
+	}
 	return mounts, nil
+}
+
+// dindReservedPaths are owned by the DIND sidecar itself: the socket
+// volume, the TLS certs volume, and the daemon's state directory.
+var dindReservedPaths = []string{"/var/run", "/certs", "/var/lib/docker"}
+
+func dindReservedTarget(target string) bool {
+	for _, p := range dindReservedPaths {
+		if target == p || strings.HasPrefix(target, p+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // dindHolderLabels copies the session labels and marks the container as the
@@ -1325,12 +1353,16 @@ func runAgent(name string, args []string) (int, error) {
 		// they exist in the agent, the bind source either doesn't exist
 		// or resolves to an empty overlay. Propagate the workspace, the
 		// pull-through registry cache directory, and every tool cache
-		// (for tools with data_dir:true) at identical paths.
+		// (for tools with data_dir:true) at identical paths, plus user
+		// volumes at their agent-side targets.
+		// Invalid and overridden entries were already reported by BuildSpec.
+		dindVolumes, _, _ := container.ResolveVolumes(cfg.Volumes)
 		dindSharedMounts, err := buildDINDSharedMounts(
 			pwd,
 			workspace.ContainerWorkdir(platInfo.Hostname, pwd),
 			cfg.Tools,
 			cfg.ToolsOrder,
+			dindVolumes,
 			layout,
 			agentName,
 			profileName,
