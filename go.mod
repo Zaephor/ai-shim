@@ -5,10 +5,11 @@ go 1.25.10
 // Pin the build toolchain to the newest patched release. Go uses
 // max(local, toolchain), so pinning to the highest version carrying the
 // fixes for GO-2026-4918/4971/5037/5039 (net/net-http in 1.26.3, crypto/x509
-// and net/textproto in 1.26.4) and GO-2026-5856 (crypto/tls ECH privacy leak
-// in 1.26.5) guarantees a patched stdlib everywhere and keeps local
-// govulncheck identical to CI.
-toolchain go1.26.5
+// and net/textproto in 1.26.4), GO-2026-5856 (crypto/tls ECH privacy leak
+// in 1.26.5), and GO-2026-5026/5972/6090/6218 (net/http, encoding/asn1,
+// crypto/tls, net/url in 1.26.6) guarantees a patched stdlib everywhere and
+// keeps local govulncheck identical to CI.
+toolchain go1.26.6
 
 require (
 	github.com/containerd/errdefs v1.0.0
