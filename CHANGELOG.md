@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/Zaephor/ai-shim/compare/v0.12.0...v0.13.0) (2026-09-23)
+
+
+### Features
+
+* **volumes:** support :ro and :rw modes on custom volumes ([f30ee70](https://github.com/Zaephor/ai-shim/commit/f30ee70f4f0e119c5790872f6060bf55bb51e3e3))
+
+
+### Bug Fixes
+
+* **deps:** bump Go toolchain to 1.26.6 for stdlib vulnerabilities ([c0961f0](https://github.com/Zaephor/ai-shim/commit/c0961f022156fe2c7b88620b28d2fafcfdce2a5d))
+
 ## [0.12.0](https://github.com/Zaephor/ai-shim/compare/v0.11.0...v0.12.0) (2026-08-01)
 
 
