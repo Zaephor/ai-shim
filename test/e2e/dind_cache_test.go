@@ -39,6 +39,7 @@ func TestDINDCachePullThrough(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow DIND pull-through cache test")
 	}
+	testutil.LockRegistryCache(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

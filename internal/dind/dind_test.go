@@ -299,6 +299,7 @@ func TestStart_WithMirrors(t *testing.T) {
 
 func TestEnsureCache_StartsAndStops(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	testutil.LockRegistryCache(t)
 	ctx := context.Background()
 	runner, err := ai_container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -328,6 +329,7 @@ func TestEnsureCache_StartsAndStops(t *testing.T) {
 // DIND registry mirror failed with "No such image: registry:2".
 func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	testutil.LockRegistryCache(t)
 	ctx := context.Background()
 	runner, err := ai_container.NewRunner(ctx)
 	require.NoError(t, err)
@@ -369,6 +371,7 @@ func TestEnsureCache_PullsImageWhenMissing(t *testing.T) {
 
 func TestMaybeStopCache_DoesNothingWhenNoCache(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	testutil.LockRegistryCache(t)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	require.NoError(t, err)
 	defer cli.Close()
@@ -380,6 +383,7 @@ func TestMaybeStopCache_DoesNothingWhenNoCache(t *testing.T) {
 
 func TestMaybeStopCache_RemovesActualCacheContainer(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	testutil.LockRegistryCache(t)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	require.NoError(t, err)
 	defer cli.Close()

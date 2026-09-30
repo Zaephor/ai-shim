@@ -401,6 +401,7 @@ func TestParallel_DINDWorkspaceFilterIsolation(t *testing.T) {
 // implementation details.
 func TestParallel_CacheOrphanGuard(t *testing.T) {
 	testutil.SkipIfNoDocker(t)
+	testutil.LockRegistryCache(t)
 	if testing.Short() {
 		t.Skip("skipping slow parallel session test")
 	}
