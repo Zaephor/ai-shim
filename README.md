@@ -334,7 +334,8 @@ See `configs/examples/` for annotated example files and
   agent+profile+workspace; picker to select which to reattach; `k<N>` to
   kill individual sessions
 - **DIND workspace sharing** -- sidecar sees the agent's workspace and tool
-  caches at matching paths so `docker -v` works inside the sandbox
+  caches at matching paths so `docker -v` works inside the sandbox. `/tmp` is
+  not shared by default; set `dind_shared_tmp: true` to share it
 - **YAML declaration order** -- tools and MCP servers are provisioned/injected
   in the order they appear in config, not random map iteration
 - **Dev build identification** -- `ai-shim version` shows `dev-<commit-hash>`
