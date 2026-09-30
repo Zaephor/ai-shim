@@ -216,6 +216,9 @@ func loadEnvOverrides() Config {
 	if b := parseBoolEnv("AI_SHIM_DIND_TLS"); b != nil {
 		cfg.DINDTLS = b
 	}
+	if b := parseBoolEnv("AI_SHIM_DIND_SHARED_TMP"); b != nil {
+		cfg.DINDSharedTmp = b
+	}
 	if v := os.Getenv("AI_SHIM_NETNS_MODE"); v != "" {
 		cfg.NetnsMode = v
 	}

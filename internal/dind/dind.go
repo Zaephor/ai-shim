@@ -36,6 +36,7 @@ type Sidecar struct {
 	hostname      string
 	socketVolume  string // Docker volume name for the DIND socket
 	certsVolume   string // Docker volume name for TLS certs (empty if TLS disabled)
+	tmpVolume     string // Docker volume name for the shared /tmp (empty if disabled)
 }
 
 // ResourceLimits defines container resource constraints for DIND.
@@ -83,6 +84,11 @@ type Config struct {
 	// host content instead of an empty overlay directory.
 	SharedMounts []mount.Mount
 	Version      string // ai-shim version (informational label)
+
+	// SharedTmp creates a per-session named volume and mounts it at /tmp.
+	// The caller mounts the same volume (TmpVolume) at /tmp in the agent so
+	// `docker run -v /tmp/...` from the agent resolves to the agent's files.
+	SharedTmp bool
 }
 
 // dockerdArgs builds the leading-dash Cmd args passed to the DIND entrypoint:
@@ -231,6 +237,20 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		tlsEnv = "DOCKER_TLS_CERTDIR="
 	}
 
+	// Shared /tmp: one volume mounted at /tmp in both DIND and the agent.
+	var tmpVolName string
+	if cfg.SharedTmp {
+		tmpVolName = baseName + "-tmp"
+		_, err := cli.VolumeCreate(ctx, volume.CreateOptions{
+			Name:   tmpVolName,
+			Labels: cfg.Labels,
+		})
+		if err != nil {
+			removeVolumes(ctx, cli, socketVolName, certsVolName)
+			return nil, fmt.Errorf("creating DIND tmp volume: %w", err)
+		}
+	}
+
 	containerCfg := &container.Config{
 		Image:    image,
 		Hostname: dindHostname(cfg),
@@ -251,6 +271,13 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 			Type:   mount.TypeVolume,
 			Source: certsVolName,
 			Target: "/certs",
+		})
+	}
+	if tmpVolName != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: tmpVolName,
+			Target: "/tmp",
 		})
 	}
 	for _, m := range cfg.SharedMounts {
@@ -302,17 +329,11 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		if cfg.Resources.Memory != "" {
 			memBytes, err := parse.Memory(cfg.Resources.Memory)
 			if err != nil {
-				_ = cli.VolumeRemove(ctx, socketVolName, true)
-				if certsVolName != "" {
-					_ = cli.VolumeRemove(ctx, certsVolName, true)
-				}
+				removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 				return nil, fmt.Errorf("invalid DIND memory limit %q: %w", cfg.Resources.Memory, err)
 			}
 			if memBytes <= 0 {
-				_ = cli.VolumeRemove(ctx, socketVolName, true)
-				if certsVolName != "" {
-					_ = cli.VolumeRemove(ctx, certsVolName, true)
-				}
+				removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 				return nil, fmt.Errorf("DIND memory limit must be positive, got %v", memBytes)
 			}
 			hostCfg.Memory = memBytes
@@ -320,17 +341,11 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		if cfg.Resources.CPUs != "" {
 			cpus, err := strconv.ParseFloat(cfg.Resources.CPUs, 64)
 			if err != nil {
-				_ = cli.VolumeRemove(ctx, socketVolName, true)
-				if certsVolName != "" {
-					_ = cli.VolumeRemove(ctx, certsVolName, true)
-				}
+				removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 				return nil, fmt.Errorf("invalid DIND CPU limit %q: %w", cfg.Resources.CPUs, err)
 			}
 			if cpus <= 0 {
-				_ = cli.VolumeRemove(ctx, socketVolName, true)
-				if certsVolName != "" {
-					_ = cli.VolumeRemove(ctx, certsVolName, true)
-				}
+				removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 				return nil, fmt.Errorf("DIND CPU limit must be positive, got %v", cpus)
 			}
 			hostCfg.NanoCPUs = int64(cpus * 1e9)
@@ -339,20 +354,13 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 
 	resp, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, cfg.ContainerName)
 	if err != nil {
-		// Clean up volumes on failure
-		_ = cli.VolumeRemove(ctx, socketVolName, true)
-		if certsVolName != "" {
-			_ = cli.VolumeRemove(ctx, certsVolName, true)
-		}
+		removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 		return nil, fmt.Errorf("creating DIND container: %w", err)
 	}
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
-		_ = cli.VolumeRemove(ctx, socketVolName, true)
-		if certsVolName != "" {
-			_ = cli.VolumeRemove(ctx, certsVolName, true)
-		}
+		removeVolumes(ctx, cli, socketVolName, certsVolName, tmpVolName)
 		return nil, fmt.Errorf("starting DIND container: %w", err)
 	}
 
@@ -363,6 +371,7 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 		hostname:      cfg.Hostname,
 		socketVolume:  socketVolName,
 		certsVolume:   certsVolName,
+		tmpVolume:     tmpVolName,
 	}
 
 	// Wait for the Docker daemon inside DIND to be ready
@@ -371,6 +380,21 @@ func Start(ctx context.Context, runner *ai_container.Runner, cfg Config) (*Sidec
 	if err := sidecar.WaitForReady(healthCtx); err != nil {
 		_ = sidecar.Stop(ctx)
 		return nil, fmt.Errorf("waiting for DIND daemon: %w", err)
+	}
+
+	// Force the shared /tmp to 1777 so the non-root agent can write to it.
+	// Docker seeds an empty named volume from the image's /tmp, but a
+	// pre-existing volume with the same name is reused as-is.
+	if tmpVolName != "" {
+		exitCode, _, stderr, err := sidecar.exec(ctx, []string{"chmod", "1777", "/tmp"})
+		if err != nil {
+			_ = sidecar.Stop(ctx)
+			return nil, fmt.Errorf("chmod DIND tmp: %w", err)
+		}
+		if exitCode != 0 {
+			_ = sidecar.Stop(ctx)
+			return nil, fmt.Errorf("chmod DIND tmp: exit %d: %s", exitCode, bytes.TrimSpace(stderr))
+		}
 	}
 
 	// Rebind /var/run/docker.sock's group to the agent's GID so the
@@ -515,7 +539,13 @@ func (s *Sidecar) CertsVolume() string {
 	return s.certsVolume
 }
 
-// Stop removes the DIND sidecar container and its socket volume.
+// TmpVolume returns the Docker volume name backing the shared /tmp,
+// or empty string if SharedTmp is not enabled.
+func (s *Sidecar) TmpVolume() string {
+	return s.tmpVolume
+}
+
+// Stop removes the DIND sidecar container and its socket, certs and tmp volumes.
 func (s *Sidecar) Stop(ctx context.Context) error {
 	var errs []error
 	if err := s.client.ContainerRemove(ctx, s.containerID, container.RemoveOptions{Force: true}); err != nil {
@@ -531,7 +561,22 @@ func (s *Sidecar) Stop(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("removing DIND certs volume: %w", err))
 		}
 	}
+	if s.tmpVolume != "" {
+		if err := s.client.VolumeRemove(ctx, s.tmpVolume, true); err != nil && !cerrdefs.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("removing DIND tmp volume: %w", err))
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// removeVolumes best-effort removes the named volumes, skipping empty names.
+// Used to unwind partially created sidecar state on Start failures.
+func removeVolumes(ctx context.Context, cli *client.Client, names ...string) {
+	for _, name := range names {
+		if name != "" {
+			_ = cli.VolumeRemove(ctx, name, true)
+		}
+	}
 }
 
 // DetectSysbox checks if the sysbox-runc runtime is available.

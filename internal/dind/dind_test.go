@@ -10,6 +10,7 @@ import (
 	ai_container "github.com/Zaephor/ai-shim/internal/container"
 	"github.com/Zaephor/ai-shim/internal/network"
 	"github.com/Zaephor/ai-shim/internal/testutil"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -200,6 +201,80 @@ func TestStart_ReturnsSocketVolume(t *testing.T) {
 	defer sidecar.Stop(ctx)
 
 	assert.NotEmpty(t, sidecar.SocketVolume(), "should return the Docker socket volume name")
+}
+
+func TestStart_SharedTmp(t *testing.T) {
+	runner := getRunner(t)
+	ctx := context.Background()
+	cli := runner.Client()
+
+	netHandle, err := network.EnsureNetwork(ctx, cli, "ai-shim-test-dind-sharedtmp", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, runner, Config{
+		Labels:        map[string]string{"ai-shim": "test"},
+		NetworkID:     netHandle.ID,
+		ContainerName: "ai-shim-test-dind-sharedtmp",
+		Hostname:      "test-dind-sharedtmp",
+		SharedTmp:     true,
+	})
+	require.NoError(t, err)
+	stopped := false
+	defer func() {
+		if !stopped {
+			_ = sidecar.Stop(ctx)
+		}
+	}()
+
+	assert.Equal(t, "ai-shim-test-dind-sharedtmp-tmp", sidecar.TmpVolume())
+
+	inspect, err := cli.ContainerInspect(ctx, sidecar.ContainerID())
+	require.NoError(t, err)
+	var tmpMount *container.MountPoint
+	for i, m := range inspect.Mounts {
+		if m.Destination == "/tmp" {
+			tmpMount = &inspect.Mounts[i]
+		}
+	}
+	require.NotNil(t, tmpMount, "DIND should mount the shared tmp volume at /tmp")
+	assert.Equal(t, mount.TypeVolume, tmpMount.Type)
+	assert.Equal(t, sidecar.TmpVolume(), tmpMount.Name)
+
+	// /tmp must stay world-writable with the sticky bit so a non-root
+	// agent sharing the volume can create files in it.
+	exitCode, stdout, stderr := execInSidecar(t, runner, sidecar.ContainerID(), []string{"stat", "-c", "%a", "/tmp"})
+	require.Equal(t, 0, exitCode, stderr)
+	assert.Equal(t, "1777", strings.TrimSpace(stdout))
+
+	require.NoError(t, sidecar.Stop(ctx))
+	stopped = true
+	_, err = cli.VolumeInspect(ctx, "ai-shim-test-dind-sharedtmp-tmp")
+	assert.True(t, cerrdefs.IsNotFound(err), "Stop should remove the shared tmp volume, got err=%v", err)
+}
+
+func TestStart_NoSharedTmpByDefault(t *testing.T) {
+	runner := getRunner(t)
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-dind-nosharedtmp", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, runner, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind-nosharedtmp",
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	assert.Empty(t, sidecar.TmpVolume(), "shared tmp is opt-in")
+	inspect, err := runner.Client().ContainerInspect(ctx, sidecar.ContainerID())
+	require.NoError(t, err)
+	for _, m := range inspect.Mounts {
+		assert.NotEqual(t, "/tmp", m.Destination, "DIND should not mount /tmp unless SharedTmp is set")
+	}
 }
 
 func TestStart_WithMirrors(t *testing.T) {

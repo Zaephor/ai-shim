@@ -217,6 +217,9 @@ packages:
 # Enable TLS for the DIND Docker socket
 # dind_tls: false
 
+# Share /tmp between the agent and the DIND sidecar (per-session volume)
+# dind_shared_tmp: false
+
 # MCP servers exposed to the agent (injected as MCP_SERVERS env var)
 # mcp_servers:
 #   filesystem:
@@ -320,6 +323,11 @@ See `configs/examples/` for annotated example files and
   default profile for subsequent invocations
 - **DIND TLS** -- `dind_tls: true` enables TLS-secured Docker socket for the
   DIND sidecar
+- **DIND shared /tmp** -- `dind_shared_tmp: true` backs `/tmp` in both the
+  agent and the DIND sidecar with one per-session volume, so
+  `docker run -v /tmp/...` from the agent sees the agent's files. The volume
+  is removed with the sidecar. Off by default; ignored without DIND or when a
+  user volume is already mounted at `/tmp`
 - **DIND health check** -- DIND sidecar startup includes automatic readiness
   polling before the agent container launches
 - **Parallel sessions** -- multiple concurrent sessions for the same
@@ -414,6 +422,7 @@ AI_SHIM_NETWORK_SCOPE=<scope>   # override network scope
 AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
 AI_SHIM_DIND_TLS=0/1            # toggle TLS for DIND socket
+AI_SHIM_DIND_SHARED_TMP=0/1     # toggle shared agent/DIND /tmp volume
 AI_SHIM_SECURITY_PROFILE=<p>    # security profile (default/strict/none)
 AI_SHIM_UPDATE_INTERVAL=<i>    # agent update interval (always/never/1d/7d/24h)
 AI_SHIM_GIT_NAME=<name>         # git user.name for container commits

@@ -32,6 +32,12 @@ type Config struct {
 	DINDMirrors  []string          `yaml:"dind_mirrors,omitempty" json:"dind_mirrors,omitempty"`
 	DINDCache    *bool             `yaml:"dind_cache,omitempty" json:"dind_cache,omitempty"`
 	DINDTLS      *bool             `yaml:"dind_tls,omitempty" json:"dind_tls,omitempty"`
+	// DINDSharedTmp, when true, backs /tmp in both the agent and the DIND
+	// sidecar with one per-session named volume, so paths under /tmp that
+	// the agent hands to `docker run -v` resolve to the same files inside
+	// DIND. The volume is removed with the sidecar. Default: false. Only
+	// meaningful when DIND is enabled.
+	DINDSharedTmp *bool `yaml:"dind_shared_tmp,omitempty" json:"dind_shared_tmp,omitempty"`
 	// NetnsMode selects which container owns the network namespace the agent
 	// uses: "agent" (agent keeps its own netns on the bridge), "dind" (agent
 	// joins the DIND sidecar's netns), or "holder" (a dedicated holder owns
@@ -140,6 +146,10 @@ func (c Config) IsCacheEnabled() bool { return c.DINDCache != nil && *c.DINDCach
 
 // IsDINDTLSEnabled returns true if DIND TLS is explicitly enabled.
 func (c Config) IsDINDTLSEnabled() bool { return c.DINDTLS != nil && *c.DINDTLS }
+
+// IsDINDSharedTmpEnabled returns true if the shared agent/DIND /tmp volume is
+// explicitly enabled.
+func (c Config) IsDINDSharedTmpEnabled() bool { return c.DINDSharedTmp != nil && *c.DINDSharedTmp }
 
 // IsIsolated returns true if agent isolation is enabled (default: true).
 func (c Config) IsIsolated() bool { return c.Isolated == nil || *c.Isolated }

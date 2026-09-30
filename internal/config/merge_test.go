@@ -520,3 +520,17 @@ func TestMerge_SecurityProfileNilPreserved(t *testing.T) {
 	result := Merge(base, over)
 	assert.Equal(t, "strict", result.SecurityProfile)
 }
+
+func TestMerge_DINDSharedTmp(t *testing.T) {
+	base := Config{DINDSharedTmp: testutil.BoolPtr(false)}
+	over := Config{DINDSharedTmp: testutil.BoolPtr(true)}
+	result := Merge(base, over)
+	assert.True(t, *result.DINDSharedTmp)
+}
+
+func TestMerge_DINDSharedTmpNilPreserved(t *testing.T) {
+	base := Config{DINDSharedTmp: testutil.BoolPtr(true)}
+	result := Merge(base, Config{})
+	require.NotNil(t, result.DINDSharedTmp)
+	assert.True(t, *result.DINDSharedTmp)
+}

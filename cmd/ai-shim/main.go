@@ -171,6 +171,23 @@ func dindReservedTarget(target string) bool {
 	return false
 }
 
+// useDINDSharedTmp reports whether the agent and DIND sidecar should share a
+// per-session /tmp volume. A user volume targeting /tmp itself takes
+// precedence (both mounts at one target would fail ContainerCreate), in which
+// case the returned warning explains why the setting was ignored. Volumes
+// under /tmp are fine: they stack on top of the shared volume.
+func useDINDSharedTmp(enabled bool, volumes []container.Volume) (bool, string) {
+	if !enabled {
+		return false, ""
+	}
+	for _, v := range volumes {
+		if v.Target == "/tmp" {
+			return false, fmt.Sprintf("ignoring dind_shared_tmp: volume %s is already mounted at /tmp", v.Source)
+		}
+	}
+	return true, ""
+}
+
 // dindHolderLabels copies the session labels and marks the container as the
 // netns holder so status/cleanup queries can distinguish it.
 func dindHolderLabels(base map[string]string) map[string]string {
@@ -1370,6 +1387,10 @@ func runAgent(name string, args []string) (int, error) {
 		if err != nil {
 			return 1, fmt.Errorf("building DIND shared mounts: %w", err)
 		}
+		sharedTmp, warn := useDINDSharedTmp(cfg.IsDINDSharedTmpEnabled(), dindVolumes)
+		if warn != "" {
+			fmt.Fprintf(os.Stderr, "ai-shim: warning: %s\n", warn)
+		}
 
 		sidecar, err := dind.Start(ctx, runner, dind.Config{
 			GPU:           dindGPU,
@@ -1390,6 +1411,7 @@ func runAgent(name string, args []string) (int, error) {
 			// denied" (docker:dind's "docker" group has GID 2375).
 			SocketGID:    platInfo.GID,
 			SharedMounts: dindSharedMounts,
+			SharedTmp:    sharedTmp,
 			Version:      version,
 			JoinNetns:    dindJoinTarget,      // "" in agent/dind modes -> bridge as before
 			AutoRestart:  cfg.IsNetnsShared(), // survive OOM in dind + holder modes
@@ -1416,6 +1438,16 @@ func runAgent(name string, args []string) (int, error) {
 			Target: "/var/run/dind",
 		})
 		spec.Env = append(spec.Env, "DOCKER_HOST=unix:///var/run/dind/docker.sock")
+
+		// Share /tmp with DIND so `docker run -v /tmp/...` from the agent
+		// resolves to the agent's own files.
+		if sidecar.TmpVolume() != "" {
+			spec.Mounts = append(spec.Mounts, mount.Mount{
+				Type:   mount.TypeVolume,
+				Source: sidecar.TmpVolume(),
+				Target: "/tmp",
+			})
+		}
 
 		// Mount TLS certs volume if TLS is enabled
 		if sidecar.CertsVolume() != "" {

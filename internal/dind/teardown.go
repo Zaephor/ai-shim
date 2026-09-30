@@ -15,7 +15,7 @@ import (
 )
 
 // StopForSession tears down the sidecars belonging to exactly one session:
-// its DIND container and that container's socket and certs volumes, its
+// its DIND container and that container's socket, certs and tmp volumes, its
 // netns holder, and finally the session network if nothing remains attached.
 //
 // Scoping is by session label. Parallel sessions in one workspace share
@@ -71,7 +71,7 @@ func StopForSession(ctx context.Context, cli *client.Client, session *ai_contain
 		}
 
 		if containerName != "" {
-			for _, vol := range []string{containerName + "-socket", containerName + "-certs"} {
+			for _, vol := range []string{containerName + "-socket", containerName + "-certs", containerName + "-tmp"} {
 				if err := cli.VolumeRemove(ctx, vol, true); err != nil && !cerrdefs.IsNotFound(err) {
 					errs = append(errs, fmt.Errorf("removing volume %s: %w", vol, err))
 				}

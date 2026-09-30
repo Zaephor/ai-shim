@@ -223,6 +223,7 @@ func ShowConfig(layout storage.Layout, agentName, profile string) (string, error
 
 	b.WriteString(formatBoolFieldSrc("dind_cache", cfg.DINDCache, false, src("dind_cache")))
 	b.WriteString(formatBoolFieldSrc("dind_tls", cfg.DINDTLS, false, src("dind_tls")))
+	b.WriteString(formatBoolFieldSrc("dind_shared_tmp", cfg.DINDSharedTmp, false, src("dind_shared_tmp")))
 	b.WriteString(formatBoolFieldSrc("isolated", cfg.Isolated, true, src("isolated")))
 
 	if len(cfg.AllowAgents) > 0 {
@@ -688,6 +689,7 @@ func DryRun(layout storage.Layout, agentName, profile string, args []string) (st
 
 	b.WriteString(formatEnabledField("DIND Cache", cfg.DINDCache))
 	b.WriteString(formatEnabledField("DIND TLS", cfg.DINDTLS))
+	b.WriteString(formatEnabledField("Shared Tmp", cfg.DINDSharedTmp))
 	b.WriteString(formatEnabledField("Isolated", cfg.Isolated))
 
 	if len(cfg.AllowAgents) > 0 {

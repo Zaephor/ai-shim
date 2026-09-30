@@ -229,3 +229,40 @@ func TestBuildDINDSharedMounts_ReservedTargetsSkipped(t *testing.T) {
 	}
 	assert.Equal(t, []string{"/workspace/abc", "/var/lib/dockerish"}, targets)
 }
+
+// TestUseDINDSharedTmp: the shared /tmp volume is opt-in, and a user volume
+// that already owns /tmp wins over it (two mounts at one target would make
+// ContainerCreate fail). Volumes under /tmp stack on top and do not conflict.
+func TestUseDINDSharedTmp(t *testing.T) {
+	under := []container.Volume{{Source: "/host/x", Target: "/tmp/x"}}
+	exact := []container.Volume{{Source: "/host/tmp", Target: "/tmp"}}
+
+	ok, warn := useDINDSharedTmp(false, nil)
+	assert.False(t, ok, "disabled by default")
+	assert.Empty(t, warn)
+
+	ok, warn = useDINDSharedTmp(true, nil)
+	assert.True(t, ok)
+	assert.Empty(t, warn)
+
+	ok, warn = useDINDSharedTmp(true, under)
+	assert.True(t, ok, "volumes under /tmp stack on the shared volume")
+	assert.Empty(t, warn)
+
+	ok, warn = useDINDSharedTmp(true, exact)
+	assert.False(t, ok, "a user volume at /tmp takes precedence")
+	assert.Contains(t, warn, "dind_shared_tmp")
+
+	ok, warn = useDINDSharedTmp(false, exact)
+	assert.False(t, ok)
+	assert.Empty(t, warn, "no warning when the feature is off")
+}
+
+// TestRun_MountsDINDTmpVolumeIntoAgent guards the agent half of the wiring:
+// the sidecar's tmp volume must be mounted at /tmp in the agent container,
+// otherwise only DIND sees the shared volume.
+func TestRun_MountsDINDTmpVolumeIntoAgent(t *testing.T) {
+	src := readMainSource(t)
+	assert.Contains(t, src, "SharedTmp:")
+	assert.Regexp(t, `Source:\s+sidecar\.TmpVolume\(\),\s+Target:\s+"/tmp",`, src)
+}

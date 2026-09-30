@@ -312,7 +312,8 @@ func TestStopForSession_RemovesExitedDIND(t *testing.T) {
 
 	socketVol := session + "-dind-socket"
 	certsVol := session + "-dind-certs"
-	for _, name := range []string{socketVol, certsVol} {
+	tmpVol := session + "-dind-tmp"
+	for _, name := range []string{socketVol, certsVol, tmpVol} {
 		_, err := cli.VolumeCreate(ctx, dvolume.CreateOptions{Name: name})
 		require.NoError(t, err, "creating fixture volume %q", name)
 		t.Cleanup(func(name string) func() {
@@ -336,7 +337,7 @@ func TestStopForSession_RemovesExitedDIND(t *testing.T) {
 	assert.True(t, cerrdefs.IsNotFound(err),
 		"an exited DIND must still be removed by teardown, got err=%v", err)
 
-	for _, name := range []string{socketVol, certsVol} {
+	for _, name := range []string{socketVol, certsVol, tmpVol} {
 		_, err := cli.VolumeInspect(ctx, name)
 		assert.True(t, cerrdefs.IsNotFound(err),
 			"an exited DIND's volume %q must be removed too, got err=%v", name, err)

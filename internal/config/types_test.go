@@ -84,3 +84,9 @@ func TestIsDINDTLSEnabled(t *testing.T) {
 	assert.True(t, Config{DINDTLS: testutil.BoolPtr(true)}.IsDINDTLSEnabled())
 	assert.False(t, Config{DINDTLS: testutil.BoolPtr(false)}.IsDINDTLSEnabled())
 }
+
+func TestIsDINDSharedTmpEnabled(t *testing.T) {
+	assert.False(t, Config{}.IsDINDSharedTmpEnabled(), "nil should be false")
+	assert.True(t, Config{DINDSharedTmp: testutil.BoolPtr(true)}.IsDINDSharedTmpEnabled())
+	assert.False(t, Config{DINDSharedTmp: testutil.BoolPtr(false)}.IsDINDSharedTmpEnabled())
+}

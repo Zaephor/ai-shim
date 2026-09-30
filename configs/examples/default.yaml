@@ -111,6 +111,13 @@
 # Enable TLS for the DIND Docker socket. Default: false
 # dind_tls: false
 
+# Mount one per-session volume at /tmp in both the agent and the DIND sidecar,
+# so `docker run -v /tmp/...` from the agent resolves to the agent's files
+# instead of DIND's own /tmp. The volume is removed when the session ends.
+# Only applies when dind: true; ignored if a volume is already mounted at /tmp.
+# Default: false
+# dind_shared_tmp: false
+
 # Select which container owns the network namespace the agent joins. Only
 # applies when dind: true.
 #   agent  -- agent gets its own network namespace/bridge (can publish ports)
