@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/Zaephor/ai-shim/compare/v0.13.0...v0.14.0) (2026-09-30)
+
+
+### Features
+
+* **dind:** add dind_shared_tmp to share /tmp between agent and DIND ([3caea1a](https://github.com/Zaephor/ai-shim/commit/3caea1a9bbd27880738bdc54b518c7c753d2e161))
+
 ## [0.13.0](https://github.com/Zaephor/ai-shim/compare/v0.12.0...v0.13.0) (2026-09-23)
 
 
