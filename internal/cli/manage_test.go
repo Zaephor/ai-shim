@@ -583,6 +583,7 @@ dind_mirrors:
 dind_cache: true
 dind_tls: true
 dind_shared_tmp: true
+dind_containerd_store: true
 isolated: false
 security_profile: strict
 allow_agents:
@@ -634,6 +635,7 @@ git:
 		"dind_cache:",       // dind cache
 		"dind_tls:",         // dind tls
 		"dind_shared_tmp:",  // dind shared tmp
+		"containerd_store:", // dind image store
 		"isolated:",         // isolation
 		"security_profile:", // security profile
 		"gemini-cli",        // allow_agents

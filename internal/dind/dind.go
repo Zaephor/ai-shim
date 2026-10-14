@@ -89,13 +89,24 @@ type Config struct {
 	// The caller mounts the same volume (TmpVolume) at /tmp in the agent so
 	// `docker run -v /tmp/...` from the agent resolves to the agent's files.
 	SharedTmp bool
+
+	// ContainerdStore keeps the daemon on Docker's containerd image store.
+	// When false (default) the daemon runs the classic overlay2 graph driver,
+	// which stores each image once instead of as compressed layers plus
+	// unpacked snapshots. /var/lib/docker is not persisted, so the choice
+	// never strands existing images.
+	ContainerdStore bool
 }
 
 // dockerdArgs builds the leading-dash Cmd args passed to the DIND entrypoint:
-// registry mirrors (cache first, highest priority), then --group so the socket
-// is created with the agent's group on every daemon start (survives restart).
+// the overlay2 store flag unless the containerd store is requested, registry
+// mirrors (cache first, highest priority), then --group so the socket is
+// created with the agent's group on every daemon start (survives restart).
 func dockerdArgs(cfg Config) []string {
 	var cmd []string
+	if !cfg.ContainerdStore {
+		cmd = append(cmd, "--feature=containerd-snapshotter=false")
+	}
 	if cfg.CacheAddr != "" {
 		cmd = append(cmd, "--registry-mirror="+cfg.CacheAddr)
 	}

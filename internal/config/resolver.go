@@ -219,6 +219,9 @@ func loadEnvOverrides() Config {
 	if b := parseBoolEnv("AI_SHIM_DIND_SHARED_TMP"); b != nil {
 		cfg.DINDSharedTmp = b
 	}
+	if b := parseBoolEnv("AI_SHIM_DIND_CONTAINERD_STORE"); b != nil {
+		cfg.DINDContainerdStore = b
+	}
 	if v := os.Getenv("AI_SHIM_NETNS_MODE"); v != "" {
 		cfg.NetnsMode = v
 	}

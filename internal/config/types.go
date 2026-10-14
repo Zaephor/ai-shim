@@ -38,6 +38,14 @@ type Config struct {
 	// DIND. The volume is removed with the sidecar. Default: false. Only
 	// meaningful when DIND is enabled.
 	DINDSharedTmp *bool `yaml:"dind_shared_tmp,omitempty" json:"dind_shared_tmp,omitempty"`
+	// DINDContainerdStore, when true, keeps the DIND daemon on Docker's
+	// containerd image store. By default the sidecar runs the classic
+	// overlay2 graph driver instead, which stores each image once rather
+	// than as compressed layers plus unpacked snapshots. Enable it for
+	// workloads that need multi-platform image builds (`docker buildx build
+	// --platform a,b --load`) or locally stored attestations. Default: false.
+	// Only meaningful when DIND is enabled.
+	DINDContainerdStore *bool `yaml:"dind_containerd_store,omitempty" json:"dind_containerd_store,omitempty"`
 	// NetnsMode selects which container owns the network namespace the agent
 	// uses: "agent" (agent keeps its own netns on the bridge), "dind" (agent
 	// joins the DIND sidecar's netns), or "holder" (a dedicated holder owns
@@ -150,6 +158,12 @@ func (c Config) IsDINDTLSEnabled() bool { return c.DINDTLS != nil && *c.DINDTLS 
 // IsDINDSharedTmpEnabled returns true if the shared agent/DIND /tmp volume is
 // explicitly enabled.
 func (c Config) IsDINDSharedTmpEnabled() bool { return c.DINDSharedTmp != nil && *c.DINDSharedTmp }
+
+// IsDINDContainerdStoreEnabled returns true if the DIND daemon should keep
+// the containerd image store instead of overlay2.
+func (c Config) IsDINDContainerdStoreEnabled() bool {
+	return c.DINDContainerdStore != nil && *c.DINDContainerdStore
+}
 
 // IsIsolated returns true if agent isolation is enabled (default: true).
 func (c Config) IsIsolated() bool { return c.Isolated == nil || *c.Isolated }

@@ -48,6 +48,9 @@ func Merge(base, over Config) Config {
 	if over.DINDSharedTmp != nil {
 		result.DINDSharedTmp = over.DINDSharedTmp
 	}
+	if over.DINDContainerdStore != nil {
+		result.DINDContainerdStore = over.DINDContainerdStore
+	}
 	if over.NetnsMode != "" {
 		result.NetnsMode = over.NetnsMode
 	}

@@ -90,3 +90,9 @@ func TestIsDINDSharedTmpEnabled(t *testing.T) {
 	assert.True(t, Config{DINDSharedTmp: testutil.BoolPtr(true)}.IsDINDSharedTmpEnabled())
 	assert.False(t, Config{DINDSharedTmp: testutil.BoolPtr(false)}.IsDINDSharedTmpEnabled())
 }
+
+func TestIsDINDContainerdStoreEnabled(t *testing.T) {
+	assert.False(t, Config{}.IsDINDContainerdStoreEnabled(), "nil should be false")
+	assert.True(t, Config{DINDContainerdStore: testutil.BoolPtr(true)}.IsDINDContainerdStoreEnabled())
+	assert.False(t, Config{DINDContainerdStore: testutil.BoolPtr(false)}.IsDINDContainerdStoreEnabled())
+}

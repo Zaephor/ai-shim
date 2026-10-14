@@ -220,6 +220,9 @@ packages:
 # Share /tmp between the agent and the DIND sidecar (per-session volume)
 # dind_shared_tmp: false
 
+# Keep DIND on the containerd image store instead of overlay2
+# dind_containerd_store: false
+
 # MCP servers exposed to the agent (injected as MCP_SERVERS env var)
 # mcp_servers:
 #   filesystem:
@@ -328,6 +331,12 @@ See `configs/examples/` for annotated example files and
   `docker run -v /tmp/...` from the agent sees the agent's files. The volume
   is removed with the sidecar. Off by default; ignored without DIND or when a
   user volume is already mounted at `/tmp`
+- **DIND image store** -- the sidecar daemon uses the overlay2 graph driver,
+  which stores each image once. Docker 29's default containerd image store
+  keeps compressed layers plus unpacked snapshots, using roughly 20-35% more
+  disk per image. Set `dind_containerd_store: true` for projects that need
+  multi-platform builds (`docker buildx build --platform a,b --load`) or
+  locally stored attestations
 - **DIND health check** -- DIND sidecar startup includes automatic readiness
   polling before the agent container launches
 - **Parallel sessions** -- multiple concurrent sessions for the same
@@ -424,6 +433,7 @@ AI_SHIM_DIND_HOSTNAME=<host>    # override DIND sidecar hostname
 AI_SHIM_DIND_CACHE=0/1          # toggle pull-through registry cache
 AI_SHIM_DIND_TLS=0/1            # toggle TLS for DIND socket
 AI_SHIM_DIND_SHARED_TMP=0/1     # toggle shared agent/DIND /tmp volume
+AI_SHIM_DIND_CONTAINERD_STORE=0/1 # keep DIND on the containerd image store
 AI_SHIM_SECURITY_PROFILE=<p>    # security profile (default/strict/none)
 AI_SHIM_UPDATE_INTERVAL=<i>    # agent update interval (always/never/1d/7d/24h)
 AI_SHIM_GIT_NAME=<name>         # git user.name for container commits

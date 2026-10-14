@@ -39,6 +39,7 @@ func TestMerge_AllFieldsHandled(t *testing.T) {
 		DINDCache:            boolPtr(true),
 		DINDTLS:              boolPtr(true),
 		DINDSharedTmp:        boolPtr(true),
+		DINDContainerdStore:  boolPtr(true),
 		NetnsMode:            "holder",
 		DINDNetnsHolderImage: "holder-image",
 		AllowAgents:          []string{"agent"},
@@ -93,6 +94,7 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 		"AI_SHIM_DIND_CACHE":              "1",
 		"AI_SHIM_DIND_TLS":                "1",
 		"AI_SHIM_DIND_SHARED_TMP":         "1",
+		"AI_SHIM_DIND_CONTAINERD_STORE":   "1",
 		"AI_SHIM_NETNS_MODE":              "dind",
 		"AI_SHIM_DIND_NETNS_HOLDER_IMAGE": "custom-holder:v1",
 		"AI_SHIM_SECURITY_PROFILE":        "strict",
@@ -123,6 +125,7 @@ func TestLoadEnvOverrides_AllEnvVarsDocumented(t *testing.T) {
 	assert.True(t, cfg.IsCacheEnabled(), "AI_SHIM_DIND_CACHE")
 	assert.True(t, cfg.IsDINDTLSEnabled(), "AI_SHIM_DIND_TLS")
 	assert.True(t, cfg.IsDINDSharedTmpEnabled(), "AI_SHIM_DIND_SHARED_TMP")
+	assert.True(t, cfg.IsDINDContainerdStoreEnabled(), "AI_SHIM_DIND_CONTAINERD_STORE")
 	assert.Equal(t, "dind", cfg.NetnsMode, "AI_SHIM_NETNS_MODE")
 	assert.Equal(t, "custom-holder:v1", cfg.DINDNetnsHolderImage, "AI_SHIM_DIND_NETNS_HOLDER_IMAGE")
 	assert.Equal(t, "strict", cfg.SecurityProfile, "AI_SHIM_SECURITY_PROFILE")
@@ -163,6 +166,7 @@ func TestComputeSources_AllFieldsTracked(t *testing.T) {
 		DINDCache:            boolPtr(true),
 		DINDTLS:              boolPtr(true),
 		DINDSharedTmp:        boolPtr(true),
+		DINDContainerdStore:  boolPtr(true),
 		NetnsMode:            "holder",
 		DINDNetnsHolderImage: "holder-image",
 		AllowAgents:          []string{"agent"},

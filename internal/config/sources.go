@@ -98,6 +98,9 @@ func computeSources(tiers []namedConfig) ConfigSources {
 		if cfg.DINDSharedTmp != nil {
 			sources.Fields["dind_shared_tmp"] = name
 		}
+		if cfg.DINDContainerdStore != nil {
+			sources.Fields["dind_containerd_store"] = name
+		}
 		if cfg.NetnsMode != "" {
 			sources.Fields["netns_mode"] = name
 		}

@@ -118,6 +118,14 @@
 # Default: false
 # dind_shared_tmp: false
 
+# Keep the DIND daemon on Docker's containerd image store. By default the
+# sidecar uses the overlay2 graph driver, which stores each image once instead
+# of as compressed layers plus unpacked snapshots (roughly 20-35% less disk).
+# Enable for multi-platform builds (`docker buildx build --platform a,b --load`)
+# or locally stored attestations. Only applies when dind: true.
+# Default: false
+# dind_containerd_store: false
+
 # Select which container owns the network namespace the agent joins. Only
 # applies when dind: true.
 #   agent  -- agent gets its own network namespace/bridge (can publish ports)

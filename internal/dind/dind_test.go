@@ -542,6 +542,31 @@ func TestStart_WithMirrors_NestingAndMirrorBothActive(t *testing.T) {
 		"registry mirror must be active in the daemon — the mirror feature must survive the cgroup-nesting fix")
 }
 
+// TestStart_UsesOverlay2Store verifies the sidecar daemon runs the classic
+// overlay2 graph driver rather than the containerd image store, which keeps
+// both the compressed layers and the unpacked snapshots of every image.
+func TestStart_UsesOverlay2Store(t *testing.T) {
+	runner := getRunner(t)
+	ctx := context.Background()
+
+	netHandle, err := network.EnsureNetwork(ctx, runner.Client(), "ai-shim-test-overlay2", map[string]string{"ai-shim": "test"})
+	require.NoError(t, err)
+	defer netHandle.Remove(ctx)
+
+	sidecar, err := Start(ctx, runner, Config{
+		Labels:    map[string]string{"ai-shim": "test"},
+		NetworkID: netHandle.ID,
+		Hostname:  "test-dind",
+	})
+	require.NoError(t, err)
+	defer sidecar.Stop(ctx)
+
+	code, info, stderr := execInSidecar(t, runner, sidecar.ContainerID(), []string{"docker", "info", "--format", "{{.Driver}}"})
+	require.Equal(t, 0, code, "docker info failed: %s", stderr)
+	assert.Equal(t, "overlay2", strings.TrimSpace(info),
+		"DIND must use the overlay2 graph driver, not the containerd snapshotter")
+}
+
 func TestWaitForReady_Timeout(t *testing.T) {
 	// Unit test: verify that WaitForReady returns an error when context is cancelled.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -870,14 +895,19 @@ func TestStart_InvalidCPULimit(t *testing.T) {
 }
 
 func TestDockerdArgs(t *testing.T) {
-	assert.Nil(t, dockerdArgs(Config{}), "no mirrors, no cache, no socket gid -> nil")
+	assert.Equal(t, []string{"--feature=containerd-snapshotter=false"}, dockerdArgs(Config{}),
+		"no mirrors, no cache, no socket gid -> only the overlay2 store flag")
 
 	got := dockerdArgs(Config{CacheAddr: "http://cache:5000", Mirrors: []string{"https://m1"}, SocketGID: 2000})
 	assert.Equal(t, []string{
+		"--feature=containerd-snapshotter=false",
 		"--registry-mirror=http://cache:5000",
 		"--registry-mirror=https://m1",
 		"--group=2000",
-	}, got, "cache mirror first, then mirrors, then --group")
+	}, got, "store flag, then cache mirror, then mirrors, then --group")
+
+	assert.Nil(t, dockerdArgs(Config{ContainerdStore: true}),
+		"containerd store opt-in -> no store flag, daemon keeps its default")
 }
 
 func TestBuildNetnsExtraHosts_NoCache(t *testing.T) {

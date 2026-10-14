@@ -1409,12 +1409,13 @@ func runAgent(name string, args []string) (int, error) {
 			// this the socket ends up root:2375 mode 660 and any docker
 			// CLI call from inside the agent fails with "permission
 			// denied" (docker:dind's "docker" group has GID 2375).
-			SocketGID:    platInfo.GID,
-			SharedMounts: dindSharedMounts,
-			SharedTmp:    sharedTmp,
-			Version:      version,
-			JoinNetns:    dindJoinTarget,      // "" in agent/dind modes -> bridge as before
-			AutoRestart:  cfg.IsNetnsShared(), // survive OOM in dind + holder modes
+			SocketGID:       platInfo.GID,
+			SharedMounts:    dindSharedMounts,
+			SharedTmp:       sharedTmp,
+			ContainerdStore: cfg.IsDINDContainerdStoreEnabled(),
+			Version:         version,
+			JoinNetns:       dindJoinTarget,      // "" in agent/dind modes -> bridge as before
+			AutoRestart:     cfg.IsNetnsShared(), // survive OOM in dind + holder modes
 		})
 		if err != nil {
 			return 1, fmt.Errorf("starting DIND sidecar: %w", err)
