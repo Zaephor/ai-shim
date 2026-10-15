@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/Zaephor/ai-shim/compare/v0.14.0...v0.15.0) (2026-10-15)
+
+
+### Features
+
+* **dind:** default DIND sidecars to the overlay2 image store ([6d8823e](https://github.com/Zaephor/ai-shim/commit/6d8823eebf4a69eec5f6de9b6e4fb72e7f470c58))
+
+
+### Bug Fixes
+
+* **deps:** bump Go toolchain to 1.26.9 for stdlib vulnerabilities ([582d95b](https://github.com/Zaephor/ai-shim/commit/582d95b8727e9ef8d00bc5ac73beb86137c14308))
+
 ## [0.14.0](https://github.com/Zaephor/ai-shim/compare/v0.13.0...v0.14.0) (2026-09-30)
 
 
