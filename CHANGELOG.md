@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Zaephor/ai-shim/compare/v0.15.0...v0.16.0) (2026-11-02)
+
+
+### Features
+
+* **agent:** add omp (oh-my-pi) built-in agent ([271bd92](https://github.com/Zaephor/ai-shim/commit/271bd9286ba28210d567efb22f9fd99dc70219eb))
+
 ## [0.15.0](https://github.com/Zaephor/ai-shim/compare/v0.14.0...v0.15.0) (2026-10-15)
 
 
