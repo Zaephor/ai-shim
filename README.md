@@ -75,7 +75,7 @@ or in the source tree if you installed from source. Copy any profile to
 
 ## Supported Agents
 
-ai-shim ships with 10 built-in agent definitions:
+ai-shim ships with 11 built-in agent definitions:
 
 | Agent | Install Method | Binary |
 |---|---|---|
@@ -89,6 +89,7 @@ ai-shim ships with 10 built-in agent definitions:
 | aider | uv | `aider` |
 | goose | custom (install script) | `goose` |
 | opencode | npm | `opencode` |
+| omp | custom (install script) | `omp` |
 
 ### Custom Agents
 

@@ -22,6 +22,16 @@ func TestLookup_NotFound(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestLookup_OmpAgent(t *testing.T) {
+	def, ok := Lookup("omp")
+	require.True(t, ok)
+	assert.Equal(t, "omp", def.Binary)
+	assert.Equal(t, "custom", def.InstallType)
+	assert.Contains(t, def.Package, "https://omp.sh/install")
+	assert.Equal(t, []string{".omp"}, def.DataDirs)
+	assert.False(t, def.ProjectScope, "omp sessions do not use the ~/.omp/projects layout")
+}
+
 func TestAllAgents_HaveDataDirs(t *testing.T) {
 	for name, def := range All() {
 		assert.NotEmpty(t, def.DataDirs, "%s should have at least one data dir", name)
@@ -30,7 +40,7 @@ func TestAllAgents_HaveDataDirs(t *testing.T) {
 
 func TestAll_ContainsAllAgents(t *testing.T) {
 	all := All()
-	for _, name := range []string{"claude-code", "gemini-cli", "qwen-code", "codex", "pi", "gsd", "aider", "goose", "opencode"} {
+	for _, name := range []string{"claude-code", "gemini-cli", "qwen-code", "codex", "pi", "gsd", "aider", "goose", "opencode", "omp"} {
 		_, ok := all[name]
 		assert.True(t, ok, "missing agent: %s", name)
 	}

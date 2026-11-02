@@ -32,6 +32,7 @@ var builtins = map[string]Definition{
 	"aider":       {Name: "aider", InstallType: "uv", Package: "aider-chat", Binary: "aider", DataDirs: []string{".aider"}},
 	"goose":       {Name: "goose", InstallType: "custom", Package: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", Binary: "goose", DataDirs: []string{".config/goose"}},
 	"opencode":    {Name: "opencode", InstallType: "npm", Package: "opencode-ai", Binary: "opencode", DataDirs: []string{".config/opencode"}},
+	"omp":         {Name: "omp", InstallType: "custom", Package: "curl -fsSL https://omp.sh/install | sh -s -- --binary", Binary: "omp", DataDirs: []string{".omp"}},
 }
 
 func init() {
